@@ -8,12 +8,40 @@
 
 #include "xm_internal.h"
 
+static float xm_envelope_lerp(xm_envelope_point_t* a, xm_envelope_point_t* b, uint16_t pos) {
+	/* Linear interpolation between two envelope points */
+	if(a->frame == b->frame) return a->value;
+	else if(pos >= b->frame) return b->value;
+	else {
+		float p = (float)(pos - a->frame) / (float)(b->frame - a->frame);
+		return a->value * (1 - p) + b->value * p;
+	}
+}
+
 static void xm_update_step(xm_context_t* ctx, xm_channel_context_t* ch, float note) {
 	/* XXX Amiga frequencies? */
 
 	float period = 7680.f - note * 64.f;
 	float frequency = 8363.f * powf(2.f, (4608.f - period) / 768.f);
 	ch->step = frequency / ctx->rate;
+}
+
+static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
+	ch->sample_position = 0.f;
+	ch->sustained = true;
+	ch->volume = ch->sample->volume;
+	ch->fadeout_volume = 1.0f;
+	ch->volume_envelope_volume = 1.0f;
+	ch->volume_envelope_frame_count = 0;
+
+	xm_update_step(ctx, ch, ch->note);
+}
+
+static void xm_cut_note(xm_channel_context_t* ch) {
+	/* NB: this is not the same as Key Off */
+	ch->note = .0f;
+	ch->instrument = NULL;
+	ch->sample = NULL;
 }
 
 static void xm_row(xm_context_t* ctx) {
@@ -37,7 +65,16 @@ static void xm_row(xm_context_t* ctx) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
 		if(s->instrument > 0) {
-		    ch->instrument = ctx->module.instruments + (s->instrument - 1);
+			if(s->instrument - 1 > ctx->module.num_instruments) {
+				/* Invalid instrument, Cut current note */
+				xm_cut_note(ch);
+			} else {
+				ch->instrument = ctx->module.instruments + (s->instrument - 1);
+				if(s->note == 0 && ch->sample != NULL) {
+					/* Ghost instrument, trigger note */
+					xm_trigger_note(ctx, ch);
+				}
+			}
 		}
 
 		if(s->note > 0 && s->note < 97) {
@@ -45,17 +82,27 @@ static void xm_row(xm_context_t* ctx) {
 			 * THAT in any of the specs! :-) */
 
 			xm_instrument_t* instr = ch->instrument;
-			if(ch->instrument->num_samples == 0) continue; /* XXX */
-
-			ch->sample = instr->samples + instr->sample_of_notes[s->note - 1];
-			xm_sample_t* sample = ch->sample;
-
-		    ch->note = s->note + sample->relative_note + sample->finetune / 128.f - 1.f;
-			ch->sample_position = 0.f;
-			ch->sustained = true;
-			ch->volume = sample->volume;
-
-			xm_update_step(ctx, ch, ch->note);
+			if(instr == NULL || ch->instrument->num_samples == 0) {
+				/* Bad instrument */
+				xm_cut_note(ch);
+			} else {
+				if(instr->sample_of_notes[s->note - 1] < instr->num_samples) {
+					ch->sample = instr->samples + instr->sample_of_notes[s->note - 1];
+					ch->note = s->note + ch->sample->relative_note
+						+ ch->sample->finetune / 128.f - 1.f;
+					if(s->instrument > 0) {
+						xm_trigger_note(ctx, ch);
+					} else {
+						/* Ghost note: keep old volume */
+						float old_volume = ch->volume;
+						xm_trigger_note(ctx, ch);
+						ch->volume = old_volume;
+					}
+				} else {
+					/* Bad sample */
+					xm_cut_note(ch);
+				}
+			}
 		} else if(s->note == 97) {
 			/* Key Off */
 			ch->sustained = false;
@@ -141,6 +188,59 @@ static void xm_tick(xm_context_t* ctx) {
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
+		if(ch->instrument != NULL && ch->instrument->volume_envelope.enabled) {
+			xm_envelope_t* env = &(ch->instrument->volume_envelope);
+
+			if(!ch->sustained) {
+				ch->fadeout_volume -= (float)ch->instrument->volume_fadeout / 65536.f;
+				if(ch->fadeout_volume < 0) ch->fadeout_volume = 0;
+			}
+
+			if(env->num_points < 2) {
+				/* Don't really know what to do… */
+				if(env->num_points == 1) {
+					/* XXX I am pulling this out of my ass */
+					ch->volume_envelope_volume = (float)env->points[0].value / (float)0x40;
+					if(ch->volume_envelope_volume > 1) {
+						ch->volume_envelope_volume = 1;
+					}
+				}
+			} else {
+				uint8_t j;
+
+				if(env->loop_enabled) {
+					uint16_t loop_start = env->points[env->loop_start_point].frame;
+					uint16_t loop_end = env->points[env->loop_end_point].frame;
+					uint16_t loop_length = loop_end - loop_start;
+
+					if(ch->volume_envelope_frame_count > loop_end) {
+						ch->volume_envelope_frame_count -= loop_length;
+					}
+				}
+
+				for(j = 0; j < (env->num_points - 1); ++j) {
+					if(env->points[j].frame <= ch->volume_envelope_frame_count &&
+					   env->points[j+1].frame >= ch->volume_envelope_frame_count) {
+						break;
+					}
+				}
+
+				ch->volume_envelope_volume = 
+					xm_envelope_lerp(env->points + j, env->points + j + 1,
+									 ch->volume_envelope_frame_count) / (float)0x40;
+
+				if(ch->volume_envelope_volume > 1) {
+					ch->volume_envelope_volume = 1;
+				}
+
+				/* Make sure it is safe to increment frame count */
+				if(!ch->sustained || !env->sustain_enabled ||
+				   ch->volume_envelope_frame_count < env->points[env->sustain_point].frame) {
+					ch->volume_envelope_frame_count++;
+				}
+			}
+		}
+
 		if(ch->arp_in_progress && (ch->current_effect != 0 || ch->current_effect_param == 0)) {
 			/* Arpeggio was interrupted in an "uneven" cycle */
 			ch->arp_in_progress = false;
@@ -205,7 +305,6 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 		if(ch->note == 0 || ch->instrument == 0) continue;
-		if(!ch->sustained) continue;
 
 		if(ch->sample_position < 0) continue; /* Reached end of non-looping sample */
 
@@ -227,8 +326,8 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 			break;
 		}
 
-		*left += chval * ch->volume;
-		*right += chval * ch->volume;
+		*left += chval * ch->volume * ch->fadeout_volume * ch->volume_envelope_volume;
+		*right += chval * ch->volume * ch->fadeout_volume * ch->volume_envelope_volume;
 	}
 
 	*left *= ctx->global_volume / ctx->module.num_channels;

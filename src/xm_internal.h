@@ -25,7 +25,7 @@
 #define TRACKER_NAME_LENGTH 20
 #define PATTERN_ORDER_TABLE_LENGTH 256
 #define NUM_NOTES 96
-#define NUM_ENVELOPE_POINTS 48
+#define NUM_ENVELOPE_POINTS 12
 
 /* ----- Data types ----- */
 
@@ -42,8 +42,14 @@ enum xm_frequency_type_e {
 };
 typedef enum xm_frequency_type_e xm_frequency_type_t;
 
+struct xm_envelope_point_s {
+	uint16_t frame;
+	uint16_t value;
+};
+typedef struct xm_envelope_point_s xm_envelope_point_t;
+
 struct xm_envelope_s {
-	uint8_t points[NUM_ENVELOPE_POINTS];
+	xm_envelope_point_t points[NUM_ENVELOPE_POINTS];
 	uint8_t num_points;
 	uint8_t sustain_point;
 	uint8_t loop_start_point;
@@ -127,6 +133,10 @@ struct xm_sample_s {
 	 float step;
 	 float volume;
 	 bool sustained;
+	 float fadeout_volume;
+	 float volume_envelope_volume;
+	 uint16_t volume_envelope_frame_count;
+
 	 uint8_t current_effect;
 	 uint8_t current_effect_param;
 

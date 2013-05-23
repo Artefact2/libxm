@@ -243,15 +243,25 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 			sample_header_size = *((uint32_t*)(moddata + offset + 29));
 
 			memcpy(ctx->module.instruments[i].sample_of_notes, moddata + offset + 33, NUM_NOTES);
-			memcpy(ctx->module.instruments[i].volume_envelope.points,
-				   moddata + offset + 129, NUM_ENVELOPE_POINTS);
-			memcpy(ctx->module.instruments[i].panning_envelope.points,
-				   moddata + offset + 177, NUM_ENVELOPE_POINTS);
 
 			ctx->module.instruments[i].volume_envelope.num_points =
 				*((uint8_t*)(moddata + offset + 225));
 			ctx->module.instruments[i].panning_envelope.num_points =
 				*((uint8_t*)(moddata + offset + 226));
+
+			for(uint8_t j = 0; j < ctx->module.instruments[i].volume_envelope.num_points; ++j) {
+				ctx->module.instruments[i].volume_envelope.points[j].frame = 
+					*(uint16_t*)(moddata + offset + 129 + 4 * j);
+				ctx->module.instruments[i].volume_envelope.points[j].value = 
+					*(uint16_t*)(moddata + offset + 129 + 4 * j + 2);
+			}
+
+			for(uint8_t j = 0; j < ctx->module.instruments[i].panning_envelope.num_points; ++j) {
+				ctx->module.instruments[i].panning_envelope.points[j].frame = 
+					*(uint16_t*)(moddata + offset + 177 + 4 * j);
+				ctx->module.instruments[i].panning_envelope.points[j].value = 
+					*(uint16_t*)(moddata + offset + 177 + 4 * j + 2);
+			}
 
 			ctx->module.instruments[i].volume_envelope.sustain_point =
 				*((uint8_t*)(moddata + offset + 227));
