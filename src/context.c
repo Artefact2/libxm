@@ -45,6 +45,7 @@ int xm_create_context(xm_context_t** ctx, char* moddata, uint32_t rate) {
 	(*ctx)->current_tick = 0;
 	(*ctx)->remaining_samples_in_tick = 0;
 	(*ctx)->jump = false;
+	(*ctx)->jump_to = 0;
 	(*ctx)->jump_row = 0;
 
 	for(uint8_t i = 0; i < (*ctx)->module.num_channels; ++i) {

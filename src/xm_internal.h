@@ -150,6 +150,7 @@ struct xm_sample_s {
 	 float remaining_samples_in_tick;
 
 	 bool jump;
+	 uint8_t jump_to;
 	 uint8_t jump_row;
 
 	 uint32_t loop_count;

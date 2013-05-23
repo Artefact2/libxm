@@ -18,9 +18,9 @@ static void xm_update_step(xm_context_t* ctx, xm_channel_context_t* ch, float no
 
 static void xm_row(xm_context_t* ctx) {
 	if(ctx->jump) {
-		ctx->jump = false;
-		ctx->current_table_index++;
+		ctx->current_table_index = ctx->jump_to;
 		ctx->current_row = ctx->jump_row;
+		ctx->jump = false;
 	}
 
 	/* Loop if necessary */
@@ -78,6 +78,14 @@ static void xm_row(xm_context_t* ctx) {
 				}
 				break;
 
+			case 0xB: /* Bxx: Position jump */
+				if(s->effect_param < ctx->module.length) {
+					ctx->jump = true;
+					ctx->jump_to = s->effect_param;
+					ctx->jump_row = 0;
+				}
+				break;
+
 			case 0xC: /* Cxx: Set volume */
 				ch->volume = (float)((s->effect_param > 0x40)
 									 ? 0x40 : s->effect_param) / (float)0x40;
@@ -86,6 +94,7 @@ static void xm_row(xm_context_t* ctx) {
 			case 0xD: /* Dxx: Pattern break */
 				/* Jump after playing this line */
 				ctx->jump = true;
+				ctx->jump_to = ctx->current_table_index + 1;
 				ctx->jump_row = ((s->effect_param & 0xF0) >> 4) * 10 + (s->effect_param & 0x0F);
 				break;
 
