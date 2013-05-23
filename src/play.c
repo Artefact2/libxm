@@ -132,7 +132,7 @@ static void xm_tick(xm_context_t* ctx) {
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
-		if(ch->arp_in_progress && ch->current_effect_param == 0) {
+		if(ch->arp_in_progress && (ch->current_effect != 0 || ch->current_effect_param == 0)) {
 			/* Arpeggio was interrupted in an "uneven" cycle */
 			ch->arp_in_progress = false;
 			xm_update_step(ctx, ch, ch->note);
