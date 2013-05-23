@@ -1,0 +1,2 @@
+ADD_LIBRARY(xm STATIC xm.c context.c load.c play.c)
+INCLUDE_DIRECTORIES(${XM_INCLUDE_DIRS})
