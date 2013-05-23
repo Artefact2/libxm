@@ -44,6 +44,16 @@ static void xm_cut_note(xm_channel_context_t* ch) {
 	ch->sample = NULL;
 }
 
+static void xm_key_off(xm_channel_context_t* ch) {
+	/* Key Off */
+	ch->sustained = false;
+
+	/* If no volume envelope is used, also cut the note */
+	if(ch->instrument == NULL || !ch->instrument->volume_envelope.enabled) {
+		xm_cut_note(ch);
+	}
+}
+
 static void xm_row(xm_context_t* ctx) {
 	if(ctx->jump) {
 		ctx->current_table_index = ctx->jump_to;
@@ -105,7 +115,7 @@ static void xm_row(xm_context_t* ctx) {
 			}
 		} else if(s->note == 97) {
 			/* Key Off */
-			ch->sustained = false;
+			xm_key_off(ch);
 		}
 
 		if(s->volume_column > 0) {
@@ -161,7 +171,7 @@ static void xm_row(xm_context_t* ctx) {
 				break;
 
 			case 20: /* Kxx: Key off */
-				ch->sustained = false;
+				xm_key_off(ch);
 				break;
 
 			default:
