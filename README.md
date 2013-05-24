@@ -12,10 +12,23 @@ Examples
 
 Two example programs are provided.
 
-`xmtest` will play a module but will not produce any sound or
-output. Useful for testing the playback routines.
+* `xmtoau` will play a module and output a `.au` file to standard
+  output. Example usages:
 
-`xmtoalsa` is a simple player that uses the ALSA library.
+  * Directly play a module (requires the `sox` package):
+
+    ~~~
+	./xmtoau my_module.xm | play -
+	~~~
+
+  * Convert the data to a .wav file on the fly, then play it with `mplayer`:
+
+    ~~~
+    ./xmtoau my_module.xm | ffmpeg -i - file.wav
+    mplayer file.wav
+	~~~
+
+* `xmtoalsa` is a simple player that uses the ALSA library.
 
 Status
 ======
@@ -56,9 +69,6 @@ DONE    |13|  D  |      | Pattern break
 DONE    |15|  F  |      | Set tempo/BPM
 DONE    |16|  G  |      | Set global volume
         |17|  H  |  (*) | Global volume slide
-        |18|  I0 |      | Sample play mode: 0 - normal; 1 - back direction; 2 - pause [PsyTexx feature]
-        |--|  I1 |      | Channel options: reduce sampling freq [PsyTexx feature]
-        |--|  I2 |      | Channel options: reduce number of bits [PsyTexx feature]
         |19|
 DONE    |20|  K  |      | Key off              (Also note number 97)
         |21|  L  |      | Set envelope position
@@ -98,6 +108,7 @@ General
 * Envelopes: volume OK, panning TODO
 * Autovibrato: TODO
 * Frequence tables: linear OK, amiga TODO
+* Ping-pong loop: TODO
 
 Thanks
 ======
