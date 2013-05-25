@@ -8,6 +8,27 @@
 
 #include "xm_internal.h"
 
+static void xm_volume_slide(xm_channel_context_t* ch, uint8_t rawval) {
+	float f;
+
+	if((rawval & 0xF0) && (rawval & 0x0F)) {
+		/* Illegal state */
+		return;
+	}
+
+	if(rawval & 0xF0) {
+		/* Slide up */
+		f = (float)(rawval >> 4) / (float)0x40;
+		ch->volume += f;
+		if(ch->volume > 1) ch->volume = 1;
+	} else {
+		/* Slide down */
+		f = (float)(rawval & 0x0F) / (float)0x40;
+		ch->volume -= f;
+		if(ch->volume < 0) ch->volume = 0;
+	}
+}
+
 static float xm_envelope_lerp(xm_envelope_point_t* a, xm_envelope_point_t* b, uint16_t pos) {
 	/* Linear interpolation between two envelope points */
 	if(a->frame == b->frame) return a->value;
@@ -118,65 +139,116 @@ static void xm_row(xm_context_t* ctx) {
 			xm_key_off(ch);
 		}
 
-		if(s->volume_column > 0) {
-			if(s->volume_column >= 0x10 && s->volume_column <= 0x50) {
-				ch->volume = (float)(s->volume_column - 0x10) / (float)0x40;
-			}
-		}
-
+		ch->current_volume_effect = s->volume_column;
 		ch->current_effect = s->effect_type;
 		ch->current_effect_param = s->effect_param;
 
-		if(s->effect_type > 0) {
-			switch(s->effect_type) {
-			case 0xA: /* Axy: Volume slide */
-				if(s->effect_param > 0) {
-					ch->volume_slide_param = s->effect_param;
-				}
-				break;
+		switch(s->volume_column & 0xF0) {
+		case 0x50:
+			if(s->volume_column > 0x50) break;
+		case 0x10:
+		case 0x20:
+		case 0x30:
+		case 0x40:
+			/* Set volume */
+			ch->volume = (float)(s->volume_column - 0x10) / (float)0x40;
+			break;
+		case 0x80: /* Fine volume slide down */
+			xm_volume_slide(ch, s->volume_column & 0x0F);
+			break;
+		case 0x90: /* Fine volume slide up */
+			xm_volume_slide(ch, s->volume_column << 4);
+		default:
+			break;
+		}
 
-			case 0xB: /* Bxx: Position jump */
-				if(s->effect_param < ctx->module.length) {
-					ctx->jump = true;
-					ctx->jump_to = s->effect_param;
-					ctx->jump_row = 0;
-				}
-				break;
+		switch(s->effect_type) {
 
-			case 0xC: /* Cxx: Set volume */
-				ch->volume = (float)((s->effect_param > 0x40)
-									 ? 0x40 : s->effect_param) / (float)0x40;
-				break;
+		case 5: /* 5xy: Tone portamento + Volume slide */
+			if(s->effect_param > 0) {
+				ch->volume_slide_param = s->effect_param;
+			}
+			break;
 
-			case 0xD: /* Dxx: Pattern break */
-				/* Jump after playing this line */
+		case 6: /* 6xy: Vibrato + Volume slide */
+			if(s->effect_param > 0) {
+				ch->volume_slide_param = s->effect_param;
+			}
+			break;
+
+		case 0xA: /* Axy: Volume slide */
+			if(s->effect_param > 0) {
+				ch->volume_slide_param = s->effect_param;
+			}
+			break;
+
+		case 0xB: /* Bxx: Position jump */
+			if(s->effect_param < ctx->module.length) {
 				ctx->jump = true;
-				ctx->jump_to = ctx->current_table_index + 1;
-				ctx->jump_row = ((s->effect_param & 0xF0) >> 4) * 10 + (s->effect_param & 0x0F);
+				ctx->jump_to = s->effect_param;
+				ctx->jump_row = 0;
+			}
+			break;
+
+		case 0xC: /* Cxx: Set volume */
+			ch->volume = (float)((s->effect_param > 0x40)
+								 ? 0x40 : s->effect_param) / (float)0x40;
+			break;
+
+		case 0xD: /* Dxx: Pattern break */
+			/* Jump after playing this line */
+			ctx->jump = true;
+			ctx->jump_to = ctx->current_table_index + 1;
+			ctx->jump_row = (s->effect_param >> 4) * 10 + (s->effect_param & 0x0F);
+			break;
+
+		case 0xE: /* Extended command */
+			switch(s->effect_param & 0xF0) {
+
+			case 0xA: /* Fine volume slide up */
+				ch->fine_volume_slide_param = s->effect_param & 0x0F;
+				xm_volume_slide(ch, ch->volume_slide_param << 4);
 				break;
 
-			case 0xF: /* Fxx: Set tempo/BPM */
-				if(s->effect_param > 0) {
-					if(s->effect_param <= 0x1F) {
-						ctx->tempo = s->effect_param;
-					} else {
-						ctx->bpm = s->effect_param;
-					}
-				}
-				break;
-
-			case 16: /* Gxx: Set global volume */
-				ctx->global_volume = (float)((s->effect_param > 0x40)
-											 ? 0x40 : s->effect_param) / (float)0x40;
-				break;
-
-			case 20: /* Kxx: Key off */
-				xm_key_off(ch);
+			case 0xB: /* Fine volume slide down */
+				ch->fine_volume_slide_param = s->effect_param & 0x0F;
+				xm_volume_slide(ch, ch->volume_slide_param);
 				break;
 
 			default:
 				break;
+
 			}
+			break;
+
+		case 0xF: /* Fxx: Set tempo/BPM */
+			if(s->effect_param > 0) {
+				if(s->effect_param <= 0x1F) {
+					ctx->tempo = s->effect_param;
+				} else {
+					ctx->bpm = s->effect_param;
+				}
+			}
+			break;
+
+		case 16: /* Gxx: Set global volume */
+			ctx->global_volume = (float)((s->effect_param > 0x40)
+										 ? 0x40 : s->effect_param) / (float)0x40;
+			break;
+
+		case 17: /* Hxy: Global volume slide */
+			if(s->effect_param > 0) {
+				ch->global_volume_slide_param = s->effect_param;
+			}
+			break;
+
+		case 20: /* Kxx: Key off */
+			xm_key_off(ch);
+			break;
+
+		default:
+			break;
+
 		}
 	}
 
@@ -257,7 +329,23 @@ static void xm_tick(xm_context_t* ctx) {
 			xm_update_step(ctx, ch, ch->note);
 		}
 
+		switch(ch->current_volume_effect & 0xF0) {
+
+		case 0x60: /* Volume slide down */
+			xm_volume_slide(ch, ch->current_volume_effect & 0x0F);
+			break;
+
+		case 0x70: /* Volume slide up */
+			xm_volume_slide(ch, ch->current_volume_effect << 4);
+			break;
+
+		default:
+			break;
+
+		}
+
 		switch(ch->current_effect) {
+
 		case 0: /* 0xy: Arpeggio */
 			if(ch->current_effect_param > 0) {
 				switch(ctx->current_tick % 3) {
@@ -268,7 +356,7 @@ static void xm_tick(xm_context_t* ctx) {
 				case 1:
 					ch->arp_in_progress = true;
 					xm_update_step(ctx, ch, ch->note +
-								   ((ch->current_effect_param & 0xF0) >> 4));
+								   (ch->current_effect_param >> 4));
 					break;
 				case 2:
 					ch->arp_in_progress = true;
@@ -279,18 +367,40 @@ static void xm_tick(xm_context_t* ctx) {
 			}
 			break;
 
+		case 5: /* 5xy: Tone portamento + Volume slide */
+			xm_volume_slide(ch, ch->volume_slide_param);
+			break;
+
+		case 6: /* 6xy: Vibrato + Volume slide */
+			xm_volume_slide(ch, ch->volume_slide_param);
+			break;
+
 		case 0xA: /* Axy: Volume slide */
-			if(ch->volume_slide_param < 0x10) {
-				ch->volume -= (float)ch->volume_slide_param / (float)0x40;
-				if(ch->volume < 0) ch->volume = 0;
+			xm_volume_slide(ch, ch->volume_slide_param);
+			break;
+
+		case 17: /* Hxy: Global volume slide */
+			if((ch->global_volume_slide_param & 0xF0) &&
+			   (ch->global_volume_slide_param & 0x0F)) {
+				/* Illegal state */
+				break;
+			}
+			if(ch->global_volume_slide_param & 0xF0) {
+				/* Global slide up */
+				float f = (ch->global_volume_slide_param >> 4) / (float)0x40;
+				ctx->global_volume += f;
+				if(ctx->global_volume > 1) ctx->global_volume = 1;
 			} else {
-				ch->volume += (float)((ch->volume_slide_param & 0xF0) >> 4) / (float)0x40;
-				if(ch->volume > 1) ch->volume = 1;
+				/* Global slide down */
+				float f = (ch->global_volume_slide_param & 0x0F) / (float)0x40;
+				ctx->global_volume -= f;
+				if(ctx->global_volume < 0) ctx->global_volume = 0;
 			}
 			break;
 
 		default:
 			break;
+
 		}
 	}
 
@@ -314,9 +424,12 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
-		if(ch->note == 0 || ch->instrument == 0) continue;
-
-		if(ch->sample_position < 0) continue; /* Reached end of non-looping sample */
+		if(ch->note == 0 ||
+		   ch->instrument == NULL ||
+		   ch->sample == NULL ||
+		   ch->sample_position < 0) {
+			continue;
+		}
 
 		float chval = ch->sample->data[(size_t)(ch->sample_position)];
 

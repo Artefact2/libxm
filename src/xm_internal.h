@@ -137,11 +137,14 @@ struct xm_sample_s {
 	 float volume_envelope_volume;
 	 uint16_t volume_envelope_frame_count;
 
+	 uint8_t current_volume_effect;
 	 uint8_t current_effect;
 	 uint8_t current_effect_param;
 
 	 bool arp_in_progress;
 	 uint8_t volume_slide_param;
+	 uint8_t fine_volume_slide_param;
+	 uint8_t global_volume_slide_param;
  };
  typedef struct xm_channel_context_s xm_channel_context_t;
 

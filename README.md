@@ -46,8 +46,8 @@ DONE    |00|  0  |      | Arpeggio
         |02|  2  |  (*) | Porta down
         |03|  3  |  (*) | Tone porta
         |04|  4  |  (*) | Vibrato
-        |05|  5  |  (*) | Tone porta+Volume slide
-        |06|  6  |  (*) | Vibrato+Volume slide
+PARTIAL |05|  5  |  (*) | Tone porta+Volume slide
+PARTIAL |06|  6  |  (*) | Vibrato+Volume slide
         |07|  7  |  (*) | Tremolo
         |08|  8  |      | Set panning
         |09|  9  |      | Sample offset
@@ -63,14 +63,14 @@ DONE    |13|  D  |      | Pattern break
         |--|  E6 |      | Set loop begin/loop
         |--|  E7 |      | Set tremolo control
         |--|  E9 |      | Retrig note
-        |--|  EA |  (*) | Fine volume slide up
-        |--|  EB |  (*) | Fine volume slide down
+DONE    |--|  EA |  (*) | Fine volume slide up
+DONE    |--|  EB |  (*) | Fine volume slide down
         |--|  EC |      | Note cut
         |--|  ED |      | Note delay
         |--|  EE |      | Pattern delay
 DONE    |15|  F  |      | Set tempo/BPM
 DONE    |16|  G  |      | Set global volume
-        |17|  H  |  (*) | Global volume slide
+DONE    |17|  H  |  (*) | Global volume slide
         |19|
 DONE    |20|  K  |      | Key off              (Also note number 97)
         |21|  L  |      | Set envelope position
@@ -92,10 +92,10 @@ Volume effects
  Status |  Value  | Meaning
 --------+---------+-----------------------------
 DONE    | $10-$50 | Set volume (Value-$10)
-        | $60-$6f | Volume slide down
-        | $70-$7f | Volume slide up
-        | $80-$8f | Fine volume slide down
-        | $90-$9f | Fine volume slide up
+DONE    | $60-$6f | Volume slide down
+DONE    | $70-$7f | Volume slide up
+DONE    | $80-$8f | Fine volume slide down
+DONE    | $90-$9f | Fine volume slide up
         | $a0-$af | Set vibrato speed
         | $b0-$bf | Vibrato
         | $c0-$cf | Set panning

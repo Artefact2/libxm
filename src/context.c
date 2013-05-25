@@ -58,10 +58,13 @@ int xm_create_context(xm_context_t** ctx, char* moddata, uint32_t rate) {
 		(*ctx)->channels[i].fadeout_volume = 1.0f;
 		(*ctx)->channels[i].volume_envelope_volume = 1.0f;
 		(*ctx)->channels[i].volume_envelope_frame_count = 0;
+		(*ctx)->channels[i].current_volume_effect = 0;
 		(*ctx)->channels[i].current_effect = 0;
 		(*ctx)->channels[i].current_effect_param = 0;
 		(*ctx)->channels[i].arp_in_progress = false;
 		(*ctx)->channels[i].volume_slide_param = 0;
+		(*ctx)->channels[i].fine_volume_slide_param = 0;
+		(*ctx)->channels[i].global_volume_slide_param = 0;
 	}
 
 	return 0;
