@@ -65,7 +65,7 @@ DONE    |13|  D  |      | Pattern break
         |--|  E9 |      | Retrig note
 DONE    |--|  EA |  (*) | Fine volume slide up
 DONE    |--|  EB |  (*) | Fine volume slide down
-        |--|  EC |      | Note cut
+DONE    |--|  EC |      | Note cut
         |--|  ED |      | Note delay
         |--|  EE |      | Pattern delay
 DONE    |15|  F  |      | Set tempo/BPM

@@ -143,20 +143,20 @@ static void xm_row(xm_context_t* ctx) {
 		ch->current_effect = s->effect_type;
 		ch->current_effect_param = s->effect_param;
 
-		switch(s->volume_column & 0xF0) {
-		case 0x50:
+		switch(s->volume_column >> 4) {
+		case 0x5:
 			if(s->volume_column > 0x50) break;
-		case 0x10:
-		case 0x20:
-		case 0x30:
-		case 0x40:
+		case 0x1:
+		case 0x2:
+		case 0x3:
+		case 0x4:
 			/* Set volume */
 			ch->volume = (float)(s->volume_column - 0x10) / (float)0x40;
 			break;
-		case 0x80: /* Fine volume slide down */
+		case 0x8: /* Fine volume slide down */
 			xm_volume_slide(ch, s->volume_column & 0x0F);
 			break;
-		case 0x90: /* Fine volume slide up */
+		case 0x9: /* Fine volume slide up */
 			xm_volume_slide(ch, s->volume_column << 4);
 		default:
 			break;
@@ -202,15 +202,15 @@ static void xm_row(xm_context_t* ctx) {
 			ctx->jump_row = (s->effect_param >> 4) * 10 + (s->effect_param & 0x0F);
 			break;
 
-		case 0xE: /* Extended command */
-			switch(s->effect_param & 0xF0) {
+		case 0xE: /* EXy: Extended command */
+			switch(s->effect_param >> 4) {
 
-			case 0xA: /* Fine volume slide up */
+			case 0xA: /* EAy: Fine volume slide up */
 				ch->fine_volume_slide_param = s->effect_param & 0x0F;
 				xm_volume_slide(ch, ch->volume_slide_param << 4);
 				break;
 
-			case 0xB: /* Fine volume slide down */
+			case 0xB: /* EBy: Fine volume slide down */
 				ch->fine_volume_slide_param = s->effect_param & 0x0F;
 				xm_volume_slide(ch, ch->volume_slide_param);
 				break;
@@ -329,13 +329,13 @@ static void xm_tick(xm_context_t* ctx) {
 			xm_update_step(ctx, ch, ch->note);
 		}
 
-		switch(ch->current_volume_effect & 0xF0) {
+		switch(ch->current_volume_effect >> 4) {
 
-		case 0x60: /* Volume slide down */
+		case 0x6: /* Volume slide down */
 			xm_volume_slide(ch, ch->current_volume_effect & 0x0F);
 			break;
 
-		case 0x70: /* Volume slide up */
+		case 0x7: /* Volume slide up */
 			xm_volume_slide(ch, ch->current_volume_effect << 4);
 			break;
 
@@ -377,6 +377,21 @@ static void xm_tick(xm_context_t* ctx) {
 
 		case 0xA: /* Axy: Volume slide */
 			xm_volume_slide(ch, ch->volume_slide_param);
+			break;
+
+		case 0xE: /* EXy: Extended command */
+			switch(ch->current_effect_param >> 4) {
+
+			case 0xC: /* ECy: Note cut (misleading name, should be mute) */
+				if((ch->current_effect_param & 0x0F) == ctx->current_tick) {
+					ch->volume = .0f;
+				}
+				break;
+
+			default:
+				break;
+
+			}
 			break;
 
 		case 17: /* Hxy: Global volume slide */
