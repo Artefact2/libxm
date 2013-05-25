@@ -1,3 +1,6 @@
+ADD_EXECUTABLE(xmbench xmbench.c)
+TARGET_LINK_LIBRARIES(xmbench ${XM_LIBRARIES})
+
 ADD_EXECUTABLE(xmtoau xmtoau.c)
 TARGET_LINK_LIBRARIES(xmtoau ${XM_LIBRARIES})
 

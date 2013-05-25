@@ -30,6 +30,8 @@ Two example programs are provided.
 
 * `xmtoalsa` is a simple player that uses the ALSA library.
 
+* `xmbench` is a benchmark program.
+
 Status
 ======
 
