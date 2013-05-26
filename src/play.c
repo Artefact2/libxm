@@ -8,6 +8,25 @@
 
 #include "xm_internal.h"
 
+/* ----- Static functions ----- */
+
+static void xm_volume_slide(xm_channel_context_t*, uint8_t);
+
+static float xm_envelope_lerp(xm_envelope_point_t*, xm_envelope_point_t*, uint16_t);
+static void xm_envelope_tick(xm_channel_context_t*, xm_envelope_t*, uint16_t*, float*);
+
+static void xm_update_step(xm_context_t*, xm_channel_context_t*, float);
+
+static void xm_trigger_note(xm_context_t*, xm_channel_context_t*);
+static void xm_cut_note(xm_channel_context_t*);
+static void xm_key_off(xm_channel_context_t*);
+
+static void xm_row(xm_context_t*);
+static void xm_tick(xm_context_t*);
+static void xm_sample(xm_context_t*, float*, float*);
+
+/* ----- Function definitions ----- */
+
 static void xm_volume_slide(xm_channel_context_t* ch, uint8_t rawval) {
 	float f;
 
@@ -29,7 +48,7 @@ static void xm_volume_slide(xm_channel_context_t* ch, uint8_t rawval) {
 	}
 }
 
-static float xm_envelope_lerp(xm_envelope_point_t* a, xm_envelope_point_t* b, uint16_t pos) {
+static float xm_envelope_lerp(xm_envelope_point_t* restrict a, xm_envelope_point_t* restrict b, uint16_t pos) {
 	/* Linear interpolation between two envelope points */
 	if(a->frame == b->frame) return a->value;
 	else if(pos >= b->frame) return b->value;
@@ -144,6 +163,7 @@ static void xm_row(xm_context_t* ctx) {
 		ch->current_effect_param = s->effect_param;
 
 		switch(s->volume_column >> 4) {
+
 		case 0x5:
 			if(s->volume_column > 0x50) break;
 		case 0x1:
@@ -153,13 +173,18 @@ static void xm_row(xm_context_t* ctx) {
 			/* Set volume */
 			ch->volume = (float)(s->volume_column - 0x10) / (float)0x40;
 			break;
+
 		case 0x8: /* Fine volume slide down */
 			xm_volume_slide(ch, s->volume_column & 0x0F);
 			break;
+
 		case 0x9: /* Fine volume slide up */
 			xm_volume_slide(ch, s->volume_column << 4);
+			break;
+
 		default:
 			break;
+
 		}
 
 		switch(s->effect_type) {
@@ -262,6 +287,54 @@ static void xm_row(xm_context_t* ctx) {
 	}
 }
 
+static void xm_envelope_tick(xm_channel_context_t* ch,
+							 xm_envelope_t* env,
+							 uint16_t* counter,
+							 float* outval) {
+	if(env->num_points < 2) {
+		/* Don't really know what to do… */
+		if(env->num_points == 1) {
+			/* XXX I am pulling this out of my ass */
+			*outval = (float)env->points[0].value / (float)0x40;
+			if(*outval > 1) {
+				*outval = 1;
+			}
+		}
+
+		return;
+	} else {
+		uint8_t j;
+
+		if(env->loop_enabled) {
+			uint16_t loop_start = env->points[env->loop_start_point].frame;
+			uint16_t loop_end = env->points[env->loop_end_point].frame;
+			uint16_t loop_length = loop_end - loop_start;
+
+			if(*counter > loop_end) {
+				*counter -= loop_length;
+			}
+		}
+
+		for(j = 0; j < (env->num_points - 1); ++j) {
+			if(env->points[j].frame <= *counter &&
+			   env->points[j+1].frame >= *counter) {
+				break;
+			}
+		}
+
+		*outval = xm_envelope_lerp(env->points + j, env->points + j + 1, *counter) / (float)0x40;
+		if(*outval > 1) {
+			*outval = 1;
+		}
+
+		/* Make sure it is safe to increment frame count */
+		if(!ch->sustained || !env->sustain_enabled ||
+		   *counter < env->points[env->sustain_point].frame) {
+			(*counter)++;
+		}
+	}
+}
+
 static void xm_tick(xm_context_t* ctx) {
 	if(ctx->current_tick == 0) {
 		xm_row(ctx);
@@ -278,49 +351,9 @@ static void xm_tick(xm_context_t* ctx) {
 				if(ch->fadeout_volume < 0) ch->fadeout_volume = 0;
 			}
 
-			if(env->num_points < 2) {
-				/* Don't really know what to do… */
-				if(env->num_points == 1) {
-					/* XXX I am pulling this out of my ass */
-					ch->volume_envelope_volume = (float)env->points[0].value / (float)0x40;
-					if(ch->volume_envelope_volume > 1) {
-						ch->volume_envelope_volume = 1;
-					}
-				}
-			} else {
-				uint8_t j;
-
-				if(env->loop_enabled) {
-					uint16_t loop_start = env->points[env->loop_start_point].frame;
-					uint16_t loop_end = env->points[env->loop_end_point].frame;
-					uint16_t loop_length = loop_end - loop_start;
-
-					if(ch->volume_envelope_frame_count > loop_end) {
-						ch->volume_envelope_frame_count -= loop_length;
-					}
-				}
-
-				for(j = 0; j < (env->num_points - 1); ++j) {
-					if(env->points[j].frame <= ch->volume_envelope_frame_count &&
-					   env->points[j+1].frame >= ch->volume_envelope_frame_count) {
-						break;
-					}
-				}
-
-				ch->volume_envelope_volume = 
-					xm_envelope_lerp(env->points + j, env->points + j + 1,
-									 ch->volume_envelope_frame_count) / (float)0x40;
-
-				if(ch->volume_envelope_volume > 1) {
-					ch->volume_envelope_volume = 1;
-				}
-
-				/* Make sure it is safe to increment frame count */
-				if(!ch->sustained || !env->sustain_enabled ||
-				   ch->volume_envelope_frame_count < env->points[env->sustain_point].frame) {
-					ch->volume_envelope_frame_count++;
-				}
-			}
+			xm_envelope_tick(ch, env,
+							 &(ch->volume_envelope_frame_count),
+							 &(ch->volume_envelope_volume));
 		}
 
 		if(ch->arp_in_progress && (ch->current_effect != 0 || ch->current_effect_param == 0)) {
@@ -332,10 +365,12 @@ static void xm_tick(xm_context_t* ctx) {
 		switch(ch->current_volume_effect >> 4) {
 
 		case 0x6: /* Volume slide down */
+			if(ctx->current_tick == 0) break;
 			xm_volume_slide(ch, ch->current_volume_effect & 0x0F);
 			break;
 
 		case 0x7: /* Volume slide up */
+			if(ctx->current_tick == 0) break;
 			xm_volume_slide(ch, ch->current_volume_effect << 4);
 			break;
 
@@ -368,14 +403,17 @@ static void xm_tick(xm_context_t* ctx) {
 			break;
 
 		case 5: /* 5xy: Tone portamento + Volume slide */
+			if(ctx->current_tick == 0) break;
 			xm_volume_slide(ch, ch->volume_slide_param);
 			break;
 
 		case 6: /* 6xy: Vibrato + Volume slide */
+			if(ctx->current_tick == 0) break;
 			xm_volume_slide(ch, ch->volume_slide_param);
 			break;
 
 		case 0xA: /* Axy: Volume slide */
+			if(ctx->current_tick == 0) break;
 			xm_volume_slide(ch, ch->volume_slide_param);
 			break;
 
@@ -395,6 +433,7 @@ static void xm_tick(xm_context_t* ctx) {
 			break;
 
 		case 17: /* Hxy: Global volume slide */
+			if(ctx->current_tick == 0) break;
 			if((ch->global_volume_slide_param & 0xF0) &&
 			   (ch->global_volume_slide_param & 0x0F)) {
 				/* Illegal state */
