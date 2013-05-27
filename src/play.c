@@ -72,7 +72,7 @@ static void xm_volume_slide(xm_channel_context_t* ch, uint8_t rawval) {
 
 static float xm_envelope_lerp(xm_envelope_point_t* restrict a, xm_envelope_point_t* restrict b, uint16_t pos) {
 	/* Linear interpolation between two envelope points */
-	if(a->frame == b->frame) return a->value;
+	if(pos <= a->frame) return a->value;
 	else if(pos >= b->frame) return b->value;
 	else {
 		float p = (float)(pos - a->frame) / (float)(b->frame - a->frame);
@@ -354,7 +354,7 @@ static void xm_envelope_tick(xm_channel_context_t* ch,
 			}
 		}
 
-		for(j = 0; j < (env->num_points - 1); ++j) {
+		for(j = 0; j < (env->num_points - 2); ++j) {
 			if(env->points[j].frame <= *counter &&
 			   env->points[j+1].frame >= *counter) {
 				break;
