@@ -71,15 +71,10 @@ DONE    |--|  EC |      | Note cut
 DONE    |15|  F  |      | Set tempo/BPM
 DONE    |16|  G  |      | Set global volume
 DONE    |17|  H  |  (*) | Global volume slide
-        |19|
 DONE    |20|  K  |      | Key off              (Also note number 97)
         |21|  L  |      | Set envelope position
-        |22|
-        |23|
-        |24|
 DONE    |25|  P  |  (*) | Panning slide
         |26|  R  |  (*) | Multi retrig note
-        |27|
         |28|  T  |      | Tremor
 DONE    |33|  X1 |  (*) | Extra fine porta up
 DONE    |--|  X2 |  (*) | Extra fine porta down
