@@ -320,7 +320,8 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 				ctx->module.instruments[i].samples[j].loop_type = XM_PING_PONG_LOOP;
 			}
 
-			ctx->module.instruments[i].samples[j].panning = *((uint8_t*)(moddata + offset + 15));
+			ctx->module.instruments[i].samples[j].panning = 
+				(float)(*((uint8_t*)(moddata + offset + 15))) / (float)0xFF;
 			ctx->module.instruments[i].samples[j].relative_note = *((int8_t*)(moddata + offset + 16));
 
 			memcpy(ctx->module.instruments[i].samples[j].name, moddata + 18, SAMPLE_NAME_LENGTH);

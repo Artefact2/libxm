@@ -11,8 +11,10 @@
 #include <math.h>
 
 #ifdef XM_NO_DEBUG
+#define XM_DEBUG 0
 #define DEBUG(...)
 #else
+#define XM_DEBUG 1
 #include <stdio.h>
 #define DEBUG(fmt, ...) fprintf(stderr, "%s(): " fmt "\n", __func__, __VA_ARGS__), fflush(stderr)
 #endif
@@ -69,7 +71,7 @@ struct xm_sample_s {
 	float volume;
 	int8_t finetune;
 	xm_loop_type_t loop_type;
-	uint8_t panning;
+	float panning;
 	int8_t relative_note;
 
 	float* data;
@@ -127,15 +129,18 @@ struct xm_sample_s {
 
  struct xm_channel_context_s {
 	 float note;
-	 xm_instrument_t* instrument;
-	 xm_sample_t* sample;
+	 xm_instrument_t* instrument; /* Could be NULL */
+	 xm_sample_t* sample; /* Could be NULL */
 	 float sample_position;
 	 float step;
-	 float volume;
+	 float volume; /* Ideally between 0 (muted) and 1 (loudest) */
+	 float panning; /* Between 0 (left) and 1 (right); 0.5 is centered */
 	 bool sustained;
 	 float fadeout_volume;
 	 float volume_envelope_volume;
+	 float panning_envelope_panning;
 	 uint16_t volume_envelope_frame_count;
+	 uint16_t panning_envelope_frame_count;
 
 	 uint8_t current_volume_effect;
 	 uint8_t current_effect;
@@ -145,6 +150,10 @@ struct xm_sample_s {
 	 uint8_t volume_slide_param;
 	 uint8_t fine_volume_slide_param;
 	 uint8_t global_volume_slide_param;
+	 uint8_t panning_slide_param;
+
+	 float final_volume_left;
+	 float final_volume_right;
  };
  typedef struct xm_channel_context_s xm_channel_context_t;
 
@@ -156,6 +165,7 @@ struct xm_sample_s {
 	 uint16_t tempo;
 	 uint16_t bpm;
 	 float global_volume;
+	 float amplification;
 
 	 uint8_t current_table_index;
 	 uint8_t current_row;

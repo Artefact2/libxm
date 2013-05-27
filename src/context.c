@@ -8,10 +8,11 @@
 
 #include "xm_internal.h"
 
-int xm_create_context(xm_context_t** ctx, char* moddata, uint32_t rate) {
+int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 	int ret;
 	size_t bytes_needed;
 	char* mempool;
+	xm_context_t* ctx;
 	
 
 	if((ret = xm_check_header_sanity(moddata))) {
@@ -29,42 +30,53 @@ int xm_create_context(xm_context_t** ctx, char* moddata, uint32_t rate) {
 		return 2;
 	}
 
-	*ctx = (xm_context_t*)mempool;
-	(*ctx)->allocated_memory = mempool; /* Keep original pointer for free() */
+	ctx = (*ctxp = (xm_context_t*)mempool);
+	ctx->allocated_memory = mempool; /* Keep original pointer for free() */
 	mempool += sizeof(xm_context_t);
 
-	(*ctx)->rate = rate;
-	mempool = xm_load_module(*ctx, moddata, mempool);
+	ctx->rate = rate;
+	mempool = xm_load_module(ctx, moddata, mempool);
 
-	(*ctx)->channels = (xm_channel_context_t*)mempool;
-	mempool += (*ctx)->module.num_channels * sizeof(xm_channel_context_t);
+	ctx->channels = (xm_channel_context_t*)mempool;
+	mempool += ctx->module.num_channels * sizeof(xm_channel_context_t);
 
-	(*ctx)->global_volume = 1.f;
-	(*ctx)->current_table_index = 0;
-	(*ctx)->current_row = 0;
-	(*ctx)->current_tick = 0;
-	(*ctx)->remaining_samples_in_tick = 0;
-	(*ctx)->jump = false;
-	(*ctx)->jump_to = 0;
-	(*ctx)->jump_row = 0;
+	ctx->global_volume = 1.f;
+	ctx->amplification = .5f; /* Purely empirical value */
+	ctx->current_table_index = 0;
+	ctx->current_row = 0;
+	ctx->current_tick = 0;
+	ctx->remaining_samples_in_tick = 0;
+	ctx->jump = false;
+	ctx->jump_to = 0;
+	ctx->jump_row = 0;
 
-	for(uint8_t i = 0; i < (*ctx)->module.num_channels; ++i) {
-		(*ctx)->channels[i].note = 0.f;
-		(*ctx)->channels[i].instrument = NULL;
-		(*ctx)->channels[i].sample = NULL;
-		(*ctx)->channels[i].sample_position = 0.f;
-		(*ctx)->channels[i].step = 0.f;
-		(*ctx)->channels[i].sustained = false;
-		(*ctx)->channels[i].fadeout_volume = 1.0f;
-		(*ctx)->channels[i].volume_envelope_volume = 1.0f;
-		(*ctx)->channels[i].volume_envelope_frame_count = 0;
-		(*ctx)->channels[i].current_volume_effect = 0;
-		(*ctx)->channels[i].current_effect = 0;
-		(*ctx)->channels[i].current_effect_param = 0;
-		(*ctx)->channels[i].arp_in_progress = false;
-		(*ctx)->channels[i].volume_slide_param = 0;
-		(*ctx)->channels[i].fine_volume_slide_param = 0;
-		(*ctx)->channels[i].global_volume_slide_param = 0;
+	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
+		xm_channel_context_t* ch = ctx->channels + i;
+
+		ch->note = 0.f;
+		ch->instrument = NULL;
+		ch->sample = NULL;
+		ch->sample_position = 0.f;
+		ch->step = 0.f;
+		ch->volume = 1.0f;
+		ch->panning = .5f;
+		ch->sustained = false;
+		ch->fadeout_volume = 1.0f;
+		ch->volume_envelope_volume = 1.0f;
+		ch->panning_envelope_panning = .5f;
+		ch->volume_envelope_frame_count = 0;
+		ch->panning_envelope_frame_count = 0;
+		ch->current_volume_effect = 0;
+		ch->current_effect = 0;
+		ch->current_effect_param = 0;
+		ch->arp_in_progress = false;
+		ch->volume_slide_param = 0;
+		ch->fine_volume_slide_param = 0;
+		ch->global_volume_slide_param = 0;
+		ch->panning_slide_param = 0;
+
+		ch->final_volume_left = .5f;
+		ch->final_volume_right = .5f;
 	}
 
 	return 0;

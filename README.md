@@ -10,7 +10,7 @@ Written in C11 and released under the WTFPL license, version 2.
 Examples
 ========
 
-Two example programs are provided.
+Three example programs are provided.
 
 * `xmtoau` will play a module and output a `.au` file to standard
   output. Example usages:
@@ -49,7 +49,7 @@ DONE    |00|  0  |      | Arpeggio
 PARTIAL |05|  5  |  (*) | Tone porta+Volume slide
 PARTIAL |06|  6  |  (*) | Vibrato+Volume slide
         |07|  7  |  (*) | Tremolo
-        |08|  8  |      | Set panning
+DONE    |08|  8  |      | Set panning
         |09|  9  |      | Sample offset
 DONE    |10|  A  |  (*) | Volume slide
 DONE    |11|  B  |      | Position jump
@@ -76,8 +76,8 @@ DONE    |20|  K  |      | Key off              (Also note number 97)
         |21|  L  |      | Set envelope position
         |22|
         |23|
-        |24|  P  |  (*) | Panning slide
-        |25|
+        |24|
+DONE    |25|  P  |  (*) | Panning slide
         |26|  R  |  (*) | Multi retrig note
         |27|
         |28|  T  |      | Tremor
@@ -98,16 +98,15 @@ DONE    | $80-$8f | Fine volume slide down
 DONE    | $90-$9f | Fine volume slide up
         | $a0-$af | Set vibrato speed
         | $b0-$bf | Vibrato
-        | $c0-$cf | Set panning
-        | $d0-$df | Panning slide left
-        | $e0-$ef | Panning slide right
+DONE    | $c0-$cf | Set panning
+DONE    | $d0-$df | Panning slide left
+DONE    | $e0-$ef | Panning slide right
         | $f0-$ff | Tone porta
 ~~~
 
 General
 -------
 
-* Envelopes: volume OK, panning TODO
 * Autovibrato: TODO
 * Frequence tables: linear OK, amiga TODO
 * Ping-pong loop: TODO

@@ -10,6 +10,7 @@
 
 /* ----- Static functions ----- */
 
+static void xm_panning_slide(xm_channel_context_t*, uint8_t);
 static void xm_volume_slide(xm_channel_context_t*, uint8_t);
 
 static float xm_envelope_lerp(xm_envelope_point_t*, xm_envelope_point_t*, uint16_t);
@@ -26,6 +27,27 @@ static void xm_tick(xm_context_t*);
 static void xm_sample(xm_context_t*, float*, float*);
 
 /* ----- Function definitions ----- */
+
+static void xm_panning_slide(xm_channel_context_t* ch, uint8_t rawval) {
+	float f;
+
+	if((rawval & 0xF0) && (rawval & 0x0F)) {
+		/* Illegal state */
+		return;
+	}
+
+	if(rawval & 0xF0) {
+		/* Slide right */
+		f = (float)(rawval >> 4) / (float)0xFF;
+		ch->panning += f;
+		if(ch->panning > 1) ch->panning = 1;
+	} else {
+		/* Slide left */
+		f = (float)(rawval & 0x0F) / (float)0xFF;
+		ch->panning -= f;
+		if(ch->panning < 0) ch->panning = 0;
+	}
+}
 
 static void xm_volume_slide(xm_channel_context_t* ch, uint8_t rawval) {
 	float f;
@@ -70,9 +92,12 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->sample_position = 0.f;
 	ch->sustained = true;
 	ch->volume = ch->sample->volume;
+	ch->panning = ch->sample->panning;
 	ch->fadeout_volume = 1.0f;
 	ch->volume_envelope_volume = 1.0f;
+	ch->panning_envelope_panning = .5f;
 	ch->volume_envelope_frame_count = 0;
+	ch->panning_envelope_frame_count = 0;
 
 	xm_update_step(ctx, ch, ch->note);
 }
@@ -182,6 +207,10 @@ static void xm_row(xm_context_t* ctx) {
 			xm_volume_slide(ch, s->volume_column << 4);
 			break;
 
+		case 0xC: /* Set panning */
+			ch->panning = (float)(s->volume_column - 0xC0) / (float)0xF;
+			break;
+
 		default:
 			break;
 
@@ -199,6 +228,10 @@ static void xm_row(xm_context_t* ctx) {
 			if(s->effect_param > 0) {
 				ch->volume_slide_param = s->effect_param;
 			}
+			break;
+
+		case 8: /* 8xx: Set panning */
+			ch->panning = (float)s->effect_param / (float)0xFF;
 			break;
 
 		case 0xA: /* Axy: Volume slide */
@@ -258,7 +291,7 @@ static void xm_row(xm_context_t* ctx) {
 
 		case 16: /* Gxx: Set global volume */
 			ctx->global_volume = (float)((s->effect_param > 0x40)
-										 ? 0x40 : s->effect_param) / (float)0x40;
+										  ? 0x40 : s->effect_param) / (float)0x40;
 			break;
 
 		case 17: /* Hxy: Global volume slide */
@@ -269,6 +302,12 @@ static void xm_row(xm_context_t* ctx) {
 
 		case 20: /* Kxx: Key off */
 			xm_key_off(ch);
+			break;
+
+		case 25: /* Pxy: Panning slide */
+			if(s->effect_param > 0) {
+				ch->panning_slide_param = s->effect_param;
+			}
 			break;
 
 		default:
@@ -343,17 +382,25 @@ static void xm_tick(xm_context_t* ctx) {
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
-		if(ch->instrument != NULL && ch->instrument->volume_envelope.enabled) {
-			xm_envelope_t* env = &(ch->instrument->volume_envelope);
+		if(ch->instrument != NULL) {
+			if(ch->instrument->volume_envelope.enabled) {
+				if(!ch->sustained) {
+					ch->fadeout_volume -= (float)ch->instrument->volume_fadeout / 65536.f;
+					if(ch->fadeout_volume < 0) ch->fadeout_volume = 0;
+				}
 
-			if(!ch->sustained) {
-				ch->fadeout_volume -= (float)ch->instrument->volume_fadeout / 65536.f;
-				if(ch->fadeout_volume < 0) ch->fadeout_volume = 0;
+				xm_envelope_tick(ch,
+								 &(ch->instrument->volume_envelope),
+								 &(ch->volume_envelope_frame_count),
+								 &(ch->volume_envelope_volume));
 			}
 
-			xm_envelope_tick(ch, env,
-							 &(ch->volume_envelope_frame_count),
-							 &(ch->volume_envelope_volume));
+			if(ch->instrument->panning_envelope.enabled) {
+				xm_envelope_tick(ch,
+								 &(ch->instrument->panning_envelope),
+								 &(ch->panning_envelope_frame_count),
+								 &(ch->panning_envelope_panning));
+			}
 		}
 
 		if(ch->arp_in_progress && (ch->current_effect != 0 || ch->current_effect_param == 0)) {
@@ -372,6 +419,16 @@ static void xm_tick(xm_context_t* ctx) {
 		case 0x7: /* Volume slide up */
 			if(ctx->current_tick == 0) break;
 			xm_volume_slide(ch, ch->current_volume_effect << 4);
+			break;
+
+		case 0xD: /* Panning slide left */
+			if(ctx->current_tick == 0) break;
+			xm_panning_slide(ch, ch->current_volume_effect & 0x0F);
+			break;
+
+		case 0xE: /* Panning slide right */
+			if(ctx->current_tick == 0) break;
+			xm_panning_slide(ch, ch->current_volume_effect << 4);
 			break;
 
 		default:
@@ -441,21 +498,34 @@ static void xm_tick(xm_context_t* ctx) {
 			}
 			if(ch->global_volume_slide_param & 0xF0) {
 				/* Global slide up */
-				float f = (ch->global_volume_slide_param >> 4) / (float)0x40;
+				float f = (float)(ch->global_volume_slide_param >> 4) / (float)0x40;
 				ctx->global_volume += f;
 				if(ctx->global_volume > 1) ctx->global_volume = 1;
 			} else {
 				/* Global slide down */
-				float f = (ch->global_volume_slide_param & 0x0F) / (float)0x40;
+				float f = (float)(ch->global_volume_slide_param & 0x0F) / (float)0x40;
 				ctx->global_volume -= f;
 				if(ctx->global_volume < 0) ctx->global_volume = 0;
 			}
+			break;
+
+		case 25: /* Pxy: Panning slide */
+			if(ctx->current_tick == 0) break;
+			xm_panning_slide(ch, ch->panning_slide_param);
 			break;
 
 		default:
 			break;
 
 		}
+
+		float fpanning = ch->panning +
+			(ch->panning_envelope_panning - .5f) * (.5f - fabsf(ch->panning - .5f)) * 2.0f;
+
+		ch->final_volume_left = ch->final_volume_right =
+			ch->volume * ch->fadeout_volume * ch->volume_envelope_volume;
+		ch->final_volume_left *= (1.0f - fpanning);
+		ch->final_volume_right *= fpanning;
 	}
 
 	ctx->current_tick++;
@@ -477,7 +547,9 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	*right = 0.f;
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
+		float chval;
 		xm_channel_context_t* ch = ctx->channels + i;
+
 		if(ch->note == 0 ||
 		   ch->instrument == NULL ||
 		   ch->sample == NULL ||
@@ -485,8 +557,7 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 			continue;
 		}
 
-		float chval = ch->sample->data[(size_t)(ch->sample_position)];
-
+		chval = ch->sample->data[(size_t)(ch->sample_position)];
 		ch->sample_position += ch->step;
 
 		switch(ch->sample->loop_type) {
@@ -503,15 +574,19 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 			break;
 		}
 
-		*left += chval * ch->volume * ch->fadeout_volume * ch->volume_envelope_volume;
-		*right += chval * ch->volume * ch->fadeout_volume * ch->volume_envelope_volume;
+		*left += chval * ch->final_volume_left;
+		*right += chval * ch->final_volume_right;
 	}
 
-	*left *= ctx->global_volume / ctx->module.num_channels;
-	*right *= ctx->global_volume / ctx->module.num_channels;
+	const float fgvol = ctx->global_volume * ctx->amplification;
+	*left *= fgvol;
+	*right *= fgvol;
 
-	if(*left > 1 || *left < -1) {
-		DEBUG("mix overflow %f", *left);
+	if(XM_DEBUG && (*left > 1 || *left < -1)) {
+		DEBUG("clipping will occur, final sample value is %f", *left);
+	}
+	if(XM_DEBUG && (*right > 1 || *right < -1)) {
+		DEBUG("clipping will occur, final sample value is %f", *right);
 	}
 }
 
