@@ -42,11 +42,11 @@ Effects
  Status |##| Eff | Info | Description
 --------+--+-----+------+------------------------------
 DONE    |00|  0  |      | Arpeggio
-        |01|  1  |  (*) | Porta up
-        |02|  2  |  (*) | Porta down
-        |03|  3  |  (*) | Tone porta
+DONE    |01|  1  |  (*) | Porta up
+DONE    |02|  2  |  (*) | Porta down
+DONE    |03|  3  |  (*) | Tone porta
         |04|  4  |  (*) | Vibrato
-PARTIAL |05|  5  |  (*) | Tone porta+Volume slide
+DONE    |05|  5  |  (*) | Tone porta+Volume slide
 PARTIAL |06|  6  |  (*) | Vibrato+Volume slide
         |07|  7  |  (*) | Tremolo
 DONE    |08|  8  |      | Set panning
@@ -55,8 +55,8 @@ DONE    |10|  A  |  (*) | Volume slide
 DONE    |11|  B  |      | Position jump
 DONE    |12|  C  |      | Set volume
 DONE    |13|  D  |      | Pattern break
-        |14|  E1 |  (*) | Fine porta up
-        |--|  E2 |  (*) | Fine porta down
+DONE    |14|  E1 |  (*) | Fine porta up
+DONE    |--|  E2 |  (*) | Fine porta down
         |--|  E3 |      | Set gliss control
         |--|  E4 |      | Set vibrato control
         |--|  E5 |      | Set finetune
@@ -81,8 +81,8 @@ DONE    |25|  P  |  (*) | Panning slide
         |26|  R  |  (*) | Multi retrig note
         |27|
         |28|  T  |      | Tremor
-        |31|  X1 |  (*) | Extra fine porta up
-        |--|  X2 |  (*) | Extra fine porta down
+DONE    |33|  X1 |  (*) | Extra fine porta up
+DONE    |--|  X2 |  (*) | Extra fine porta down
 ~~~
 
 Volume effects
@@ -101,7 +101,7 @@ DONE    | $90-$9f | Fine volume slide up
 DONE    | $c0-$cf | Set panning
 DONE    | $d0-$df | Panning slide left
 DONE    | $e0-$ef | Panning slide right
-        | $f0-$ff | Tone porta
+DONE    | $f0-$ff | Tone porta
 ~~~
 
 General

@@ -132,9 +132,13 @@ struct xm_sample_s {
 	 xm_instrument_t* instrument; /* Could be NULL */
 	 xm_sample_t* sample; /* Could be NULL */
 	 float sample_position;
+	 float period;
+	 float frequency;
 	 float step;
+
 	 float volume; /* Ideally between 0 (muted) and 1 (loudest) */
 	 float panning; /* Between 0 (left) and 1 (right); 0.5 is centered */
+
 	 bool sustained;
 	 float fadeout_volume;
 	 float volume_envelope_volume;
@@ -151,6 +155,14 @@ struct xm_sample_s {
 	 uint8_t fine_volume_slide_param;
 	 uint8_t global_volume_slide_param;
 	 uint8_t panning_slide_param;
+	 uint8_t portamento_up_param;
+	 uint8_t portamento_down_param;
+	 uint8_t fine_portamento_up_param;
+	 uint8_t fine_portamento_down_param;
+	 uint8_t extra_fine_portamento_up_param;
+	 uint8_t extra_fine_portamento_down_param;
+	 uint8_t tone_portamento_param;
+	 float tone_portamento_target_period;
 
 	 float final_volume_left;
 	 float final_volume_right;

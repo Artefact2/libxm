@@ -57,23 +57,35 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 		ch->instrument = NULL;
 		ch->sample = NULL;
 		ch->sample_position = 0.f;
+		ch->period = 0.f;
+		ch->frequency = 1.f;
 		ch->step = 0.f;
+
 		ch->volume = 1.0f;
 		ch->panning = .5f;
+
 		ch->sustained = false;
 		ch->fadeout_volume = 1.0f;
 		ch->volume_envelope_volume = 1.0f;
 		ch->panning_envelope_panning = .5f;
 		ch->volume_envelope_frame_count = 0;
 		ch->panning_envelope_frame_count = 0;
+
 		ch->current_volume_effect = 0;
 		ch->current_effect = 0;
 		ch->current_effect_param = 0;
+
 		ch->arp_in_progress = false;
 		ch->volume_slide_param = 0;
 		ch->fine_volume_slide_param = 0;
 		ch->global_volume_slide_param = 0;
 		ch->panning_slide_param = 0;
+		ch->portamento_up_param = 0;
+		ch->portamento_down_param = 0;
+		ch->fine_portamento_up_param = 0;
+		ch->fine_portamento_down_param = 0;
+		ch->extra_fine_portamento_up_param = 0;
+		ch->extra_fine_portamento_down_param = 0;
 
 		ch->final_volume_left = .5f;
 		ch->final_volume_right = .5f;

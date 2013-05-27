@@ -10,13 +10,15 @@
 
 /* ----- Static functions ----- */
 
+static void xm_tone_portamento(xm_context_t*, xm_channel_context_t*);
+static void xm_pitch_slide(xm_context_t*, xm_channel_context_t*, float);
 static void xm_panning_slide(xm_channel_context_t*, uint8_t);
 static void xm_volume_slide(xm_channel_context_t*, uint8_t);
 
 static float xm_envelope_lerp(xm_envelope_point_t*, xm_envelope_point_t*, uint16_t);
 static void xm_envelope_tick(xm_channel_context_t*, xm_envelope_t*, uint16_t*, float*);
 
-static void xm_update_step(xm_context_t*, xm_channel_context_t*, float);
+static void xm_update_step(xm_context_t*, xm_channel_context_t*, float, bool, bool);
 
 static void xm_trigger_note(xm_context_t*, xm_channel_context_t*);
 static void xm_cut_note(xm_channel_context_t*);
@@ -26,7 +28,38 @@ static void xm_row(xm_context_t*);
 static void xm_tick(xm_context_t*);
 static void xm_sample(xm_context_t*, float*, float*);
 
+#define XM_PERIOD_OF_NOTE(note) (7680.f - (note) * 64.f)
+#define XM_LINEAR_FREQUENCY_OF_PERIOD(period) (8363.f * powf(2.f, (4608.f - (period)) / 768.f))
+
 /* ----- Function definitions ----- */
+
+static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
+	if(ch->period > ch->tone_portamento_target_period) {
+		ch->period -= 4.0f * ch->tone_portamento_param;
+
+		if(ch->period < ch->tone_portamento_target_period) {
+			ch->period = ch->tone_portamento_target_period;
+		}
+	} else if(ch->period < ch->tone_portamento_target_period) {
+		ch->period += 4.0f * ch->tone_portamento_param;
+
+		if(ch->period > ch->tone_portamento_target_period) {
+			ch->period = ch->tone_portamento_target_period;
+		}
+	} else {
+		return;
+	}
+
+	xm_update_step(ctx, ch, ch->note, false, true);
+}
+
+static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch, float period_offset) {
+	ch->period += period_offset;
+	if(ch->period < 0) ch->period = 0;
+	/* XXX: upper bound of period ? */
+
+	xm_update_step(ctx, ch, ch->note, false, true);
+}
 
 static void xm_panning_slide(xm_channel_context_t* ch, uint8_t rawval) {
 	float f;
@@ -80,12 +113,18 @@ static float xm_envelope_lerp(xm_envelope_point_t* restrict a, xm_envelope_point
 	}
 }
 
-static void xm_update_step(xm_context_t* ctx, xm_channel_context_t* ch, float note) {
+static void xm_update_step(xm_context_t* ctx, xm_channel_context_t* ch, float note, bool update_period, bool update_frequency) {
 	/* XXX Amiga frequencies? */
 
-	float period = 7680.f - note * 64.f;
-	float frequency = 8363.f * powf(2.f, (4608.f - period) / 768.f);
-	ch->step = frequency / ctx->rate;
+	if(update_period) {
+		ch->period = XM_PERIOD_OF_NOTE(note);
+	}
+
+	if(update_frequency) {
+		ch->frequency = XM_LINEAR_FREQUENCY_OF_PERIOD(ch->period);
+	}
+
+	ch->step = ch->frequency / ctx->rate;
 }
 
 static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
@@ -99,14 +138,12 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->volume_envelope_frame_count = 0;
 	ch->panning_envelope_frame_count = 0;
 
-	xm_update_step(ctx, ch, ch->note);
+	xm_update_step(ctx, ch, ch->note, true, true);
 }
 
 static void xm_cut_note(xm_channel_context_t* ch) {
 	/* NB: this is not the same as Key Off */
 	ch->note = .0f;
-	ch->instrument = NULL;
-	ch->sample = NULL;
 }
 
 static void xm_key_off(xm_channel_context_t* ch) {
@@ -140,7 +177,16 @@ static void xm_row(xm_context_t* ctx) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
 		if(s->instrument > 0) {
-			if(s->instrument - 1 > ctx->module.num_instruments) {
+			if(s->effect_type == 3 && ch->instrument != NULL && ch->sample != NULL) {
+				/* Tone portamento in effect, unclear stuff happens */
+				float old_sample_pos, old_period;
+				old_sample_pos = ch->sample_position;
+				old_period = ch->period;
+				xm_trigger_note(ctx, ch);
+				ch->period = old_period;
+				ch->sample_position = old_sample_pos;
+				xm_update_step(ctx, ch, ch->note, false, true);
+			} else if(s->instrument - 1 > ctx->module.num_instruments) {
 				/* Invalid instrument, Cut current note */
 				xm_cut_note(ch);
 			} else {
@@ -157,7 +203,11 @@ static void xm_row(xm_context_t* ctx) {
 			 * THAT in any of the specs! :-) */
 
 			xm_instrument_t* instr = ch->instrument;
-			if(instr == NULL || ch->instrument->num_samples == 0) {
+
+			if(s->effect_type == 3 && instr != NULL && ch->sample != NULL) {
+				/* Tone portamento in effect */
+				ch->tone_portamento_target_period = XM_PERIOD_OF_NOTE(s->note + ch->sample->relative_note - 1);
+			} else if(instr == NULL || ch->instrument->num_samples == 0) {
 				/* Bad instrument */
 				xm_cut_note(ch);
 			} else {
@@ -211,12 +261,36 @@ static void xm_row(xm_context_t* ctx) {
 			ch->panning = (float)(s->volume_column - 0xC0) / (float)0xF;
 			break;
 
+		case 0xF: /* Tone portamento */
+			if(s->volume_column & 0x0F) {
+				ch->tone_portamento_param = s->volume_column;
+			}
+			break;
+
 		default:
 			break;
 
 		}
 
 		switch(s->effect_type) {
+
+		case 1: /* 1xx: Portamento up */
+			if(s->effect_param > 0) {
+				ch->portamento_up_param = s->effect_param;
+			}
+			break;
+
+		case 2: /* 2xx: Portamento down */
+			if(s->effect_param > 0) {
+				ch->portamento_down_param = s->effect_param;
+			}
+			break;
+
+		case 3: /* 3xx: Tone portamento */
+			if(s->effect_param > 0) {
+				ch->tone_portamento_param = s->effect_param;
+			}
+			break;
 
 		case 5: /* 5xy: Tone portamento + Volume slide */
 			if(s->effect_param > 0) {
@@ -263,14 +337,32 @@ static void xm_row(xm_context_t* ctx) {
 		case 0xE: /* EXy: Extended command */
 			switch(s->effect_param >> 4) {
 
+			case 1: /* E1y: Fine portamento up */
+				if(s->effect_param & 0x0F) {
+					ch->fine_portamento_up_param = s->effect_param & 0x0F;
+				}
+				xm_pitch_slide(ctx, ch, -4.f * ch->fine_portamento_up_param);
+				break;
+
+			case 2: /* E2y: Fine portamento down */
+				if(s->effect_param & 0x0F) {
+					ch->fine_portamento_down_param = s->effect_param & 0x0F;
+				}
+				xm_pitch_slide(ctx, ch, 4.f * ch->fine_portamento_down_param);
+				break;
+
 			case 0xA: /* EAy: Fine volume slide up */
-				ch->fine_volume_slide_param = s->effect_param & 0x0F;
-				xm_volume_slide(ch, ch->volume_slide_param << 4);
+				if(s->effect_param & 0x0F) {
+					ch->fine_volume_slide_param = s->effect_param & 0x0F;
+				}
+				xm_volume_slide(ch, ch->fine_volume_slide_param << 4);
 				break;
 
 			case 0xB: /* EBy: Fine volume slide down */
-				ch->fine_volume_slide_param = s->effect_param & 0x0F;
-				xm_volume_slide(ch, ch->volume_slide_param);
+				if(s->effect_param & 0x0F) {
+					ch->fine_volume_slide_param = s->effect_param & 0x0F;
+				}
+				xm_volume_slide(ch, ch->fine_volume_slide_param);
 				break;
 
 			default:
@@ -307,6 +399,29 @@ static void xm_row(xm_context_t* ctx) {
 		case 25: /* Pxy: Panning slide */
 			if(s->effect_param > 0) {
 				ch->panning_slide_param = s->effect_param;
+			}
+			break;
+
+		case 33: /* Xxy: Extra stuff */
+			switch(s->effect_param >> 4) {
+
+		    case 1: /* X1y: Extra fine portamento up */
+				if(s->effect_param & 0x0F) {
+					ch->extra_fine_portamento_up_param = s->effect_param & 0x0F;
+				}
+				xm_pitch_slide(ctx, ch, -1.0f * ch->extra_fine_portamento_up_param);
+				break;
+
+		    case 2: /* X2y: Extra fine portamento down */
+				if(s->effect_param & 0x0F) {
+					ch->extra_fine_portamento_down_param = s->effect_param & 0x0F;
+				}
+				xm_pitch_slide(ctx, ch, ch->extra_fine_portamento_down_param);
+				break;
+
+			default:
+				break;
+
 			}
 			break;
 
@@ -406,7 +521,7 @@ static void xm_tick(xm_context_t* ctx) {
 		if(ch->arp_in_progress && (ch->current_effect != 0 || ch->current_effect_param == 0)) {
 			/* Arpeggio was interrupted in an "uneven" cycle */
 			ch->arp_in_progress = false;
-			xm_update_step(ctx, ch, ch->note);
+			xm_update_step(ctx, ch, ch->note, true, true);
 		}
 
 		switch(ch->current_volume_effect >> 4) {
@@ -431,6 +546,11 @@ static void xm_tick(xm_context_t* ctx) {
 			xm_panning_slide(ch, ch->current_volume_effect << 4);
 			break;
 
+		case 0xF: /* Tone portamento */
+			if(ctx->current_tick == 0) break;
+			xm_tone_portamento(ctx, ch);
+			break;
+
 		default:
 			break;
 
@@ -443,24 +563,42 @@ static void xm_tick(xm_context_t* ctx) {
 				switch(ctx->current_tick % 3) {
 				case 0:
 					ch->arp_in_progress = false;
-					xm_update_step(ctx, ch, ch->note);
+					xm_update_step(ctx, ch, ch->note, true, true);
 					break;
 				case 1:
 					ch->arp_in_progress = true;
 					xm_update_step(ctx, ch, ch->note +
-								   (ch->current_effect_param >> 4));
+								   (ch->current_effect_param >> 4), true, true);
 					break;
 				case 2:
 					ch->arp_in_progress = true;
 					xm_update_step(ctx, ch, ch->note +
-								   (ch->current_effect_param & 0x0F));
+								   (ch->current_effect_param & 0x0F), true, true);
 					break;
 				}
 			}
 			break;
 
+		case 1: /* 1xx: Portamento up */
+			if(ctx->current_tick == 0) break;
+			/* Don't ask about the 4.f coefficient. I found mention of
+			 * it nowhere. Found by ear™. */
+			xm_pitch_slide(ctx, ch, -4.f * ch->portamento_up_param);
+			break;
+
+		case 2: /* 2xx: Portamento down */
+			if(ctx->current_tick == 0) break;
+			xm_pitch_slide(ctx, ch, 4.f * ch->portamento_down_param);
+			break;
+
+		case 3: /* 3xx: Tone portamento */
+			if(ctx->current_tick == 0) break;
+			xm_tone_portamento(ctx, ch);
+			break;
+
 		case 5: /* 5xy: Tone portamento + Volume slide */
 			if(ctx->current_tick == 0) break;
+			xm_tone_portamento(ctx, ch);
 			xm_volume_slide(ch, ch->volume_slide_param);
 			break;
 
