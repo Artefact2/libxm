@@ -10,6 +10,7 @@
 
 /* ----- Static functions ----- */
 
+static void xm_arpeggio(xm_context_t*, xm_channel_context_t*, uint8_t, int16_t);
 static void xm_tone_portamento(xm_context_t*, xm_channel_context_t*);
 static void xm_pitch_slide(xm_context_t*, xm_channel_context_t*, float);
 static void xm_panning_slide(xm_channel_context_t*, uint8_t);
@@ -49,6 +50,23 @@ static const float multi_retrig_multiply[] = {
 #define XM_LINEAR_FREQUENCY_OF_PERIOD(period) (8363.f * powf(2.f, (4608.f - (period)) / 768.f))
 
 /* ----- Function definitions ----- */
+
+static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, int16_t tick) {
+	switch(tick % 3) {
+	case 0:
+		ch->arp_in_progress = false;
+		xm_update_step(ctx, ch, ch->note, true, true);
+		break;
+	case 2:
+		ch->arp_in_progress = true;
+		xm_update_step(ctx, ch, ch->note + (param >> 4), true, true);
+		break;
+	case 1:
+		ch->arp_in_progress = true;
+		xm_update_step(ctx, ch, ch->note + (param & 0x0F), true, true);
+		break;
+	}
+}
 
 static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(ch->period > ch->tone_portamento_target_period) {
@@ -604,20 +622,25 @@ static void xm_tick(xm_context_t* ctx) {
 
 		case 0: /* 0xy: Arpeggio */
 			if(ch->current_effect_param > 0) {
-				switch(ctx->current_tick % 3) {
-				case 0:
-					ch->arp_in_progress = false;
-					xm_update_step(ctx, ch, ch->note, true, true);
-					break;
-				case 2: /* Yes, FT2 doesn't use the natural order */
-					ch->arp_in_progress = true;
-					xm_update_step(ctx, ch, ch->note +
-								   (ch->current_effect_param >> 4), true, true);
-					break;
-				case 1:
-					ch->arp_in_progress = true;
-					xm_update_step(ctx, ch, ch->note +
-								   (ch->current_effect_param & 0x0F), true, true);
+				char arp_offset = ctx->tempo % 3;
+				switch(arp_offset) {
+				case 2: /* 0 -> x -> 0 -> y -> x -> … */
+					if(ctx->current_tick == 1) {
+						ch->arp_in_progress = true;
+						xm_update_step(ctx, ch, ch->note +
+									   (ch->current_effect_param >> 4), true, true);
+						break;
+					}
+					/* No break here, this is intended */
+				case 1: /* 0 -> 0 -> y -> x -> … */
+					if(ctx->current_tick == 0) {
+						xm_update_step(ctx, ch, ch->note, true, true);
+						break;
+					}
+					/* No break here, this is intended */
+				case 0: /* 0 -> y -> x -> … */
+					xm_arpeggio(ctx, ch, ch->current_effect_param, ctx->current_tick - arp_offset);
+				default:
 					break;
 				}
 			}
