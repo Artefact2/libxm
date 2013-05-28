@@ -72,7 +72,7 @@ DONE    |15|  F  |      | Set tempo/BPM
 DONE    |16|  G  |      | Set global volume
 DONE    |17|  H  |  (*) | Global volume slide
 DONE    |20|  K  |      | Key off              (Also note number 97)
-        |21|  L  |      | Set envelope position
+DONE    |21|  L  |      | Set envelope position
 DONE    |25|  P  |  (*) | Panning slide
         |26|  R  |  (*) | Multi retrig note
         |28|  T  |      | Tremor

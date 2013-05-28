@@ -406,6 +406,11 @@ static void xm_row(xm_context_t* ctx) {
 			}
 			break;
 
+		case 21: /* Lxx: Set envelope position */
+			ch->volume_envelope_frame_count = s->effect_param;
+			ch->panning_envelope_frame_count = s->effect_param;
+			break;
+
 		case 25: /* Pxy: Panning slide */
 			if(s->effect_param > 0) {
 				ch->panning_slide_param = s->effect_param;
