@@ -186,9 +186,11 @@ static void xm_row(xm_context_t* ctx) {
 				ch->period = old_period;
 				ch->sample_position = old_sample_pos;
 				xm_update_step(ctx, ch, ch->note, false, true);
-			} else if(s->instrument - 1 > ctx->module.num_instruments) {
+			} else if(s->instrument > ctx->module.num_instruments) {
 				/* Invalid instrument, Cut current note */
 				xm_cut_note(ch);
+				ch->instrument = NULL;
+				ch->sample = NULL;
 			} else {
 				ch->instrument = ctx->module.instruments + (s->instrument - 1);
 				if(s->note == 0 && ch->sample != NULL) {
