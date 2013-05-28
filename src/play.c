@@ -167,10 +167,18 @@ static void xm_key_off(xm_channel_context_t* ch) {
 }
 
 static void xm_row(xm_context_t* ctx) {
-	if(ctx->jump) {
-		ctx->current_table_index = ctx->jump_to;
+	if(ctx->position_jump) {
+		ctx->current_table_index = ctx->jump_dest;
 		ctx->current_row = ctx->jump_row;
-		ctx->jump = false;
+		ctx->position_jump = false;
+		ctx->pattern_break = false;
+		ctx->jump_row = 0;
+		xm_post_pattern_change(ctx);
+	} else if(ctx->pattern_break) {
+		ctx->current_table_index++;
+		ctx->current_row = ctx->jump_row;
+		ctx->pattern_break = false;
+		ctx->jump_row = 0;
 		xm_post_pattern_change(ctx);
 	}
 
@@ -324,9 +332,8 @@ static void xm_row(xm_context_t* ctx) {
 
 		case 0xB: /* Bxx: Position jump */
 			if(s->effect_param < ctx->module.length) {
-				ctx->jump = true;
-				ctx->jump_to = s->effect_param;
-				ctx->jump_row = 0;
+				ctx->position_jump = true;
+				ctx->jump_dest = s->effect_param;
 			}
 			break;
 
@@ -337,8 +344,7 @@ static void xm_row(xm_context_t* ctx) {
 
 		case 0xD: /* Dxx: Pattern break */
 			/* Jump after playing this line */
-			ctx->jump = true;
-			ctx->jump_to = ctx->current_table_index + 1;
+			ctx->pattern_break = true;
 			ctx->jump_row = (s->effect_param >> 4) * 10 + (s->effect_param & 0x0F);
 			break;
 
@@ -439,7 +445,8 @@ static void xm_row(xm_context_t* ctx) {
 						 * increment from 255 to 0, in which case it
 						 * is still necessary to go the next
 						 * pattern. */
-	if(!ctx->jump && (ctx->current_row >= cur->num_rows || ctx->current_row == 0)) {
+	if(!ctx->position_jump && !ctx->pattern_break &&
+	   (ctx->current_row >= cur->num_rows || ctx->current_row == 0)) {
 		ctx->current_table_index++;
 		ctx->current_row = 0;
 		xm_post_pattern_change(ctx);

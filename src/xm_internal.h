@@ -185,8 +185,9 @@ struct xm_sample_s {
 	 uint8_t current_tick;
 	 float remaining_samples_in_tick;
 
-	 bool jump;
-	 uint8_t jump_to;
+	 bool position_jump;
+	 bool pattern_break;
+	 uint8_t jump_dest;
 	 uint8_t jump_row;
 
 	 uint32_t* pattern_index_loop_counts;
