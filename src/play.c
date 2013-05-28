@@ -393,10 +393,6 @@ static void xm_row(xm_context_t* ctx) {
 			}
 			break;
 
-		case 20: /* Kxx: Key off */
-			xm_key_off(ch);
-			break;
-
 		case 25: /* Pxy: Panning slide */
 			if(s->effect_param > 0) {
 				ch->panning_slide_param = s->effect_param;
@@ -465,7 +461,7 @@ static void xm_envelope_tick(xm_channel_context_t* ch,
 			uint16_t loop_end = env->points[env->loop_end_point].frame;
 			uint16_t loop_length = loop_end - loop_start;
 
-			if(*counter > loop_end) {
+			if(*counter >= loop_end) {
 				*counter -= loop_length;
 			}
 		}
@@ -645,6 +641,14 @@ static void xm_tick(xm_context_t* ctx) {
 				float f = (float)(ch->global_volume_slide_param & 0x0F) / (float)0x40;
 				ctx->global_volume -= f;
 				if(ctx->global_volume < 0) ctx->global_volume = 0;
+			}
+			break;
+
+		case 20: /* Kxx: Key off */
+			/* Most documentations will tell you the parameter has no
+			 * use. Don't be fooled. */
+			if(ctx->current_tick == ch->current_effect_param) {
+				xm_key_off(ch);
 			}
 			break;
 
