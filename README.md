@@ -74,7 +74,7 @@ DONE    |17|  H  |  (*) | Global volume slide
 DONE    |20|  K  |      | Key off              (Also note number 97)
 DONE    |21|  L  |      | Set envelope position
 DONE    |25|  P  |  (*) | Panning slide
-        |26|  R  |  (*) | Multi retrig note
+DONE    |27|  R  |  (*) | Multi retrig note
         |28|  T  |      | Tremor
 DONE    |33|  X1 |  (*) | Extra fine porta up
 DONE    |--|  X2 |  (*) | Extra fine porta down

@@ -164,6 +164,7 @@ struct xm_sample_s {
 	 uint8_t extra_fine_portamento_down_param;
 	 uint8_t tone_portamento_param;
 	 float tone_portamento_target_period;
+	 uint8_t multi_retrig_param;
 
 	 float final_volume_left;
 	 float final_volume_right;

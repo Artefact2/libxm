@@ -29,6 +29,22 @@ static void xm_row(xm_context_t*);
 static void xm_tick(xm_context_t*);
 static void xm_sample(xm_context_t*, float*, float*);
 
+/* ----- Other oddities ----- */
+
+static const float multi_retrig_add[] = {
+	 0.f,  -1.f,  -2.f,  -4.f,  /* 0, 1, 2, 3 */
+	-8.f, -16.f,   0.f,   0.f,  /* 4, 5, 6, 7 */
+	 0.f,   1.f,   2.f,   4.f,  /* 8, 9, A, B */
+	 8.f,  16.f,   0.f,   0.f   /* C, D, E, F */
+};
+
+static const float multi_retrig_multiply[] = {
+	1.f,   1.f,  1.f,        1.f,  /* 0, 1, 2, 3 */
+	1.f,   1.f,   .6666667f,  .5f, /* 4, 5, 6, 7 */
+	1.f,   1.f,  1.f,        1.f,  /* 8, 9, A, B */
+	1.f,   1.f,  1.5f,       2.f   /* C, D, E, F */
+};
+
 #define XM_PERIOD_OF_NOTE(note) (7680.f - (note) * 64.f)
 #define XM_LINEAR_FREQUENCY_OF_PERIOD(period) (8363.f * powf(2.f, (4608.f - (period)) / 768.f))
 
@@ -417,6 +433,17 @@ static void xm_row(xm_context_t* ctx) {
 			}
 			break;
 
+		case 27: /* Rxy: Multi retrig note */
+			if(s->effect_param > 0) {
+				if((s->effect_param >> 4) == 0) {
+					/* Keep previous x value */
+					ch->multi_retrig_param = (ch->multi_retrig_param & 0xF0) | (s->effect_param & 0x0F);
+				} else {
+					ch->multi_retrig_param = s->effect_param;
+				}
+			}
+			break;
+
 		case 33: /* Xxy: Extra stuff */
 			switch(s->effect_param >> 4) {
 
@@ -675,6 +702,19 @@ static void xm_tick(xm_context_t* ctx) {
 		case 25: /* Pxy: Panning slide */
 			if(ctx->current_tick == 0) break;
 			xm_panning_slide(ch, ch->panning_slide_param);
+			break;
+
+		case 27: /* Rxy: Multi retrig note */
+			if(ctx->current_tick == 0) break;
+			if(((ch->multi_retrig_param) & 0x0F) == 0) break;
+			if((ctx->current_tick % (ch->multi_retrig_param & 0x0F)) == 0) {
+				float v = ch->volume * multi_retrig_multiply[ch->multi_retrig_param >> 4]
+					+ multi_retrig_add[ch->multi_retrig_param >> 4];
+				if(v < 0) v = 0;
+				else if(v > 1) v = 1;
+				xm_trigger_note(ctx, ch);
+				ch->volume = v;
+			}
 			break;
 
 		default:

@@ -88,6 +88,7 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 		ch->fine_portamento_down_param = 0;
 		ch->extra_fine_portamento_up_param = 0;
 		ch->extra_fine_portamento_down_param = 0;
+		ch->multi_retrig_param = 0;
 
 		ch->final_volume_left = .5f;
 		ch->final_volume_right = .5f;
