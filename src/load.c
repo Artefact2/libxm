@@ -7,7 +7,6 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
 #include "xm_internal.h"
-#include <string.h>
 
 #define READ(type, pointer) (*((type *)(pointer)))
 
@@ -36,6 +35,8 @@ size_t xm_get_memory_needed_for_context(char* moddata) {
 	uint16_t num_instruments;
 
 	/* Read the module header */
+
+	memory_needed += READ(uint16_t, moddata + offset + 4) * sizeof(uint32_t);
 
 	num_channels = READ(uint16_t, moddata + offset + 8);
 	DEBUG("got %i channels", num_channels);

@@ -18,6 +18,7 @@ static void xm_volume_slide(xm_channel_context_t*, uint8_t);
 static float xm_envelope_lerp(xm_envelope_point_t*, xm_envelope_point_t*, uint16_t);
 static void xm_envelope_tick(xm_channel_context_t*, xm_envelope_t*, uint16_t*, float*);
 
+static void xm_post_pattern_change(xm_context_t*);
 static void xm_update_step(xm_context_t*, xm_channel_context_t*, float, bool, bool);
 
 static void xm_trigger_note(xm_context_t*, xm_channel_context_t*);
@@ -113,6 +114,15 @@ static float xm_envelope_lerp(xm_envelope_point_t* restrict a, xm_envelope_point
 	}
 }
 
+static void xm_post_pattern_change(xm_context_t* ctx) {
+	/* Loop if necessary */
+	if(ctx->current_table_index >= ctx->module.length) {
+		ctx->current_table_index = ctx->module.restart_position;
+	}
+
+	ctx->loop_count = (ctx->pattern_index_loop_counts[ctx->current_table_index]++);
+}
+
 static void xm_update_step(xm_context_t* ctx, xm_channel_context_t* ch, float note, bool update_period, bool update_frequency) {
 	/* XXX Amiga frequencies? */
 
@@ -161,12 +171,7 @@ static void xm_row(xm_context_t* ctx) {
 		ctx->current_table_index = ctx->jump_to;
 		ctx->current_row = ctx->jump_row;
 		ctx->jump = false;
-	}
-
-	/* Loop if necessary */
-	if(ctx->current_table_index >= ctx->module.length) {
-		ctx->current_table_index = ctx->module.restart_position;
-		ctx->loop_count++;
+		xm_post_pattern_change(ctx);
 	}
 
 	xm_pattern_t* cur = ctx->module.patterns + ctx->module.pattern_table[ctx->current_table_index];
@@ -437,6 +442,7 @@ static void xm_row(xm_context_t* ctx) {
 	if(!ctx->jump && (ctx->current_row >= cur->num_rows || ctx->current_row == 0)) {
 		ctx->current_table_index++;
 		ctx->current_row = 0;
+		xm_post_pattern_change(ctx);
 	}
 }
 

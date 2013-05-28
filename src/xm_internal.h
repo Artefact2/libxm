@@ -9,6 +9,7 @@
 #include <xm.h>
 #include <stdbool.h>
 #include <math.h>
+#include <string.h>
 
 #ifdef XM_NO_DEBUG
 #define XM_DEBUG 0
@@ -188,6 +189,7 @@ struct xm_sample_s {
 	 uint8_t jump_to;
 	 uint8_t jump_row;
 
+	 uint32_t* pattern_index_loop_counts;
 	 uint32_t loop_count;
 
 	 xm_channel_context_t* channels;
