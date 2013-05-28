@@ -229,6 +229,7 @@ static void xm_row(xm_context_t* ctx) {
 				float old_sample_pos, old_period;
 				old_sample_pos = ch->sample_position;
 				old_period = ch->period;
+				if(ch->note == 0) ch->note = 1;
 				xm_trigger_note(ctx, ch);
 				ch->period = old_period;
 				ch->sample_position = old_sample_pos;
