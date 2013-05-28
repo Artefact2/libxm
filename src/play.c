@@ -206,7 +206,7 @@ static void xm_row(xm_context_t* ctx) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
 		if(s->instrument > 0) {
-			if(s->effect_type == 3 && ch->instrument != NULL && ch->sample != NULL) {
+			if((s->effect_type == 3 || s->effect_type == 5) && ch->instrument != NULL && ch->sample != NULL) {
 				/* Tone portamento in effect, unclear stuff happens */
 				float old_sample_pos, old_period;
 				old_sample_pos = ch->sample_position;
@@ -235,7 +235,7 @@ static void xm_row(xm_context_t* ctx) {
 
 			xm_instrument_t* instr = ch->instrument;
 
-			if(s->effect_type == 3 && instr != NULL && ch->sample != NULL) {
+			if((s->effect_type == 3 || s->effect_type == 5) && instr != NULL && ch->sample != NULL) {
 				/* Tone portamento in effect */
 				ch->tone_portamento_target_period =
 					XM_PERIOD_OF_NOTE(s->note + ch->sample->relative_note + ch->sample->finetune / 128.f - 1);
