@@ -22,6 +22,7 @@ static void xm_envelope_tick(xm_channel_context_t*, xm_envelope_t*, uint16_t*, f
 static void xm_post_pattern_change(xm_context_t*);
 static void xm_update_step(xm_context_t*, xm_channel_context_t*, float, bool, bool);
 
+static void xm_handle_note_and_instrument(xm_context_t*, xm_channel_context_t*, xm_pattern_slot_t*);
 static void xm_trigger_note(xm_context_t*, xm_channel_context_t*);
 static void xm_cut_note(xm_channel_context_t*);
 static void xm_key_off(xm_channel_context_t*);
@@ -171,6 +172,281 @@ static void xm_update_step(xm_context_t* ctx, xm_channel_context_t* ch, float no
 	ch->step = ch->frequency / ctx->rate;
 }
 
+static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_t* ch,
+										  xm_pattern_slot_t* s) {
+	if(s->instrument > 0) {
+		if((s->effect_type == 3 || s->effect_type == 5) && ch->instrument != NULL && ch->sample != NULL) {
+			/* Tone portamento in effect, unclear stuff happens */
+			float old_sample_pos, old_period;
+			old_sample_pos = ch->sample_position;
+			old_period = ch->period;
+			if(ch->note == 0) ch->note = 1;
+			xm_trigger_note(ctx, ch);
+			ch->period = old_period;
+			ch->sample_position = old_sample_pos;
+			xm_update_step(ctx, ch, ch->note, false, true);
+		} else if(s->instrument > ctx->module.num_instruments) {
+			/* Invalid instrument, Cut current note */
+			xm_cut_note(ch);
+			ch->instrument = NULL;
+			ch->sample = NULL;
+		} else {
+			ch->instrument = ctx->module.instruments + (s->instrument - 1);
+			if(s->note == 0 && ch->sample != NULL) {
+				/* Ghost instrument, trigger note */
+				xm_trigger_note(ctx, ch);
+			}
+		}
+	}
+
+	if(s->note > 0 && s->note < 97) {
+		/* Yes, the real note number is s->note -1. Try finding
+		 * THAT in any of the specs! :-) */
+
+		xm_instrument_t* instr = ch->instrument;
+
+		if((s->effect_type == 3 || s->effect_type == 5) && instr != NULL && ch->sample != NULL) {
+			/* Tone portamento in effect */
+			ch->tone_portamento_target_period =
+				XM_PERIOD_OF_NOTE(s->note + ch->sample->relative_note + ch->sample->finetune / 128.f - 1);
+		} else if(instr == NULL || ch->instrument->num_samples == 0) {
+			/* Bad instrument */
+			xm_cut_note(ch);
+		} else {
+			if(instr->sample_of_notes[s->note - 1] < instr->num_samples) {
+				ch->sample = instr->samples + instr->sample_of_notes[s->note - 1];
+				ch->note = s->note + ch->sample->relative_note
+					+ ch->sample->finetune / 128.f - 1.f;
+				if(s->instrument > 0) {
+					xm_trigger_note(ctx, ch);
+				} else {
+					/* Ghost note: keep old volume */
+					float old_volume = ch->volume;
+					xm_trigger_note(ctx, ch);
+					ch->volume = old_volume;
+				}
+			} else {
+				/* Bad sample */
+				xm_cut_note(ch);
+			}
+		}
+	} else if(s->note == 97) {
+		/* Key Off */
+		xm_key_off(ch);
+	}
+
+	ch->current_volume_effect = s->volume_column;
+	ch->current_effect = s->effect_type;
+	ch->current_effect_param = s->effect_param;
+
+	switch(s->volume_column >> 4) {
+
+	case 0x5:
+		if(s->volume_column > 0x50) break;
+	case 0x1:
+	case 0x2:
+	case 0x3:
+	case 0x4:
+		/* Set volume */
+		ch->volume = (float)(s->volume_column - 0x10) / (float)0x40;
+		break;
+
+	case 0x8: /* Fine volume slide down */
+		xm_volume_slide(ch, s->volume_column & 0x0F);
+		break;
+
+	case 0x9: /* Fine volume slide up */
+		xm_volume_slide(ch, s->volume_column << 4);
+		break;
+
+	case 0xC: /* Set panning */
+		ch->panning = (float)(s->volume_column - 0xC0) / (float)0xF;
+		break;
+
+	case 0xF: /* Tone portamento */
+		if(s->volume_column & 0x0F) {
+			ch->tone_portamento_param = s->volume_column;
+		}
+		break;
+
+	default:
+		break;
+
+	}
+
+	switch(s->effect_type) {
+
+	case 1: /* 1xx: Portamento up */
+		if(s->effect_param > 0) {
+			ch->portamento_up_param = s->effect_param;
+		}
+		break;
+
+	case 2: /* 2xx: Portamento down */
+		if(s->effect_param > 0) {
+			ch->portamento_down_param = s->effect_param;
+		}
+		break;
+
+	case 3: /* 3xx: Tone portamento */
+		if(s->effect_param > 0) {
+			ch->tone_portamento_param = s->effect_param;
+		}
+		break;
+
+	case 5: /* 5xy: Tone portamento + Volume slide */
+		if(s->effect_param > 0) {
+			ch->volume_slide_param = s->effect_param;
+		}
+		break;
+
+	case 6: /* 6xy: Vibrato + Volume slide */
+		if(s->effect_param > 0) {
+			ch->volume_slide_param = s->effect_param;
+		}
+		break;
+
+	case 8: /* 8xx: Set panning */
+		ch->panning = (float)s->effect_param / (float)0xFF;
+		break;
+
+	case 0xA: /* Axy: Volume slide */
+		if(s->effect_param > 0) {
+			ch->volume_slide_param = s->effect_param;
+		}
+		break;
+
+	case 0xB: /* Bxx: Position jump */
+		if(s->effect_param < ctx->module.length) {
+			ctx->position_jump = true;
+			ctx->jump_dest = s->effect_param;
+		}
+		break;
+
+	case 0xC: /* Cxx: Set volume */
+		ch->volume = (float)((s->effect_param > 0x40)
+							 ? 0x40 : s->effect_param) / (float)0x40;
+		break;
+
+	case 0xD: /* Dxx: Pattern break */
+		/* Jump after playing this line */
+		ctx->pattern_break = true;
+		ctx->jump_row = (s->effect_param >> 4) * 10 + (s->effect_param & 0x0F);
+		break;
+
+	case 0xE: /* EXy: Extended command */
+		switch(s->effect_param >> 4) {
+
+		case 1: /* E1y: Fine portamento up */
+			if(s->effect_param & 0x0F) {
+				ch->fine_portamento_up_param = s->effect_param & 0x0F;
+			}
+			xm_pitch_slide(ctx, ch, -4.f * ch->fine_portamento_up_param);
+			break;
+
+		case 2: /* E2y: Fine portamento down */
+			if(s->effect_param & 0x0F) {
+				ch->fine_portamento_down_param = s->effect_param & 0x0F;
+			}
+			xm_pitch_slide(ctx, ch, 4.f * ch->fine_portamento_down_param);
+			break;
+
+		case 0xA: /* EAy: Fine volume slide up */
+			if(s->effect_param & 0x0F) {
+				ch->fine_volume_slide_param = s->effect_param & 0x0F;
+			}
+			xm_volume_slide(ch, ch->fine_volume_slide_param << 4);
+			break;
+
+		case 0xB: /* EBy: Fine volume slide down */
+			if(s->effect_param & 0x0F) {
+				ch->fine_volume_slide_param = s->effect_param & 0x0F;
+			}
+			xm_volume_slide(ch, ch->fine_volume_slide_param);
+			break;
+
+		case 0xD: /* EDy: Note delay */
+			/* Already taken care of */
+			break;
+
+		default:
+			break;
+
+		}
+		break;
+
+	case 0xF: /* Fxx: Set tempo/BPM */
+		if(s->effect_param > 0) {
+			if(s->effect_param <= 0x1F) {
+				ctx->tempo = s->effect_param;
+			} else {
+				ctx->bpm = s->effect_param;
+			}
+		}
+		break;
+
+	case 16: /* Gxx: Set global volume */
+		ctx->global_volume = (float)((s->effect_param > 0x40)
+									 ? 0x40 : s->effect_param) / (float)0x40;
+		break;
+
+	case 17: /* Hxy: Global volume slide */
+		if(s->effect_param > 0) {
+			ch->global_volume_slide_param = s->effect_param;
+		}
+		break;
+
+	case 21: /* Lxx: Set envelope position */
+		ch->volume_envelope_frame_count = s->effect_param;
+		ch->panning_envelope_frame_count = s->effect_param;
+		break;
+
+	case 25: /* Pxy: Panning slide */
+		if(s->effect_param > 0) {
+			ch->panning_slide_param = s->effect_param;
+		}
+		break;
+
+	case 27: /* Rxy: Multi retrig note */
+		if(s->effect_param > 0) {
+			if((s->effect_param >> 4) == 0) {
+				/* Keep previous x value */
+				ch->multi_retrig_param = (ch->multi_retrig_param & 0xF0) | (s->effect_param & 0x0F);
+			} else {
+				ch->multi_retrig_param = s->effect_param;
+			}
+		}
+		break;
+
+	case 33: /* Xxy: Extra stuff */
+		switch(s->effect_param >> 4) {
+
+		case 1: /* X1y: Extra fine portamento up */
+			if(s->effect_param & 0x0F) {
+				ch->extra_fine_portamento_up_param = s->effect_param & 0x0F;
+			}
+			xm_pitch_slide(ctx, ch, -1.0f * ch->extra_fine_portamento_up_param);
+			break;
+
+		case 2: /* X2y: Extra fine portamento down */
+			if(s->effect_param & 0x0F) {
+				ch->extra_fine_portamento_down_param = s->effect_param & 0x0F;
+			}
+			xm_pitch_slide(ctx, ch, ch->extra_fine_portamento_down_param);
+			break;
+
+		default:
+			break;
+
+		}
+		break;
+
+	default:
+		break;
+
+	}
+}
+
 static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->sample_position = 0.f;
 	ch->sustained = true;
@@ -223,272 +499,12 @@ static void xm_row(xm_context_t* ctx) {
 		xm_pattern_slot_t* s = cur->slots + ctx->current_row * ctx->module.num_channels + i;
 		xm_channel_context_t* ch = ctx->channels + i;
 
-		if(s->instrument > 0) {
-			if((s->effect_type == 3 || s->effect_type == 5) && ch->instrument != NULL && ch->sample != NULL) {
-				/* Tone portamento in effect, unclear stuff happens */
-				float old_sample_pos, old_period;
-				old_sample_pos = ch->sample_position;
-				old_period = ch->period;
-				if(ch->note == 0) ch->note = 1;
-				xm_trigger_note(ctx, ch);
-				ch->period = old_period;
-				ch->sample_position = old_sample_pos;
-				xm_update_step(ctx, ch, ch->note, false, true);
-			} else if(s->instrument > ctx->module.num_instruments) {
-				/* Invalid instrument, Cut current note */
-				xm_cut_note(ch);
-				ch->instrument = NULL;
-				ch->sample = NULL;
-			} else {
-				ch->instrument = ctx->module.instruments + (s->instrument - 1);
-				if(s->note == 0 && ch->sample != NULL) {
-					/* Ghost instrument, trigger note */
-					xm_trigger_note(ctx, ch);
-				}
-			}
-		}
-
-		if(s->note > 0 && s->note < 97) {
-			/* Yes, the real note number is s->note -1. Try finding
-			 * THAT in any of the specs! :-) */
-
-			xm_instrument_t* instr = ch->instrument;
-
-			if((s->effect_type == 3 || s->effect_type == 5) && instr != NULL && ch->sample != NULL) {
-				/* Tone portamento in effect */
-				ch->tone_portamento_target_period =
-					XM_PERIOD_OF_NOTE(s->note + ch->sample->relative_note + ch->sample->finetune / 128.f - 1);
-			} else if(instr == NULL || ch->instrument->num_samples == 0) {
-				/* Bad instrument */
-				xm_cut_note(ch);
-			} else {
-				if(instr->sample_of_notes[s->note - 1] < instr->num_samples) {
-					ch->sample = instr->samples + instr->sample_of_notes[s->note - 1];
-					ch->note = s->note + ch->sample->relative_note
-						+ ch->sample->finetune / 128.f - 1.f;
-					if(s->instrument > 0) {
-						xm_trigger_note(ctx, ch);
-					} else {
-						/* Ghost note: keep old volume */
-						float old_volume = ch->volume;
-						xm_trigger_note(ctx, ch);
-						ch->volume = old_volume;
-					}
-				} else {
-					/* Bad sample */
-					xm_cut_note(ch);
-				}
-			}
-		} else if(s->note == 97) {
-			/* Key Off */
-			xm_key_off(ch);
-		}
-
-		ch->current_volume_effect = s->volume_column;
-		ch->current_effect = s->effect_type;
-		ch->current_effect_param = s->effect_param;
-
-		switch(s->volume_column >> 4) {
-
-		case 0x5:
-			if(s->volume_column > 0x50) break;
-		case 0x1:
-		case 0x2:
-		case 0x3:
-		case 0x4:
-			/* Set volume */
-			ch->volume = (float)(s->volume_column - 0x10) / (float)0x40;
-			break;
-
-		case 0x8: /* Fine volume slide down */
-			xm_volume_slide(ch, s->volume_column & 0x0F);
-			break;
-
-		case 0x9: /* Fine volume slide up */
-			xm_volume_slide(ch, s->volume_column << 4);
-			break;
-
-		case 0xC: /* Set panning */
-			ch->panning = (float)(s->volume_column - 0xC0) / (float)0xF;
-			break;
-
-		case 0xF: /* Tone portamento */
-			if(s->volume_column & 0x0F) {
-				ch->tone_portamento_param = s->volume_column;
-			}
-			break;
-
-		default:
-			break;
-
-		}
-
-		switch(s->effect_type) {
-
-		case 1: /* 1xx: Portamento up */
-			if(s->effect_param > 0) {
-				ch->portamento_up_param = s->effect_param;
-			}
-			break;
-
-		case 2: /* 2xx: Portamento down */
-			if(s->effect_param > 0) {
-				ch->portamento_down_param = s->effect_param;
-			}
-			break;
-
-		case 3: /* 3xx: Tone portamento */
-			if(s->effect_param > 0) {
-				ch->tone_portamento_param = s->effect_param;
-			}
-			break;
-
-		case 5: /* 5xy: Tone portamento + Volume slide */
-			if(s->effect_param > 0) {
-				ch->volume_slide_param = s->effect_param;
-			}
-			break;
-
-		case 6: /* 6xy: Vibrato + Volume slide */
-			if(s->effect_param > 0) {
-				ch->volume_slide_param = s->effect_param;
-			}
-			break;
-
-		case 8: /* 8xx: Set panning */
-			ch->panning = (float)s->effect_param / (float)0xFF;
-			break;
-
-		case 0xA: /* Axy: Volume slide */
-			if(s->effect_param > 0) {
-				ch->volume_slide_param = s->effect_param;
-			}
-			break;
-
-		case 0xB: /* Bxx: Position jump */
-			if(s->effect_param < ctx->module.length) {
-				ctx->position_jump = true;
-				ctx->jump_dest = s->effect_param;
-			}
-			break;
-
-		case 0xC: /* Cxx: Set volume */
-			ch->volume = (float)((s->effect_param > 0x40)
-								 ? 0x40 : s->effect_param) / (float)0x40;
-			break;
-
-		case 0xD: /* Dxx: Pattern break */
-			/* Jump after playing this line */
-			ctx->pattern_break = true;
-			ctx->jump_row = (s->effect_param >> 4) * 10 + (s->effect_param & 0x0F);
-			break;
-
-		case 0xE: /* EXy: Extended command */
-			switch(s->effect_param >> 4) {
-
-			case 1: /* E1y: Fine portamento up */
-				if(s->effect_param & 0x0F) {
-					ch->fine_portamento_up_param = s->effect_param & 0x0F;
-				}
-				xm_pitch_slide(ctx, ch, -4.f * ch->fine_portamento_up_param);
-				break;
-
-			case 2: /* E2y: Fine portamento down */
-				if(s->effect_param & 0x0F) {
-					ch->fine_portamento_down_param = s->effect_param & 0x0F;
-				}
-				xm_pitch_slide(ctx, ch, 4.f * ch->fine_portamento_down_param);
-				break;
-
-			case 0xA: /* EAy: Fine volume slide up */
-				if(s->effect_param & 0x0F) {
-					ch->fine_volume_slide_param = s->effect_param & 0x0F;
-				}
-				xm_volume_slide(ch, ch->fine_volume_slide_param << 4);
-				break;
-
-			case 0xB: /* EBy: Fine volume slide down */
-				if(s->effect_param & 0x0F) {
-					ch->fine_volume_slide_param = s->effect_param & 0x0F;
-				}
-				xm_volume_slide(ch, ch->fine_volume_slide_param);
-				break;
-
-			default:
-				break;
-
-			}
-			break;
-
-		case 0xF: /* Fxx: Set tempo/BPM */
-			if(s->effect_param > 0) {
-				if(s->effect_param <= 0x1F) {
-					ctx->tempo = s->effect_param;
-				} else {
-					ctx->bpm = s->effect_param;
-				}
-			}
-			break;
-
-		case 16: /* Gxx: Set global volume */
-			ctx->global_volume = (float)((s->effect_param > 0x40)
-										  ? 0x40 : s->effect_param) / (float)0x40;
-			break;
-
-		case 17: /* Hxy: Global volume slide */
-			if(s->effect_param > 0) {
-				ch->global_volume_slide_param = s->effect_param;
-			}
-			break;
-
-		case 21: /* Lxx: Set envelope position */
-			ch->volume_envelope_frame_count = s->effect_param;
-			ch->panning_envelope_frame_count = s->effect_param;
-			break;
-
-		case 25: /* Pxy: Panning slide */
-			if(s->effect_param > 0) {
-				ch->panning_slide_param = s->effect_param;
-			}
-			break;
-
-		case 27: /* Rxy: Multi retrig note */
-			if(s->effect_param > 0) {
-				if((s->effect_param >> 4) == 0) {
-					/* Keep previous x value */
-					ch->multi_retrig_param = (ch->multi_retrig_param & 0xF0) | (s->effect_param & 0x0F);
-				} else {
-					ch->multi_retrig_param = s->effect_param;
-				}
-			}
-			break;
-
-		case 33: /* Xxy: Extra stuff */
-			switch(s->effect_param >> 4) {
-
-		    case 1: /* X1y: Extra fine portamento up */
-				if(s->effect_param & 0x0F) {
-					ch->extra_fine_portamento_up_param = s->effect_param & 0x0F;
-				}
-				xm_pitch_slide(ctx, ch, -1.0f * ch->extra_fine_portamento_up_param);
-				break;
-
-		    case 2: /* X2y: Extra fine portamento down */
-				if(s->effect_param & 0x0F) {
-					ch->extra_fine_portamento_down_param = s->effect_param & 0x0F;
-				}
-				xm_pitch_slide(ctx, ch, ch->extra_fine_portamento_down_param);
-				break;
-
-			default:
-				break;
-
-			}
-			break;
-
-		default:
-			break;
-
+		if(s->effect_type != 0xE || s->effect_param >> 4 != 0xD) {
+			xm_handle_note_and_instrument(ctx, ch, s);
+		} else {
+			ch->note_delay = true;
+			ch->note_delay_param = s->effect_param & 0x0F;
+			ch->note_delay_note = s;
 		}
 	}
 
@@ -559,6 +575,12 @@ static void xm_tick(xm_context_t* ctx) {
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
+
+		/* Note delay check must happen here, before the envelopes are updated */
+		if(ch->note_delay == true && ch->note_delay_param == ctx->current_tick) {
+			ch->note_delay = false;
+			xm_handle_note_and_instrument(ctx, ch, ch->note_delay_note);
+		}
 
 		if(ch->instrument != NULL) {
 			if(ch->instrument->volume_envelope.enabled) {
@@ -687,6 +709,10 @@ static void xm_tick(xm_context_t* ctx) {
 				if((ch->current_effect_param & 0x0F) == ctx->current_tick) {
 					ch->volume = .0f;
 				}
+				break;
+
+			case 0xD: /* EDy: Note delay */
+				/* Already taken care of */
 				break;
 
 			default:

@@ -66,7 +66,7 @@ DONE    |--|  E2 |  (*) | Fine porta down
 DONE    |--|  EA |  (*) | Fine volume slide up
 DONE    |--|  EB |  (*) | Fine volume slide down
 DONE    |--|  EC |      | Note cut
-        |--|  ED |      | Note delay
+DONE    |--|  ED |      | Note delay
         |--|  EE |      | Pattern delay
 DONE    |15|  F  |      | Set tempo/BPM
 DONE    |16|  G  |      | Set global volume
