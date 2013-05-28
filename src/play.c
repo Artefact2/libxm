@@ -609,12 +609,12 @@ static void xm_tick(xm_context_t* ctx) {
 					ch->arp_in_progress = false;
 					xm_update_step(ctx, ch, ch->note, true, true);
 					break;
-				case 1:
+				case 2: /* Yes, FT2 doesn't use the natural order */
 					ch->arp_in_progress = true;
 					xm_update_step(ctx, ch, ch->note +
 								   (ch->current_effect_param >> 4), true, true);
 					break;
-				case 2:
+				case 1:
 					ch->arp_in_progress = true;
 					xm_update_step(ctx, ch, ch->note +
 								   (ch->current_effect_param & 0x0F), true, true);
