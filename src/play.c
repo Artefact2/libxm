@@ -50,6 +50,8 @@ static const float multi_retrig_multiply[] = {
 #define XM_PERIOD_OF_NOTE(note) (7680.f - (note) * 64.f)
 #define XM_LINEAR_FREQUENCY_OF_PERIOD(period) (8363.f * powf(2.f, (4608.f - (period)) / 768.f))
 
+#define HAS_TONE_PORTAMENTO(s) ((s)->effect_type == 3 || (s)->effect_type == 5 || ((s)->volume_column >> 4) == 0xF)
+
 /* ----- Function definitions ----- */
 
 static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, int16_t tick) {
@@ -173,7 +175,7 @@ static void xm_update_step(xm_context_t* ctx, xm_channel_context_t* ch, float no
 static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_t* ch,
 										  xm_pattern_slot_t* s) {
 	if(s->instrument > 0) {
-		if((s->effect_type == 3 || s->effect_type == 5) && ch->instrument != NULL && ch->sample != NULL) {
+		if(HAS_TONE_PORTAMENTO(s) && ch->instrument != NULL && ch->sample != NULL) {
 			/* Tone portamento in effect, unclear stuff happens */
 			float old_sample_pos, old_period;
 			old_sample_pos = ch->sample_position;
@@ -192,7 +194,10 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			ch->instrument = ctx->module.instruments + (s->instrument - 1);
 			if(s->note == 0 && ch->sample != NULL) {
 				/* Ghost instrument, trigger note */
+				/* Sample position is kept, but envelopes are reset */
+				float old_sample_pos = ch->sample_position;
 				xm_trigger_note(ctx, ch);
+				ch->sample_position = old_sample_pos;
 			}
 		}
 	}
@@ -203,10 +208,10 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 
 		xm_instrument_t* instr = ch->instrument;
 
-		if((s->effect_type == 3 || s->effect_type == 5) && instr != NULL && ch->sample != NULL) {
+		if(HAS_TONE_PORTAMENTO(s) && instr != NULL && ch->sample != NULL) {
 			/* Tone portamento in effect */
-			ch->tone_portamento_target_period =
-				XM_PERIOD_OF_NOTE(s->note + ch->sample->relative_note + ch->sample->finetune / 128.f - 1);
+			ch->note = s->note + ch->sample->relative_note + ch->sample->finetune / 128.f - 1.f;
+			ch->tone_portamento_target_period = XM_PERIOD_OF_NOTE(ch->note);
 		} else if(instr == NULL || ch->instrument->num_samples == 0) {
 			/* Bad instrument */
 			xm_cut_note(ch);
