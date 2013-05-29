@@ -18,6 +18,7 @@ static void xm_volume_slide(xm_channel_context_t*, uint8_t);
 
 static float xm_envelope_lerp(xm_envelope_point_t*, xm_envelope_point_t*, uint16_t);
 static void xm_envelope_tick(xm_channel_context_t*, xm_envelope_t*, uint16_t*, float*);
+static void xm_envelopes(xm_channel_context_t*);
 
 static void xm_post_pattern_change(xm_context_t*);
 static void xm_update_step(xm_context_t*, xm_channel_context_t*, float, bool, bool);
@@ -231,10 +232,6 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 		/* Key Off */
 		xm_key_off(ch);
 	}
-
-	ch->current_volume_effect = s->volume_column;
-	ch->current_effect = s->effect_type;
-	ch->current_effect_param = s->effect_param;
 
 	switch(s->volume_column >> 4) {
 
@@ -469,7 +466,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 
 static void xm_cut_note(xm_channel_context_t* ch) {
 	/* NB: this is not the same as Key Off */
-	ch->note = .0f;
+	ch->volume = .0f;
 }
 
 static void xm_key_off(xm_channel_context_t* ch) {
@@ -507,10 +504,13 @@ static void xm_row(xm_context_t* ctx) {
 		xm_pattern_slot_t* s = cur->slots + ctx->current_row * ctx->module.num_channels + i;
 		xm_channel_context_t* ch = ctx->channels + i;
 
+		ch->current_volume_effect = s->volume_column;
+		ch->current_effect = s->effect_type;
+		ch->current_effect_param = s->effect_param;
+
 		if(s->effect_type != 0xE || s->effect_param >> 4 != 0xD) {
 			xm_handle_note_and_instrument(ctx, ch, s);
 		} else {
-			ch->note_delay = true;
 			ch->note_delay_param = s->effect_param & 0x0F;
 			ch->note_delay_note = s;
 		}
@@ -576,6 +576,29 @@ static void xm_envelope_tick(xm_channel_context_t* ch,
 	}
 }
 
+static void xm_envelopes(xm_channel_context_t* ch) {
+	if(ch->instrument != NULL) {
+		if(ch->instrument->volume_envelope.enabled) {
+			if(!ch->sustained) {
+				ch->fadeout_volume -= (float)ch->instrument->volume_fadeout / 65536.f;
+				if(ch->fadeout_volume < 0) ch->fadeout_volume = 0;
+			}
+
+			xm_envelope_tick(ch,
+							 &(ch->instrument->volume_envelope),
+							 &(ch->volume_envelope_frame_count),
+							 &(ch->volume_envelope_volume));
+		}
+
+		if(ch->instrument->panning_envelope.enabled) {
+			xm_envelope_tick(ch,
+							 &(ch->instrument->panning_envelope),
+							 &(ch->panning_envelope_frame_count),
+							 &(ch->panning_envelope_panning));
+		}
+	}
+}
+
 static void xm_tick(xm_context_t* ctx) {
 	if(ctx->current_tick == 0) {
 		xm_row(ctx);
@@ -584,32 +607,7 @@ static void xm_tick(xm_context_t* ctx) {
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
-		/* Note delay check must happen here, before the envelopes are updated */
-		if(ch->note_delay == true && ch->note_delay_param == ctx->current_tick) {
-			ch->note_delay = false;
-			xm_handle_note_and_instrument(ctx, ch, ch->note_delay_note);
-		}
-
-		if(ch->instrument != NULL) {
-			if(ch->instrument->volume_envelope.enabled) {
-				if(!ch->sustained) {
-					ch->fadeout_volume -= (float)ch->instrument->volume_fadeout / 65536.f;
-					if(ch->fadeout_volume < 0) ch->fadeout_volume = 0;
-				}
-
-				xm_envelope_tick(ch,
-								 &(ch->instrument->volume_envelope),
-								 &(ch->volume_envelope_frame_count),
-								 &(ch->volume_envelope_volume));
-			}
-
-			if(ch->instrument->panning_envelope.enabled) {
-				xm_envelope_tick(ch,
-								 &(ch->instrument->panning_envelope),
-								 &(ch->panning_envelope_frame_count),
-								 &(ch->panning_envelope_panning));
-			}
-		}
+		xm_envelopes(ch);
 
 		if(ch->arp_in_progress && (ch->current_effect != 0 || ch->current_effect_param == 0)) {
 			/* Arpeggio was interrupted in an "uneven" cycle */
@@ -713,14 +711,26 @@ static void xm_tick(xm_context_t* ctx) {
 		case 0xE: /* EXy: Extended command */
 			switch(ch->current_effect_param >> 4) {
 
-			case 0xC: /* ECy: Note cut (misleading name, should be mute) */
+			case 0x9: /* E9y: Retrigger note */
+				if(ctx->current_tick != 0 && ch->current_effect_param & 0x0F) {
+					if(!(ctx->current_tick % (ch->current_effect_param & 0x0F))) {
+						xm_trigger_note(ctx, ch, 0);
+						xm_envelopes(ch);
+					}
+				}
+				break;
+
+			case 0xC: /* ECy: Note cut */
 				if((ch->current_effect_param & 0x0F) == ctx->current_tick) {
-					ch->volume = .0f;
+				    xm_cut_note(ch);
 				}
 				break;
 
 			case 0xD: /* EDy: Note delay */
-				/* Already taken care of */
+				if(ch->note_delay_param == ctx->current_tick) {
+					xm_handle_note_and_instrument(ctx, ch, ch->note_delay_note);
+					xm_envelopes(ch);
+				}
 				break;
 
 			default:

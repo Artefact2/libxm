@@ -164,7 +164,6 @@ struct xm_sample_s {
 	 uint8_t tone_portamento_param;
 	 float tone_portamento_target_period;
 	 uint8_t multi_retrig_param;
-	 bool note_delay;
 	 uint8_t note_delay_param;
 	 xm_pattern_slot_t* note_delay_note;
 

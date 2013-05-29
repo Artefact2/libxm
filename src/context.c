@@ -13,7 +13,6 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 	size_t bytes_needed;
 	char* mempool;
 	xm_context_t* ctx;
-	
 
 	if((ret = xm_check_header_sanity(moddata))) {
 		DEBUG("xm_check_header_sanity() returned %i", ret);
@@ -90,7 +89,6 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 		ch->extra_fine_portamento_up_param = 0;
 		ch->extra_fine_portamento_down_param = 0;
 		ch->multi_retrig_param = 0;
-		ch->note_delay = false;
 		ch->note_delay_param = 0;
 		ch->note_delay_note = NULL;
 

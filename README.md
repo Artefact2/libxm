@@ -72,7 +72,7 @@ DONE    |--|  E2 |  (*) | Fine porta down
         |--|  E5 |      | Set finetune
         |--|  E6 |      | Set loop begin/loop
         |--|  E7 |      | Set tremolo control
-        |--|  E9 |      | Retrig note
+DONE    |--|  E9 |      | Retrig note
 DONE    |--|  EA |  (*) | Fine volume slide up
 DONE    |--|  EB |  (*) | Fine volume slide down
 DONE    |--|  EC |      | Note cut
