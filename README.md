@@ -34,7 +34,7 @@ Three example programs are provided.
 
 Here are some interesting modules, most showcase unusual or advanced
 tracking techniques (and thus are a good indicator of a player's
-reliability):
+accuracy):
 
 * [Lamb - Among the stars](http://modarchive.org/module.php?165819)
 * [Raina - Cyberculosis](http://modarchive.org/module.php?165308)
@@ -112,9 +112,8 @@ DONE    | $f0-$ff | Tone porta
 General
 -------
 
-* Autovibrato: TODO
-* Frequence tables: linear OK, amiga TODO
-* Ping-pong loop: TODO
+* Autovibrato is not supported yet.
+* Amiga frequency tables are not supported yet.
 
 Thanks
 ======

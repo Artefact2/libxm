@@ -815,21 +815,47 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 			continue;
 		}
 
-		chval = ch->sample->data[(size_t)(ch->sample_position)];
-		ch->sample_position += ch->step;
+		chval = ch->sample->data[(uint32_t)(ch->sample_position)];
 
 		switch(ch->sample->loop_type) {
+
 		case XM_NO_LOOP:
+			ch->sample_position += ch->step;
 		    if(ch->sample_position >= ch->sample->length) {
 				ch->sample_position = -1;
 			}
 			break;
+
 		case XM_FORWARD_LOOP:
-		case XM_PING_PONG_LOOP: /* TODO */
+			ch->sample_position += ch->step;
 			while(ch->sample_position >= ch->sample->loop_start + ch->sample->loop_length) {
 				ch->sample_position -= ch->sample->loop_length;
 			}
 			break;
+
+		case XM_PING_PONG_LOOP:
+			if(ch->ping) {
+				ch->sample_position += ch->step;
+			} else {
+				ch->sample_position -= ch->step;
+			}
+			/* XXX: this may not work for very tight ping-pong loops
+			 * (ie switches direction more than once per sample */
+			if(ch->ping) {
+				if(ch->sample_position >= ch->sample->loop_start + ch->sample->loop_length) {
+					ch->ping = false;
+					ch->sample_position = ch->sample->loop_start + ch->sample->loop_length +
+						ch->sample->loop_start + ch->sample->loop_length - ch->sample_position;
+				}
+			} else {
+				if(ch->sample_position <= ch->sample->loop_start) {
+					ch->ping = true;
+					ch->sample_position = ch->sample->loop_start +
+						ch->sample->loop_start - ch->sample_position;
+				}
+			}
+			break;
+
 		}
 
 		*left += chval * ch->final_volume_left;

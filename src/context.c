@@ -62,6 +62,7 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 		ch->period = 0.f;
 		ch->frequency = 1.f;
 		ch->step = 0.f;
+		ch->ping = true;
 
 		ch->volume = 1.0f;
 		ch->panning = .5f;

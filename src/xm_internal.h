@@ -134,6 +134,7 @@ struct xm_sample_s {
 	 float period;
 	 float frequency;
 	 float step;
+	 bool ping; /* For ping-pong samples: true is -->, false is <-- */
 
 	 float volume; /* Ideally between 0 (muted) and 1 (loudest) */
 	 float panning; /* Between 0 (left) and 1 (right); 0.5 is centered */
