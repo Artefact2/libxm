@@ -184,13 +184,16 @@ struct xm_sample_s {
 
 	 uint8_t current_table_index;
 	 uint8_t current_row;
-	 uint8_t current_tick;
+	 uint16_t current_tick; /* Can go below 255, with high tempo and a pattern delay */
 	 float remaining_samples_in_tick;
 
 	 bool position_jump;
 	 bool pattern_break;
 	 uint8_t jump_dest;
 	 uint8_t jump_row;
+
+	 uint16_t extra_ticks; /* Extra ticks to be played before going to
+							* the next row - Used for EEy effect */
 
 	 uint8_t* row_loop_count; /* Array of size MAX_NUM_ROWS * module_length */
 	 uint8_t loop_count;

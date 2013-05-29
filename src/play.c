@@ -363,6 +363,10 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			/* Already taken care of */
 			break;
 
+		case 0xE: /* EEy: Pattern delay */
+			ctx->extra_ticks = (ch->current_effect_param & 0x0F) * ctx->tempo;
+			break;
+
 		default:
 			break;
 
@@ -800,8 +804,9 @@ static void xm_tick(xm_context_t* ctx) {
 	}
 
 	ctx->current_tick++;
-	if(ctx->current_tick >= ctx->tempo) {
+    if(ctx->current_tick >= ctx->tempo + ctx->extra_ticks) {
 		ctx->current_tick = 0;
+		ctx->extra_ticks = 0;
 	}
 
 	/* FT2 manual says number of ticks / second = BPM * 0.4 */

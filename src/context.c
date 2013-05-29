@@ -51,6 +51,8 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 	ctx->jump_dest = 0;
 	ctx->jump_row = 0;
 
+	ctx->extra_ticks = 0;
+
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
