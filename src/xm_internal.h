@@ -11,13 +11,11 @@
 #include <math.h>
 #include <string.h>
 
-#ifdef XM_NO_DEBUG
-#define XM_DEBUG 0
-#define DEBUG(...)
-#else
-#define XM_DEBUG 1
+#if XM_DEBUG
 #include <stdio.h>
 #define DEBUG(fmt, ...) fprintf(stderr, "%s(): " fmt "\n", __func__, __VA_ARGS__), fflush(stderr)
+#else
+#define DEBUG(...)
 #endif
 
 /* ----- XM constants ----- */
