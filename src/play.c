@@ -451,12 +451,15 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 		ch->ping = true;
 	}
 
-	if(!(flags & XM_TRIGGER_KEEP_VOLUME)) {
-		ch->volume = ch->sample->volume;
+	if(ch->sample != NULL) {
+		if(!(flags & XM_TRIGGER_KEEP_VOLUME)) {
+			ch->volume = ch->sample->volume;
+		}
+
+		ch->panning = ch->sample->panning;
 	}
 
 	ch->sustained = true;
-	ch->panning = ch->sample->panning;
 	ch->fadeout_volume = 1.0f;
 	ch->volume_envelope_volume = 1.0f;
 	ch->panning_envelope_panning = .5f;
