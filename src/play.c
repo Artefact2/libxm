@@ -574,7 +574,7 @@ static void xm_envelope_tick(xm_channel_context_t* ch,
 
 		/* Make sure it is safe to increment frame count */
 		if(!ch->sustained || !env->sustain_enabled ||
-		   *counter < env->points[env->sustain_point].frame) {
+		   *counter != env->points[env->sustain_point].frame) {
 			(*counter)++;
 		}
 	}
