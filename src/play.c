@@ -23,7 +23,7 @@ static void xm_post_pattern_change(xm_context_t*);
 static void xm_update_step(xm_context_t*, xm_channel_context_t*, float, bool, bool);
 
 static void xm_handle_note_and_instrument(xm_context_t*, xm_channel_context_t*, xm_pattern_slot_t*);
-static void xm_trigger_note(xm_context_t*, xm_channel_context_t*);
+static void xm_trigger_note(xm_context_t*, xm_channel_context_t*, unsigned int flags);
 static void xm_cut_note(xm_channel_context_t*);
 static void xm_key_off(xm_channel_context_t*);
 
@@ -32,6 +32,10 @@ static void xm_tick(xm_context_t*);
 static void xm_sample(xm_context_t*, float*, float*);
 
 /* ----- Other oddities ----- */
+
+#define XM_TRIGGER_KEEP_VOLUME (1 << 0)
+#define XM_TRIGGER_KEEP_PERIOD (1 << 1)
+#define XM_TRIGGER_KEEP_SAMPLE_POSITION (1 << 2)
 
 static const float multi_retrig_add[] = {
 	 0.f,  -1.f,  -2.f,  -4.f,  /* 0, 1, 2, 3 */
@@ -177,14 +181,8 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 	if(s->instrument > 0) {
 		if(HAS_TONE_PORTAMENTO(s) && ch->instrument != NULL && ch->sample != NULL) {
 			/* Tone portamento in effect, unclear stuff happens */
-			float old_sample_pos, old_period;
-			old_sample_pos = ch->sample_position;
-			old_period = ch->period;
 			if(ch->note == 0) ch->note = 1;
-			xm_trigger_note(ctx, ch);
-			ch->period = old_period;
-			ch->sample_position = old_sample_pos;
-			xm_update_step(ctx, ch, ch->note, false, true);
+			xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_PERIOD | XM_TRIGGER_KEEP_SAMPLE_POSITION);
 		} else if(s->instrument > ctx->module.num_instruments) {
 			/* Invalid instrument, Cut current note */
 			xm_cut_note(ch);
@@ -195,9 +193,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			if(s->note == 0 && ch->sample != NULL) {
 				/* Ghost instrument, trigger note */
 				/* Sample position is kept, but envelopes are reset */
-				float old_sample_pos = ch->sample_position;
-				xm_trigger_note(ctx, ch);
-				ch->sample_position = old_sample_pos;
+				xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_SAMPLE_POSITION);
 			}
 		}
 	}
@@ -221,12 +217,10 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 				ch->note = s->note + ch->sample->relative_note
 					+ ch->sample->finetune / 128.f - 1.f;
 				if(s->instrument > 0) {
-					xm_trigger_note(ctx, ch);
+					xm_trigger_note(ctx, ch, 0);
 				} else {
 					/* Ghost note: keep old volume */
-					float old_volume = ch->volume;
-					xm_trigger_note(ctx, ch);
-					ch->volume = old_volume;
+					xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_VOLUME);
 				}
 			} else {
 				/* Bad sample */
@@ -450,10 +444,17 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 	}
 }
 
-static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
-	ch->sample_position = 0.f;
+static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigned int flags) {
+	if(!(flags & XM_TRIGGER_KEEP_SAMPLE_POSITION)) {
+		ch->sample_position = 0.f;
+		ch->ping = true;
+	}
+
+	if(!(flags & XM_TRIGGER_KEEP_VOLUME)) {
+		ch->volume = ch->sample->volume;
+	}
+
 	ch->sustained = true;
-	ch->volume = ch->sample->volume;
 	ch->panning = ch->sample->panning;
 	ch->fadeout_volume = 1.0f;
 	ch->volume_envelope_volume = 1.0f;
@@ -461,7 +462,9 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->volume_envelope_frame_count = 0;
 	ch->panning_envelope_frame_count = 0;
 
-	xm_update_step(ctx, ch, ch->note, true, true);
+	if(!(flags & XM_TRIGGER_KEEP_PERIOD)) {
+		xm_update_step(ctx, ch, ch->note, true, true);
+	}
 }
 
 static void xm_cut_note(xm_channel_context_t* ch) {
@@ -767,7 +770,7 @@ static void xm_tick(xm_context_t* ctx) {
 					+ multi_retrig_add[ch->multi_retrig_param >> 4];
 				if(v < 0) v = 0;
 				else if(v > 1) v = 1;
-				xm_trigger_note(ctx, ch);
+				xm_trigger_note(ctx, ch, 0);
 				ch->volume = v;
 			}
 			break;
