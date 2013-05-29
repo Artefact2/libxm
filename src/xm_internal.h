@@ -29,6 +29,7 @@
 #define PATTERN_ORDER_TABLE_LENGTH 256
 #define NUM_NOTES 96
 #define NUM_ENVELOPE_POINTS 12
+#define MAX_NUM_ROWS 256
 
 /* ----- Data types ----- */
 
@@ -106,7 +107,6 @@ struct xm_sample_s {
 
  struct xm_pattern_s {
 	 uint16_t num_rows;
-
 	 xm_pattern_slot_t* slots; /* Array of size num_rows * num_channels */
  };
  typedef struct xm_pattern_s xm_pattern_t;
@@ -194,8 +194,8 @@ struct xm_sample_s {
 	 uint8_t jump_dest;
 	 uint8_t jump_row;
 
-	 uint32_t* pattern_index_loop_counts;
-	 uint32_t loop_count;
+	 uint8_t* row_loop_count; /* Array of size MAX_NUM_ROWS * module_length */
+	 uint8_t loop_count;
 
 	 xm_channel_context_t* channels;
 };
@@ -215,9 +215,11 @@ int xm_check_header_sanity(char*);
  * - sample data
  * - sample structures in instruments
  * - pattern data
+ * - row loop count arrays
  * - pattern structures in module
  * - instrument structures in module
  * - channel contexts
+ * - context structure itself
  */
 size_t xm_get_memory_needed_for_context(char*);
 

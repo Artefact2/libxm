@@ -32,6 +32,16 @@ Three example programs are provided.
 
 * `xmbench` is a benchmark program.
 
+Here are some interesting modules, most showcase unusual or advanced
+tracking techniques (and thus are a good indicator of a player's
+reliability):
+
+* [Lamb - Among the stars](http://modarchive.org/module.php?165819)
+* [Raina - Cyberculosis](http://modarchive.org/module.php?165308)
+* [Raina - Slumberjack](http://modarchive.org/module.php?148721)
+* [Strobe - One for all](http://modarchive.org/module.php?161246)
+* [Strobe - Paralysicical death](http://modarchive.org/module.php?65817)
+
 Status
 ======
 
@@ -117,4 +127,8 @@ Thanks to:
   file;
 
 * Mr.H of Triton and Guru and Alfred of Sahara Surfers, for writing
-  the specification of XM 1.04 files.
+  the specification of XM 1.04 files;
+
+* All the MilkyTracker contributors, for the [thorough
+  documentation](http://www.milkytracker.org/docs/MilkyTracker.html#effects)
+  of effects.

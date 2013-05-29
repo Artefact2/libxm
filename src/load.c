@@ -36,8 +36,6 @@ size_t xm_get_memory_needed_for_context(char* moddata) {
 
 	/* Read the module header */
 
-	memory_needed += READ(uint16_t, moddata + offset + 4) * sizeof(uint32_t);
-
 	num_channels = READ(uint16_t, moddata + offset + 8);
 	DEBUG("got %i channels", num_channels);
 
@@ -48,6 +46,8 @@ size_t xm_get_memory_needed_for_context(char* moddata) {
 	num_instruments = READ(uint16_t, moddata + offset + 12);
 	memory_needed += num_instruments * sizeof(xm_instrument_t);
 	DEBUG("got %i instruments", num_instruments);
+
+	memory_needed += MAX_NUM_ROWS * READ(uint16_t, moddata + offset + 4) * sizeof(uint8_t); /* Module length */
 
 	/* Header size */
 	offset += READ(uint32_t, moddata + offset);
@@ -146,6 +146,7 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 		xm_pattern_t* pat = mod->patterns + i;
 
 		pat->num_rows = READ(uint16_t, moddata + offset + 5);
+
 		pat->slots = (xm_pattern_slot_t*)mempool;
 		mempool += mod->num_channels * pat->num_rows * sizeof(xm_pattern_slot_t);
 

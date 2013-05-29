@@ -97,10 +97,9 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 		ch->final_volume_right = .5f;
 	}
 
-	ctx->pattern_index_loop_counts = (uint32_t*)mempool;
-	mempool += ctx->module.length * sizeof(uint32_t);
-	memset(ctx->pattern_index_loop_counts + 1, 0, (ctx->module.length - 1) * sizeof(uint32_t));
-	ctx->pattern_index_loop_counts[0] = 1;
+	ctx->row_loop_count = (uint8_t*)mempool;
+	mempool += MAX_NUM_ROWS * sizeof(uint8_t);
+	memset(ctx->row_loop_count, 0, MAX_NUM_ROWS * ctx->module.length);
 
 	return 0;
 }

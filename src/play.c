@@ -154,8 +154,6 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	if(ctx->current_table_index >= ctx->module.length) {
 		ctx->current_table_index = ctx->module.restart_position;
 	}
-
-	ctx->loop_count = (ctx->pattern_index_loop_counts[ctx->current_table_index]++);
 }
 
 static void xm_update_step(xm_context_t* ctx, xm_channel_context_t* ch, float note, bool update_period, bool update_frequency) {
@@ -493,6 +491,8 @@ static void xm_row(xm_context_t* ctx) {
 	}
 
 	xm_pattern_t* cur = ctx->module.patterns + ctx->module.pattern_table[ctx->current_table_index];
+
+	ctx->loop_count = (ctx->row_loop_count[MAX_NUM_ROWS * ctx->current_table_index + ctx->current_row]++);
 
 	/* Read notes… */
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
