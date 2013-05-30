@@ -31,6 +31,14 @@
 
 /* ----- Data types ----- */
 
+enum xm_waveform_type_e {
+	XM_SINE_WAVEFORM,
+	XM_RAMP_DOWN_WAVEFORM,
+	XM_SQUARE_WAVEFORM,
+	XM_RANDOM_WAVEFORM,
+};
+typedef enum xm_waveform_type_e xm_waveform_type_t;
+
 enum xm_loop_type_e {
 	XM_NO_LOOP,
 	XM_FORWARD_LOOP,
@@ -169,6 +177,17 @@ struct xm_sample_s {
 	 xm_pattern_slot_t* note_delay_note;
 	 uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
 	 uint8_t pattern_loop_count; /* How many loop passes have been done */
+	 bool vibrato_in_progress;
+	 xm_waveform_type_t vibrato_waveform;
+	 bool vibrato_waveform_retrigger; /* True if a new note retriggers the waveform */
+	 uint8_t vibrato_param;
+	 uint16_t vibrato_ticks; /* Position in the waveform */
+	 float vibrato_note_offset;
+	 xm_waveform_type_t tremolo_waveform;
+	 bool tremolo_waveform_retrigger;
+	 uint8_t tremolo_param;
+	 uint8_t tremolo_ticks;
+	 float tremolo_volume;
 
 	 float final_volume_left;
 	 float final_volume_right; /* These values are updated at the end

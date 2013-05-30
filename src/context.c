@@ -29,6 +29,9 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 		return 2;
 	}
 
+	/* Initialize most of the fields to 0, 0.f, NULL or false depending on type */
+	memset(mempool, 0, bytes_needed);
+
 	ctx = (*ctxp = (xm_context_t*)mempool);
 	ctx->allocated_memory = mempool; /* Keep original pointer for free() */
 	mempool += sizeof(xm_context_t);
@@ -41,68 +44,23 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 
 	ctx->global_volume = 1.f;
 	ctx->amplification = .5f; /* Purely empirical value */
-	ctx->current_table_index = 0;
-	ctx->current_row = 0;
-	ctx->current_tick = 0;
-	ctx->remaining_samples_in_tick = 0;
-
-	ctx->position_jump = false;
-	ctx->pattern_break = false;
-	ctx->jump_dest = 0;
-	ctx->jump_row = 0;
-
-	ctx->extra_ticks = 0;
-
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
-		ch->note = 0.f;
-		ch->instrument = NULL;
-		ch->sample = NULL;
-		ch->sample_position = 0.f;
-		ch->period = 0.f;
-		ch->frequency = 1.f;
-		ch->step = 0.f;
 		ch->ping = true;
+		ch->vibrato_waveform = XM_SINE_WAVEFORM;
+		ch->vibrato_waveform_retrigger = true;
+		ch->tremolo_waveform = XM_SINE_WAVEFORM;
+		ch->tremolo_waveform_retrigger = true;
 
-		ch->volume = 1.0f;
-		ch->panning = .5f;
-
-		ch->sustained = false;
-		ch->fadeout_volume = 1.0f;
-		ch->volume_envelope_volume = 1.0f;
-		ch->panning_envelope_panning = .5f;
-		ch->volume_envelope_frame_count = 0;
-		ch->panning_envelope_frame_count = 0;
-
-		ch->current_volume_effect = 0;
-		ch->current_effect = 0;
-		ch->current_effect_param = 0;
-
-		ch->arp_in_progress = false;
-		ch->volume_slide_param = 0;
-		ch->fine_volume_slide_param = 0;
-		ch->global_volume_slide_param = 0;
-		ch->panning_slide_param = 0;
-		ch->portamento_up_param = 0;
-		ch->portamento_down_param = 0;
-		ch->fine_portamento_up_param = 0;
-		ch->fine_portamento_down_param = 0;
-		ch->extra_fine_portamento_up_param = 0;
-		ch->extra_fine_portamento_down_param = 0;
-		ch->multi_retrig_param = 0;
-		ch->note_delay_param = 0;
-		ch->note_delay_note = NULL;
-		ch->pattern_loop_origin = 0;
-		ch->pattern_loop_count = 0;
-
+		ch->volume = ch->volume_envelope_volume = ch->fadeout_volume = 1.0f;
+		ch->panning = ch->panning_envelope_panning = .5f;
 		ch->final_volume_left = .5f;
 		ch->final_volume_right = .5f;
 	}
 
 	ctx->row_loop_count = (uint8_t*)mempool;
 	mempool += MAX_NUM_ROWS * sizeof(uint8_t);
-	memset(ctx->row_loop_count, 0, MAX_NUM_ROWS * ctx->module.length);
 
 	return 0;
 }
