@@ -357,6 +357,27 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			xm_pitch_slide(ctx, ch, 4.f * ch->fine_portamento_down_param);
 			break;
 
+		case 6: /* E6y: Pattern loop */
+			if(s->effect_param & 0x0F) {
+				if((s->effect_param & 0x0F) == ch->pattern_loop_count) {
+					/* Loop is over */
+					ch->pattern_loop_count = 0;
+					break;
+				}
+
+				/* Jump to the beginning of the loop */
+				ch->pattern_loop_count++;
+				ctx->position_jump = true;
+				ctx->jump_row = ch->pattern_loop_origin;
+				ctx->jump_dest = ctx->current_table_index;
+			} else {
+				/* Set loop start point */
+				ch->pattern_loop_origin = ctx->current_row;
+				/* Replicate FT2 E60 bug */
+				ctx->jump_row = ch->pattern_loop_origin;
+			}
+			break;
+
 		case 0xA: /* EAy: Fine volume slide up */
 			if(s->effect_param & 0x0F) {
 				ch->fine_volume_slide_param = s->effect_param & 0x0F;
@@ -515,8 +536,7 @@ static void xm_row(xm_context_t* ctx) {
 	}
 
 	xm_pattern_t* cur = ctx->module.patterns + ctx->module.pattern_table[ctx->current_table_index];
-
-	ctx->loop_count = (ctx->row_loop_count[MAX_NUM_ROWS * ctx->current_table_index + ctx->current_row]++);
+	bool in_a_loop = false;
 
 	/* Read notes… */
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
@@ -533,6 +553,15 @@ static void xm_row(xm_context_t* ctx) {
 			ch->note_delay_param = s->effect_param & 0x0F;
 			ch->note_delay_note = s;
 		}
+
+		if(!in_a_loop && ch->pattern_loop_count > 0) {
+			in_a_loop = true;
+		}
+	}
+
+	if(!in_a_loop) {
+		/* No E6y loop is in effect (or we are in the first pass) */
+		ctx->loop_count = (ctx->row_loop_count[MAX_NUM_ROWS * ctx->current_table_index + ctx->current_row]++);
 	}
 
 	ctx->current_row++; /* Since this is an uint8, this line can
@@ -542,7 +571,10 @@ static void xm_row(xm_context_t* ctx) {
 	if(!ctx->position_jump && !ctx->pattern_break &&
 	   (ctx->current_row >= cur->num_rows || ctx->current_row == 0)) {
 		ctx->current_table_index++;
-		ctx->current_row = 0;
+		ctx->current_row = ctx->jump_row; /* This will be 0 most of
+										   * the time, except when E60
+										   * is used */
+		ctx->jump_row = 0;
 		xm_post_pattern_change(ctx);
 	}
 }

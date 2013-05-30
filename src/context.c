@@ -93,6 +93,8 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 		ch->multi_retrig_param = 0;
 		ch->note_delay_param = 0;
 		ch->note_delay_note = NULL;
+		ch->pattern_loop_origin = 0;
+		ch->pattern_loop_count = 0;
 
 		ch->final_volume_left = .5f;
 		ch->final_volume_right = .5f;

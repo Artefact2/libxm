@@ -70,7 +70,7 @@ DONE    |--|  E2 |  (*) | Fine porta down
         |--|  E3 |      | Set gliss control
         |--|  E4 |      | Set vibrato control
         |--|  E5 |      | Set finetune
-        |--|  E6 |      | Set loop begin/loop
+DONE    |--|  E6 |      | Set loop begin/loop
         |--|  E7 |      | Set tremolo control
 DONE    |--|  E9 |      | Retrig note
 DONE    |--|  EA |  (*) | Fine volume slide up
