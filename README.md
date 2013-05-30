@@ -60,7 +60,7 @@ DONE    |05|  5  |  (*) | Tone porta+Volume slide
 PARTIAL |06|  6  |  (*) | Vibrato+Volume slide
         |07|  7  |  (*) | Tremolo
 DONE    |08|  8  |      | Set panning
-        |09|  9  |      | Sample offset
+DONE    |09|  9  |      | Sample offset
 DONE    |10|  A  |  (*) | Volume slide
 DONE    |11|  B  |      | Position jump
 DONE    |12|  C  |      | Set volume
@@ -113,7 +113,11 @@ General
 -------
 
 * Autovibrato is not supported yet.
+
 * Amiga frequency tables are not supported yet.
+
+* Only nearest interpolation at the moment (need to figure out a way
+  to do linear interpolation that doesn't triple the CPU usage).
 
 Thanks
 ======

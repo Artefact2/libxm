@@ -64,6 +64,7 @@ typedef struct xm_envelope_s xm_envelope_t;
 
 struct xm_sample_s {
 	char name[SAMPLE_NAME_LENGTH];
+	int8_t bits; /* Either 8 or 16 */
 
 	uint32_t length;
 	uint32_t loop_start;

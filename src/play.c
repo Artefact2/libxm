@@ -304,6 +304,18 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 		ch->panning = (float)s->effect_param / (float)0xFF;
 		break;
 
+	case 9: /* 9xx: Sample offset */
+		if(ch->sample != NULL && s->note > 0 && s->note < 97) {
+			uint32_t final_offset = s->effect_param << (ch->sample->bits == 16 ? 7 : 8);
+			if(final_offset >= ch->sample->length) {
+				/* Pretend the sample dosen't loop and is done playing */
+				ch->sample_position = -1;
+				break;
+			}
+			ch->sample_position = final_offset;
+		}
+		break;
+
 	case 0xA: /* Axy: Volume slide */
 		if(s->effect_param > 0) {
 			ch->volume_slide_param = s->effect_param;

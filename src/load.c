@@ -228,8 +228,6 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 		memcpy(instr->name, moddata + offset + 4, INSTRUMENT_NAME_LENGTH);
 	    instr->num_samples = READ(uint16_t, moddata + offset + 27);
 
-		bool sample_is_16bit[instr->num_samples]; /* VLA */
-
 		if(instr->num_samples > 0) {
 			/* Read extra header properties */
 			sample_header_size = READ(uint32_t, moddata + offset + 29);
@@ -300,12 +298,14 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 				sample->loop_type = XM_PING_PONG_LOOP;
 			}
 
+			sample->bits = (flags & (1 << 4)) ? 16 : 8;
+
 			sample->panning = (float)READ(uint8_t, moddata + offset + 15) / (float)0xFF;
 			sample->relative_note = READ(int8_t, moddata + offset + 16);
 			memcpy(sample->name, moddata + 18, SAMPLE_NAME_LENGTH);
 			sample->data = (float*)mempool;
 
-			if((sample_is_16bit[j] = (flags & (1 << 4)))) {
+			if(sample->bits == 16) {
 				/* 16 bit sample */
 				mempool += sample->length * (sizeof(float) >> 1);
 				sample->loop_start >>= 1;
@@ -324,7 +324,7 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 			xm_sample_t* sample = instr->samples + j;
 			uint32_t length = sample->length;
 
-			if(sample_is_16bit[j]) {
+			if(sample->bits == 16) {
 				int16_t* sampledata = (int16_t*)(moddata + offset);
 				int16_t v = 0;
 				for(uint32_t k = 0; k < length; ++k) {
