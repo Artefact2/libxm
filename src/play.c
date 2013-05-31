@@ -72,6 +72,7 @@ static const float multi_retrig_multiply[] = {
 /* ----- Function definitions ----- */
 
 static float xm_waveform(xm_waveform_type_t waveform, uint8_t step) {
+	static unsigned int next_rand = 24492;
 	step %= 0x40;
 
 	switch(waveform) {
@@ -79,7 +80,21 @@ static float xm_waveform(xm_waveform_type_t waveform, uint8_t step) {
 	case XM_SINE_WAVEFORM:
 		/* Why not use a table? For saving space, and because there's
 		 * very very little actual performance gain. */
-		return sinf(2.f * 3.141592f * (float)step / (float)0x40);
+		return -sinf(2.f * 3.141592f * (float)step / (float)0x40);
+
+	case XM_RAMP_DOWN_WAVEFORM:
+		/* Ramp down: 1.0f when step = 0; -1.0f when step = 0x40 */
+		return (float)(0x20 - step) / 0x20;
+
+	case XM_SQUARE_WAVEFORM:
+		/* Square with a 50% duty */
+		return (step >= 0x20) ? -1.f : 1.f;
+
+	case XM_RANDOM_WAVEFORM:
+		/* Use the POSIX.1-2001 example, just to be deterministic
+		 * across different machines */
+		next_rand = next_rand * 1103515245 + 12345;
+		return (float)((next_rand >> 16) & 0x7FFF) / (float)0x4000 - 1.f;
 
 	default:
 		break;
@@ -91,8 +106,7 @@ static float xm_waveform(xm_waveform_type_t waveform, uint8_t step) {
 
 static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, uint16_t pos) {
 	unsigned int step = pos * (param >> 4);
-	/* Notice the minus sign. */
-	ch->vibrato_note_offset = -2.f * xm_waveform(ch->vibrato_waveform, step)
+	ch->vibrato_note_offset = 2.f * xm_waveform(ch->vibrato_waveform, step)
 		* (float)(param & 0x0F) / (float)0xF;
 	xm_update_frequency(ctx, ch, 0.f, 0.f);
 }
@@ -101,8 +115,8 @@ static void xm_tremolo(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t para
 	unsigned int step = pos * (param >> 4);
 	/* Not so sure about this, it sounds correct by ear compared with
 	 * MilkyTracker, but it could come from other bugs */
-	ch->tremolo_volume = 2.f * xm_waveform(ch->tremolo_waveform, step)
-		* (float)(param & 0x0F) * (float)(ctx->tempo - 1) / (float)0x40;
+	ch->tremolo_volume = -2.f * xm_waveform(ch->tremolo_waveform, step)
+		* (float)(param & 0x0F) / (float)0xF;
 }
 
 static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, uint16_t tick) {
@@ -430,6 +444,11 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			xm_pitch_slide(ctx, ch, 4.f * ch->fine_portamento_down_param);
 			break;
 
+		case 4: /* E4y: Set vibrato control */
+			ch->vibrato_waveform = s->effect_param & 3;
+			ch->vibrato_waveform_retrigger = !((s->effect_param >> 2) & 1);
+			break;
+
 		case 6: /* E6y: Pattern loop */
 			if(s->effect_param & 0x0F) {
 				if((s->effect_param & 0x0F) == ch->pattern_loop_count) {
@@ -449,6 +468,11 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 				/* Replicate FT2 E60 bug */
 				ctx->jump_row = ch->pattern_loop_origin;
 			}
+			break;
+
+		case 7: /* E7y: Set tremolo control */
+			ch->tremolo_waveform = s->effect_param & 3;
+			ch->tremolo_waveform_retrigger = !((s->effect_param >> 2) & 1);
 			break;
 
 		case 0xA: /* EAy: Fine volume slide up */

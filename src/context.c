@@ -39,6 +39,9 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 	ctx->rate = rate;
 	mempool = xm_load_module(ctx, moddata, mempool);
 
+	DEBUG("module name: %.*s", MODULE_NAME_LENGTH, ctx->module.name);
+	DEBUG("tracker name: %.*s", TRACKER_NAME_LENGTH, ctx->module.trackername);
+
 	ctx->channels = (xm_channel_context_t*)mempool;
 	mempool += ctx->module.num_channels * sizeof(xm_channel_context_t);
 

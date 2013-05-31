@@ -32,10 +32,10 @@
 /* ----- Data types ----- */
 
 enum xm_waveform_type_e {
-	XM_SINE_WAVEFORM,
-	XM_RAMP_DOWN_WAVEFORM,
-	XM_SQUARE_WAVEFORM,
-	XM_RANDOM_WAVEFORM,
+	XM_SINE_WAVEFORM = 0,
+	XM_RAMP_DOWN_WAVEFORM = 1,
+	XM_SQUARE_WAVEFORM = 2,
+	XM_RANDOM_WAVEFORM = 3,
 };
 typedef enum xm_waveform_type_e xm_waveform_type_t;
 
