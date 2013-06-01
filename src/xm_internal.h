@@ -160,6 +160,7 @@ struct xm_sample_s {
 	 uint8_t current_effect_param;
 
 	 bool arp_in_progress;
+	 uint8_t arp_note_offset;
 	 uint8_t volume_slide_param;
 	 uint8_t fine_volume_slide_param;
 	 uint8_t global_volume_slide_param;

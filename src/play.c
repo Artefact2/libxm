@@ -24,7 +24,7 @@ static void xm_envelope_tick(xm_channel_context_t*, xm_envelope_t*, uint16_t*, f
 static void xm_envelopes(xm_channel_context_t*);
 
 static void xm_post_pattern_change(xm_context_t*);
-static void xm_update_frequency(xm_context_t*, xm_channel_context_t*, float, float);
+static void xm_update_frequency(xm_context_t*, xm_channel_context_t*);
 
 static void xm_handle_note_and_instrument(xm_context_t*, xm_channel_context_t*, xm_pattern_slot_t*);
 static void xm_trigger_note(xm_context_t*, xm_channel_context_t*, unsigned int flags);
@@ -108,34 +108,34 @@ static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t para
 	unsigned int step = pos * (param >> 4);
 	ch->vibrato_note_offset = 2.f * xm_waveform(ch->vibrato_waveform, step)
 		* (float)(param & 0x0F) / (float)0xF;
-	xm_update_frequency(ctx, ch, 0.f, 0.f);
+	xm_update_frequency(ctx, ch);
 }
 
 static void xm_tremolo(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, uint16_t pos) {
 	unsigned int step = pos * (param >> 4);
 	/* Not so sure about this, it sounds correct by ear compared with
 	 * MilkyTracker, but it could come from other bugs */
-	ch->tremolo_volume = -2.f * xm_waveform(ch->tremolo_waveform, step)
+	ch->tremolo_volume = -1.f * xm_waveform(ch->tremolo_waveform, step)
 		* (float)(param & 0x0F) / (float)0xF;
 }
 
 static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, uint16_t tick) {
-	/* The vibrato interference was guessed from MilkyTracker, it may
-	 * very well be wrong. xmp 4.0.4 doesn't take it in account. */
 	switch(tick % 3) {
 	case 0:
 		ch->arp_in_progress = false;
-		xm_update_frequency(ctx, ch, -ch->vibrato_note_offset, 0.f);
+		ch->arp_note_offset = 0;
 		break;
 	case 2:
 		ch->arp_in_progress = true;
-		xm_update_frequency(ctx, ch, (param >> 4) - ch->vibrato_note_offset, 0.f);
+		ch->arp_note_offset = param >> 4;
 		break;
 	case 1:
 		ch->arp_in_progress = true;
-		xm_update_frequency(ctx, ch, (param & 0x0F) - ch->vibrato_note_offset, 0.f);
+		ch->arp_note_offset = param & 0x0F;
 		break;
 	}
+
+	xm_update_frequency(ctx, ch);
 }
 
 static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
@@ -151,7 +151,7 @@ static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 		return;
 	}
 
-	xm_update_frequency(ctx, ch, 0.f, 0.f);
+	xm_update_frequency(ctx, ch);
 }
 
 static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch, float period_offset) {
@@ -167,7 +167,7 @@ static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch, float pe
 	XM_CLAMP_DOWN(ch->period);
 	/* XXX: upper bound of period ? */
 
-	xm_update_frequency(ctx, ch, 0.f, 0.f);
+	xm_update_frequency(ctx, ch);
 }
 
 static void xm_panning_slide(xm_channel_context_t* ch, uint8_t rawval) {
@@ -229,11 +229,13 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	}
 }
 
-static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch,
-								float note_offset, float period_offset) {
+static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* XXX Amiga frequencies? */
-	ch->frequency = XM_LINEAR_FREQUENCY_OF_PERIOD(ch->period + period_offset -
-												  64.f * (note_offset + ch->vibrato_note_offset));
+	ch->frequency = XM_LINEAR_FREQUENCY_OF_PERIOD(
+		ch->period - 64.f * (
+			(ch->arp_note_offset > 0 ? ch->arp_note_offset : ch->vibrato_note_offset)
+		)
+	);
 
 	ch->step = ch->frequency / ctx->rate;
 }
@@ -608,7 +610,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 
 	if(!(flags & XM_TRIGGER_KEEP_PERIOD)) {
 		ch->period = XM_PERIOD_OF_NOTE(ch->note);
-		xm_update_frequency(ctx, ch, 0.f, 0.f);
+		xm_update_frequency(ctx, ch);
 	}
 }
 
@@ -767,12 +769,13 @@ static void xm_tick(xm_context_t* ctx) {
 
 		if(ch->arp_in_progress && !HAS_ARPEGGIO(ch)) {
 			ch->arp_in_progress = false;
-			xm_update_frequency(ctx, ch, 0.f, 0.f);
+			ch->arp_note_offset = 0;
+			xm_update_frequency(ctx, ch);
 		}
 		if(ch->vibrato_in_progress && !HAS_VIBRATO(ch)) {
 			ch->vibrato_in_progress = false;
 			ch->vibrato_note_offset = 0.f;
-			xm_update_frequency(ctx, ch, 0.f, 0.f);
+			xm_update_frequency(ctx, ch);
 		}
 
 		switch(ch->current_volume_effect >> 4) {
@@ -822,14 +825,16 @@ static void xm_tick(xm_context_t* ctx) {
 				case 2: /* 0 -> x -> 0 -> y -> x -> … */
 					if(ctx->current_tick == 1) {
 						ch->arp_in_progress = true;
-						xm_update_frequency(ctx, ch, (ch->current_effect_param >> 4)
-											- ch->vibrato_note_offset, 0.f);
+						ch->arp_note_offset = ch->current_effect_param >> 4;
+						xm_update_frequency(ctx, ch);
 						break;
 					}
 					/* No break here, this is intended */
 				case 1: /* 0 -> 0 -> y -> x -> … */
 					if(ctx->current_tick == 0) {
-						xm_update_frequency(ctx, ch, -ch->vibrato_note_offset, 0.f);
+						ch->arp_in_progress = false;
+						ch->arp_note_offset = 0;
+						xm_update_frequency(ctx, ch);
 						break;
 					}
 					/* No break here, this is intended */
