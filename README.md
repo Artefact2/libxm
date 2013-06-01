@@ -116,6 +116,22 @@ General
 
 * Amiga frequency tables are not supported yet.
 
+Tests
+=====
+
+Some test XM files are in the `tests` directory. Their goal is to test
+a certain feature against regressions. A summary of tests (and what
+they are supposed to test) is in the table below.
+
+~~~
+     Test     |     Status     |     Tested against     | Extras
+--------------+----------------+------------------------+------------------------------------------------
+ramping.xm    | PASS           | MilkyTracker           | You should not hear any loud clicks.
+tremolo.xm    | PASS           | MilkyTracker           | Should sound identical.
+vibrato.xm    | PASS           | MilkyTracker           | Should sound identical.
+pattern-lo….xm| PASS           | MilkyTracker           | Should play the same notes at the same time.
+~~~
+
 Thanks
 ======
 
