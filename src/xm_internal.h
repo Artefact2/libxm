@@ -38,6 +38,8 @@ extern int __fail[-1];
 #define NUM_ENVELOPE_POINTS 12
 #define MAX_NUM_ROWS 256
 
+#define XM_SAMPLE_RAMPING_POINTS 0x80
+
 /* ----- Data types ----- */
 
 enum xm_waveform_type_e {
@@ -199,6 +201,9 @@ struct xm_sample_s {
 	 uint8_t tremolo_param;
 	 uint8_t tremolo_ticks;
 	 float tremolo_volume;
+
+	 unsigned long frame_count;
+	 float end_of_previous_sample[XM_SAMPLE_RAMPING_POINTS];
 
 	 float actual_panning;
 	 float target_panning;

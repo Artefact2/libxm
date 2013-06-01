@@ -33,6 +33,8 @@ static void xm_key_off(xm_channel_context_t*);
 
 static void xm_row(xm_context_t*);
 static void xm_tick(xm_context_t*);
+
+static float xm_next_of_sample(xm_channel_context_t*);
 static void xm_sample(xm_context_t*, float*, float*);
 
 /* ----- Other oddities ----- */
@@ -80,6 +82,8 @@ static const float multi_retrig_multiply[] = {
 			XM_CLAMP_UP1F((val), (goal));			\
 		}											\
 	} while(0)
+
+#define XM_LERP(u, v, t) ((u) + (t) * ((v) - (u)))
 
 #define XM_PERIOD_OF_NOTE(note) (7680.f - (note) * 64.f)
 #define XM_LINEAR_FREQUENCY_OF_PERIOD(period) (8363.f * powf(2.f, (4608.f - (period)) / 768.f))
@@ -294,6 +298,12 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			xm_cut_note(ch);
 		} else {
 			if(instr->sample_of_notes[s->note - 1] < instr->num_samples) {
+				if(XM_RAMPING) {
+					for(unsigned int z = 0; z < XM_SAMPLE_RAMPING_POINTS; ++z) {
+						ch->end_of_previous_sample[z] = xm_next_of_sample(ch);
+					}
+					ch->frame_count = 0;
+				}
 				ch->sample = instr->samples + instr->sample_of_notes[s->note - 1];
 				ch->note = s->note + ch->sample->relative_note
 					+ ch->sample->finetune / 128.f - 1.f;
@@ -995,6 +1005,11 @@ static void xm_tick(xm_context_t* ctx) {
 	    ch->target_volume = ch->volume + ch->tremolo_volume;
 		XM_CLAMP(ch->target_volume);
 		ch->target_volume *= ch->fadeout_volume * ch->volume_envelope_volume;
+
+		if(!XM_RAMPING) {
+			ch->actual_panning = ch->target_panning;
+			ch->actual_volume = ch->target_volume;
+		}
 	}
 
 	ctx->current_tick++;
@@ -1005,6 +1020,94 @@ static void xm_tick(xm_context_t* ctx) {
 
 	/* FT2 manual says number of ticks / second = BPM * 0.4 */
 	ctx->remaining_samples_in_tick += (float)ctx->rate / ((float)ctx->bpm * 0.4f);
+}
+
+static float xm_next_of_sample(xm_channel_context_t* ch) {
+	if(ch->note == 0 || ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
+		if(XM_RAMPING && ch->frame_count < XM_SAMPLE_RAMPING_POINTS) {
+			return XM_LERP(ch->end_of_previous_sample[ch->frame_count], .0f,
+						   (float)ch->frame_count / (float)XM_SAMPLE_RAMPING_POINTS);
+		}
+		return .0f;
+	}
+
+	float u, v, t;
+	uint32_t a, b;
+	a = (uint32_t)ch->sample_position; /* This cast is fine,
+										* sample_position will not
+										* go above integer
+										* ranges */
+	if(XM_LINEAR_INTERPOLATION) {
+		b = a + 1;
+		t = ch->sample_position - a; /* Cheaper than fmodf(., 1.f) */
+	}
+	u = ch->sample->data[a];
+
+	switch(ch->sample->loop_type) {
+
+	case XM_NO_LOOP:
+		if(XM_LINEAR_INTERPOLATION) {
+			v = (b < ch->sample->length) ? ch->sample->data[b] : .0f;
+		}
+		ch->sample_position += ch->step;
+		if(ch->sample_position >= ch->sample->length) {
+			ch->sample_position = -1;
+		}
+		break;
+
+	case XM_FORWARD_LOOP:
+		if(XM_LINEAR_INTERPOLATION) {
+			v = ch->sample->data[
+				(b == ch->sample->loop_end) ? ch->sample->loop_start : b
+			];
+		}
+		ch->sample_position += ch->step;
+		while(ch->sample_position >= ch->sample->loop_end) {
+			ch->sample_position -= ch->sample->loop_length;
+		}
+		break;
+
+	case XM_PING_PONG_LOOP:
+		if(ch->ping) {
+			ch->sample_position += ch->step;
+		} else {
+			ch->sample_position -= ch->step;
+		}
+		/* XXX: this may not work for very tight ping-pong loops
+		 * (ie switches direction more than once per sample */
+		if(ch->ping) {
+			if(XM_LINEAR_INTERPOLATION) {
+				v = (b >= ch->sample->loop_end) ? ch->sample->data[a] : ch->sample->data[b];
+			}
+			if(ch->sample_position >= ch->sample->loop_end) {
+				ch->ping = false;
+				ch->sample_position = (ch->sample->loop_end << 1) - ch->sample_position;
+			}
+		} else {
+			if(XM_LINEAR_INTERPOLATION) {
+				v = u;
+				u = (b == 1 || b - 2 <= ch->sample->loop_start) ? ch->sample->data[a] : ch->sample->data[b - 2];
+			}
+			if(ch->sample_position <= ch->sample->loop_start) {
+				ch->ping = true;
+				ch->sample_position = (ch->sample->loop_start << 1) - ch->sample_position;
+			}
+		}
+		break;
+
+	default:
+		v = .0f;
+		break;
+	}
+
+	float endval = XM_LINEAR_INTERPOLATION ? XM_LERP(u, v, t) : u;
+
+	if(XM_RAMPING && ch->frame_count < XM_SAMPLE_RAMPING_POINTS) {
+		return XM_LERP(ch->end_of_previous_sample[ch->frame_count], endval,
+					   (float)ch->frame_count / (float)XM_SAMPLE_RAMPING_POINTS);
+	}
+
+	return endval;
 }
 
 static void xm_sample(xm_context_t* ctx, float* left, float* right) {
@@ -1019,79 +1122,21 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
-		if(ch->note == 0 ||
-		   ch->instrument == NULL ||
-		   ch->sample == NULL ||
-		   ch->sample_position < 0) {
+		if(XM_RAMPING)
+			ch->frame_count++;
+
+		if(ch->note == 0 || ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
 			continue;
 		}
 
-		float fval, u, v, t;
-		uint32_t a, b;
-		a = (uint32_t)ch->sample_position; /* This cast is fine,
-											* sample_position will not
-											* go above integer
-											* ranges */
-		b = a + 1;
-		t = ch->sample_position - a; /* Cheaper than fmodf(., 1.f) */
-		u = ch->sample->data[a];
-
-		switch(ch->sample->loop_type) {
-
-		case XM_NO_LOOP:
-			v = (b < ch->sample->length) ? ch->sample->data[b] : .0f;
-			ch->sample_position += ch->step;
-		    if(ch->sample_position >= ch->sample->length) {
-				ch->sample_position = -1;
-			}
-			break;
-
-		case XM_FORWARD_LOOP:
-			v = ch->sample->data[
-				(b == ch->sample->loop_end) ? ch->sample->loop_start : b
-			];
-			ch->sample_position += ch->step;
-			while(ch->sample_position >= ch->sample->loop_end) {
-				ch->sample_position -= ch->sample->loop_length;
-			}
-			break;
-
-		case XM_PING_PONG_LOOP:
-			if(ch->ping) {
-				ch->sample_position += ch->step;
-			} else {
-				ch->sample_position -= ch->step;
-			}
-			/* XXX: this may not work for very tight ping-pong loops
-			 * (ie switches direction more than once per sample */
-			if(ch->ping) {
-				v = (b >= ch->sample->loop_end) ? ch->sample->data[a] : ch->sample->data[b];
-				if(ch->sample_position >= ch->sample->loop_end) {
-					ch->ping = false;
-					ch->sample_position = (ch->sample->loop_end << 1) - ch->sample_position;
-				}
-			} else {
-				v = u;
-				u = (b == 1 || b - 2 <= ch->sample->loop_start) ? ch->sample->data[a] : ch->sample->data[b - 2];
-				if(ch->sample_position <= ch->sample->loop_start) {
-					ch->ping = true;
-					ch->sample_position = (ch->sample->loop_start << 1) - ch->sample_position;
-				}
-			}
-			break;
-
-		default:
-			v = .0f;
-			break;
-
-		}
-
-		fval = u + t * (v - u);
+		const float fval = xm_next_of_sample(ch);
 		*left += fval * ch->actual_volume * (1.f - ch->actual_panning);
 		*right += fval * ch->actual_volume * ch->actual_panning;
 
-		XM_SLIDE_TOWARDS(ch->actual_volume, ch->target_volume, ctx->volume_ramp);
-		XM_SLIDE_TOWARDS(ch->actual_panning, ch->target_panning, ctx->panning_ramp);
+		if(XM_RAMPING) {
+			XM_SLIDE_TOWARDS(ch->actual_volume, ch->target_volume, ctx->volume_ramp);
+			XM_SLIDE_TOWARDS(ch->actual_panning, ch->target_panning, ctx->panning_ramp);
+		}
 	}
 
 	const float fgvol = ctx->global_volume * ctx->amplification;
