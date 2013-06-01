@@ -13,9 +13,18 @@
 
 #if XM_DEBUG
 #include <stdio.h>
-#define DEBUG(fmt, ...) fprintf(stderr, "%s(): " fmt "\n", __func__, __VA_ARGS__), fflush(stderr)
+#define DEBUG(fmt, ...) do {										\
+		fprintf(stderr, "%s(): " fmt "\n", __func__, __VA_ARGS__);	\
+		fflush(stderr);												\
+	} while(0)
 #else
 #define DEBUG(...)
+#endif
+
+#if XM_BIG_ENDIAN
+#error "Big endian platforms are not yet supported, sorry"
+/* Make sure the compiler stops, even if #error is ignored */
+extern int __fail[-1];
 #endif
 
 /* ----- XM constants ----- */

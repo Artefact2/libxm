@@ -13,6 +13,7 @@ ENDIF()
 ENDFUNCTION()
 
 OPTION_AND_DEFINE(XM_DEBUG "Enable debugging messages" "ON")
+OPTION_AND_DEFINE(XM_BIG_ENDIAN "Assume big endian byte order (default: little endian assumed)" "OFF")
 
 ADD_DEFINITIONS("-g -Os -Wall -pedantic --std=c11")
 ADD_DEFINITIONS("-fdata-sections -ffunction-sections")

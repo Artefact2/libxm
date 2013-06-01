@@ -6,50 +6,38 @@
  * License, Version 2, as published by Sam Hocevar. See
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
-#include <xm.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
-#include <unistd.h>
-#include <fcntl.h>
+#include "testprog.h"
 
-const size_t buffer_size = 1024;
-const unsigned int channels = 2;
-const unsigned int rate = 48000;
+static const unsigned int channels = 2;
+static const unsigned int rate = 48000;
+static const size_t buffer_size = (1 << 8); /* Use a small buffer to
+											 * stop shortly after loop
+											 * count gets changed */
 
 void puts_uint32_be(uint32_t i) {
 	char* c = (char*)(&i);
 
-	/* Assume little-endian, the decoder assumes it anyway */
+#if XM_BIG_ENDIAN
+	putchar(c[0]);
+	putchar(c[1]);
+	putchar(c[2]);
+	putchar(c[3]);
+#else
 	putchar(c[3]);
 	putchar(c[2]);
 	putchar(c[1]);
 	putchar(c[0]);
+#endif
 }
 
 int main(int argc, char** argv) {
-	int fd, ret;
-	off_t size;
-	void* data;
 	xm_context_t* ctx;
 	float buffer[buffer_size];
 
-	if(argc != 2) {
-		fprintf(stderr, "Usage: %s <filename>\n", argv[0]);
-		return 1;
-	}
+	if(argc != 2)
+		FATAL("Usage: %s <filename>\n", argv[0]);
 
-	fd = open(argv[1], O_RDONLY);
-	size = lseek(fd, 0, SEEK_END);
-	data = mmap(0, size, PROT_READ, MAP_SHARED, fd, 0);
-
-	if((ret = xm_create_context(&ctx, data, rate)) != 0) {
-		fprintf(stderr, "xm_create_context() failed and returned %i\n", ret);
-		return 1;
-	}
-
-	munmap(data, size); /* Data no longer needed, all necessary data was copied in the context */
+	create_context_from_file(&ctx, rate, argv[1]);
 
 	puts_uint32_be(0x2E736E64); /* .snd magic number */
 	puts_uint32_be(24); /* Header size */
