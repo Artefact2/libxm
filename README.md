@@ -116,9 +116,6 @@ General
 
 * Amiga frequency tables are not supported yet.
 
-* Only nearest interpolation at the moment (need to figure out a way
-  to do linear interpolation that doesn't triple the CPU usage).
-
 Thanks
 ======
 

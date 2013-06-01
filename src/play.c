@@ -55,19 +55,43 @@ static const float multi_retrig_multiply[] = {
 	1.f,   1.f,  1.5f,       2.f   /* C, D, E, F */
 };
 
-#define XM_CLAMP_UP1F(vol, limit) { if((vol) > (limit)) (vol) = (limit); }
+#define XM_CLAMP_UP1F(vol, limit) do {			\
+		if((vol) > (limit)) (vol) = (limit);	\
+	} while(0)
 #define XM_CLAMP_UP(vol) XM_CLAMP_UP1F((vol), 1.f)
-#define XM_CLAMP_DOWN1F(vol, limit) { if((vol) < (limit)) (vol) = (limit); }
+
+#define XM_CLAMP_DOWN1F(vol, limit) do {		\
+		if((vol) < (limit)) (vol) = (limit);	\
+	} while(0)
 #define XM_CLAMP_DOWN(vol) XM_CLAMP_DOWN1F((vol), .0f)
-#define XM_CLAMP2F(vol, up, down) { if((vol) > (up)) (vol) = (up); else if((vol) < (down)) (vol) = (down); }
+
+#define XM_CLAMP2F(vol, up, down) do {			\
+		if((vol) > (up)) (vol) = (up);			\
+		else if((vol) < (down)) (vol) = (down); \
+	} while(0)
 #define XM_CLAMP(vol) XM_CLAMP2F((vol), 1.f, .0f)
+
+#define XM_SLIDE_TOWARDS(val, goal, incr) do {		\
+		if((val) > (goal)) {						\
+			(val) -= (incr);						\
+			XM_CLAMP_DOWN1F((val), (goal));			\
+		} else if((val) < (goal)) {					\
+			(val) += (incr);						\
+			XM_CLAMP_UP1F((val), (goal));			\
+		}											\
+	} while(0)
 
 #define XM_PERIOD_OF_NOTE(note) (7680.f - (note) * 64.f)
 #define XM_LINEAR_FREQUENCY_OF_PERIOD(period) (8363.f * powf(2.f, (4608.f - (period)) / 768.f))
 
-#define HAS_TONE_PORTAMENTO(ch) ((ch)->current_effect == 3 || (ch)->current_effect == 5 || ((ch)->current_volume_effect >> 4) == 0xF)
-#define HAS_ARPEGGIO(ch) ((ch)->current_effect == 0 && (ch)->current_effect_param != 0)
-#define HAS_VIBRATO(ch) ((ch)->current_effect == 4 || (ch)->current_effect_param == 6 || ((ch)->current_volume_effect >> 4) == 0xB)
+#define HAS_TONE_PORTAMENTO(ch) ((ch)->current_effect == 3 \
+								 || (ch)->current_effect == 5 \
+								 || ((ch)->current_volume_effect >> 4) == 0xF)
+#define HAS_ARPEGGIO(ch) ((ch)->current_effect == 0 \
+						  && (ch)->current_effect_param != 0)
+#define HAS_VIBRATO(ch) ((ch)->current_effect == 4 \
+						 || (ch)->current_effect_param == 6 \
+						 || ((ch)->current_volume_effect >> 4) == 0xB)
 
 /* ----- Function definitions ----- */
 
@@ -139,19 +163,12 @@ static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t par
 }
 
 static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
-	if(ch->period > ch->tone_portamento_target_period) {
-		ch->period -= 4.0f * ch->tone_portamento_param;
-
-		XM_CLAMP_DOWN1F(ch->period, ch->tone_portamento_target_period);
-	} else if(ch->period < ch->tone_portamento_target_period) {
-		ch->period += 4.0f * ch->tone_portamento_param;
-
-		XM_CLAMP_UP1F(ch->period, ch->tone_portamento_target_period);
-	} else {
-		return;
+	if(ch->period != ch->tone_portamento_target_period) {
+		XM_SLIDE_TOWARDS(ch->period,
+						 ch->tone_portamento_target_period,
+						 4.f * ch->tone_portamento_param);
+		xm_update_frequency(ctx, ch);
 	}
-
-	xm_update_frequency(ctx, ch);
 }
 
 static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch, float period_offset) {
@@ -973,15 +990,11 @@ static void xm_tick(xm_context_t* ctx) {
 
 		}
 
-		float fpanning = ch->panning +
+		ch->target_panning = ch->panning +
 			(ch->panning_envelope_panning - .5f) * (.5f - fabsf(ch->panning - .5f)) * 2.0f;
-		float fvolume = ch->volume + ch->tremolo_volume;
-		XM_CLAMP(fvolume);
-		fvolume *= ch->fadeout_volume * ch->volume_envelope_volume;
-
-		ch->final_volume_left = ch->final_volume_right = fvolume;
-		ch->final_volume_left *= (1.0f - fpanning);
-		ch->final_volume_right *= fpanning;
+	    ch->target_volume = ch->volume + ch->tremolo_volume;
+		XM_CLAMP(ch->target_volume);
+		ch->target_volume *= ch->fadeout_volume * ch->volume_envelope_volume;
 	}
 
 	ctx->current_tick++;
@@ -1004,7 +1017,6 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	*right = 0.f;
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
-		float chval;
 		xm_channel_context_t* ch = ctx->channels + i;
 
 		if(ch->note == 0 ||
@@ -1014,11 +1026,20 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 			continue;
 		}
 
-		chval = ch->sample->data[(uint32_t)(ch->sample_position)];
+		float fval, u, v, t;
+		uint32_t a, b;
+		a = (uint32_t)ch->sample_position; /* This cast is fine,
+											* sample_position will not
+											* go above integer
+											* ranges */
+		b = a + 1;
+		t = ch->sample_position - a; /* Cheaper than fmodf(., 1.f) */
+		u = ch->sample->data[a];
 
 		switch(ch->sample->loop_type) {
 
 		case XM_NO_LOOP:
+			v = (b < ch->sample->length) ? ch->sample->data[b] : .0f;
 			ch->sample_position += ch->step;
 		    if(ch->sample_position >= ch->sample->length) {
 				ch->sample_position = -1;
@@ -1026,8 +1047,11 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 			break;
 
 		case XM_FORWARD_LOOP:
+			v = ch->sample->data[
+				(b == ch->sample->loop_end) ? ch->sample->loop_start : b
+			];
 			ch->sample_position += ch->step;
-			while(ch->sample_position >= ch->sample->loop_start + ch->sample->loop_length) {
+			while(ch->sample_position >= ch->sample->loop_end) {
 				ch->sample_position -= ch->sample->loop_length;
 			}
 			break;
@@ -1041,24 +1065,29 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 			/* XXX: this may not work for very tight ping-pong loops
 			 * (ie switches direction more than once per sample */
 			if(ch->ping) {
-				if(ch->sample_position >= ch->sample->loop_start + ch->sample->loop_length) {
+				v = (b >= ch->sample->loop_end) ? ch->sample->data[a] : ch->sample->data[b];
+				if(ch->sample_position >= ch->sample->loop_end) {
 					ch->ping = false;
-					ch->sample_position = ch->sample->loop_start + ch->sample->loop_length +
-						ch->sample->loop_start + ch->sample->loop_length - ch->sample_position;
+					ch->sample_position = (ch->sample->loop_end << 1) - ch->sample_position;
 				}
 			} else {
+				v = u;
+				u = (b == 1 || b - 2 <= ch->sample->loop_start) ? ch->sample->data[a] : ch->sample->data[b - 2];
 				if(ch->sample_position <= ch->sample->loop_start) {
 					ch->ping = true;
-					ch->sample_position = ch->sample->loop_start +
-						ch->sample->loop_start - ch->sample_position;
+					ch->sample_position = (ch->sample->loop_start << 1) - ch->sample_position;
 				}
 			}
 			break;
 
 		}
 
-		*left += chval * ch->final_volume_left;
-		*right += chval * ch->final_volume_right;
+		fval = u + t * (v - u);
+		*left += fval * ch->actual_volume * (1.f - ch->actual_panning);
+		*right += fval * ch->actual_volume * ch->actual_panning;
+
+		XM_SLIDE_TOWARDS(ch->actual_volume, ch->target_volume, ctx->volume_ramp);
+		XM_SLIDE_TOWARDS(ch->actual_panning, ch->target_panning, ctx->panning_ramp);
 	}
 
 	const float fgvol = ctx->global_volume * ctx->amplification;

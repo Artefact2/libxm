@@ -47,6 +47,8 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 
 	ctx->global_volume = 1.f;
 	ctx->amplification = .5f; /* Purely empirical value */
+	ctx->volume_ramp = (1.f / 128.f); /* Same here. These should be user-tunable. */
+	ctx->panning_ramp = (1.f / 128.f); /* Same here. These should be user-tunable. */
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
@@ -58,8 +60,8 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 
 		ch->volume = ch->volume_envelope_volume = ch->fadeout_volume = 1.0f;
 		ch->panning = ch->panning_envelope_panning = .5f;
-		ch->final_volume_left = .5f;
-		ch->final_volume_right = .5f;
+		ch->actual_volume = .0f;
+		ch->actual_panning = .5f;
 	}
 
 	ctx->row_loop_count = (uint8_t*)mempool;

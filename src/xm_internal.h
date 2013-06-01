@@ -77,6 +77,7 @@ struct xm_sample_s {
 	uint32_t length;
 	uint32_t loop_start;
 	uint32_t loop_length;
+	uint32_t loop_end;
 	float volume;
 	int8_t finetune;
 	xm_loop_type_t loop_type;
@@ -190,11 +191,13 @@ struct xm_sample_s {
 	 uint8_t tremolo_ticks;
 	 float tremolo_volume;
 
-	 float final_volume_left;
-	 float final_volume_right; /* These values are updated at the end
-							    * of each tick, to save a couple of
-							    * float operations on every generated
-							    * sample. */
+	 float actual_panning;
+	 float target_panning;
+	 float actual_volume;
+	 float target_volume; /* These values are updated at the end
+						   * of each tick, to save a couple of
+						   * float operations on every generated
+						   * sample. */
  };
  typedef struct xm_channel_context_s xm_channel_context_t;
 
@@ -207,6 +210,11 @@ struct xm_sample_s {
 	 uint16_t bpm;
 	 float global_volume;
 	 float amplification;
+	 float volume_ramp; /* How much is a channel final volume allowed
+						 * to change per sample; this is used to avoid
+						 * abrubt volume changes which manifest as
+						 * "clicks" in the generated sound. */
+	 float panning_ramp; /* Same for panning. */
 
 	 uint8_t current_table_index;
 	 uint8_t current_row;

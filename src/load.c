@@ -286,6 +286,7 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 			sample->length = READ(uint32_t, moddata + offset);
 			sample->loop_start = READ(uint32_t, moddata + offset + 4);
 			sample->loop_length = READ(uint32_t, moddata + offset + 8);
+			sample->loop_end = sample->loop_start + sample->loop_length;
 			sample->volume = (float)READ(uint8_t, moddata + offset + 12) / (float)0x40;
 			sample->finetune = READ(int8_t, moddata + offset + 13);
 
@@ -310,6 +311,7 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 				mempool += sample->length * (sizeof(float) >> 1);
 				sample->loop_start >>= 1;
 				sample->loop_length >>= 1;
+				sample->loop_end >>= 1;
 				sample->length >>= 1;
 			} else {
 				/* 8 bit sample */
