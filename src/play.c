@@ -1080,6 +1080,10 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 			}
 			break;
 
+		default:
+			v = .0f;
+			break;
+
 		}
 
 		fval = u + t * (v - u);
