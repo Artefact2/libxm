@@ -198,6 +198,8 @@ struct xm_sample_s {
 	 uint8_t tremolo_param;
 	 uint8_t tremolo_ticks;
 	 float tremolo_volume;
+	 uint8_t tremor_param;
+	 bool tremor_on;
 
 	 unsigned long frame_count;
 	 float end_of_previous_sample[XM_SAMPLE_RAMPING_POINTS];

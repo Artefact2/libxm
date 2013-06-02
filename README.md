@@ -85,7 +85,7 @@ DONE    |20|  K  |      | Key off              (Also note number 97)
 DONE    |21|  L  |      | Set envelope position
 DONE    |25|  P  |  (*) | Panning slide
 DONE    |27|  R  |  (*) | Multi retrig note
-        |28|  T  |      | Tremor
+DONE    |29|  T  |  (*) | Tremor
 DONE    |33|  X1 |  (*) | Extra fine porta up
 DONE    |--|  X2 |  (*) | Extra fine porta down
 ~~~
@@ -130,6 +130,7 @@ ramping.xm    | PASS           | MilkyTracker           | If XM_RAMPING is ON, n
 ramping2.xm   | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
 tremolo.xm    | PASS           | MilkyTracker           | Should sound identical.
 vibrato.xm    | PASS           | MilkyTracker           | Should sound identical.
+tremor.xm     | PASS           | MilkyTracker           | Should sound identical.
 pattern-lo….xm| PASS           | MilkyTracker           | Should play the same notes at the same time.
 finetune.xm   | PASS           | MilkyTracker           | Left and right channels should sound identical.
 ~~~

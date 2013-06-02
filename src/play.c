@@ -585,6 +585,14 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 		}
 		break;
 
+	case 29: /* Txy: Tremor */
+		if(s->effect_param > 0) {
+			/* Tremor x and y params do not appear to be separately
+			 * kept in memory, unlike Rxy */
+			ch->tremor_param = s->effect_param;
+		}
+		break;
+
 	case 33: /* Xxy: Extra stuff */
 		switch(s->effect_param >> 4) {
 
@@ -629,13 +637,12 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 	}
 
 	ch->sustained = true;
-	ch->fadeout_volume = 1.0f;
-	ch->volume_envelope_volume = 1.0f;
+	ch->fadeout_volume = ch->volume_envelope_volume = 1.0f;
 	ch->panning_envelope_panning = .5f;
-	ch->volume_envelope_frame_count = 0;
-	ch->panning_envelope_frame_count = 0;
+	ch->volume_envelope_frame_count = ch->panning_envelope_frame_count = 0;
 	ch->vibrato_note_offset = 0.f;
 	ch->tremolo_volume = 0.f;
+	ch->tremor_on = false;
 
 	if(ch->vibrato_waveform_retrigger) {
 		ch->vibrato_ticks = 0; /* XXX: should the waveform itself also
@@ -1002,6 +1009,15 @@ static void xm_tick(xm_context_t* ctx) {
 			}
 			break;
 
+		case 29: /* Txy: Tremor */
+			if(ctx->current_tick == 0) break;
+			ch->tremor_on = (
+				(ctx->current_tick - 1) % ((ch->tremor_param >> 4) + (ch->tremor_param & 0x0F) + 2)
+				>
+				(ch->tremor_param >> 4)
+			);
+			break;
+
 		default:
 			break;
 
@@ -1009,9 +1025,14 @@ static void xm_tick(xm_context_t* ctx) {
 
 		ch->target_panning = ch->panning +
 			(ch->panning_envelope_panning - .5f) * (.5f - fabsf(ch->panning - .5f)) * 2.0f;
-	    ch->target_volume = ch->volume + ch->tremolo_volume;
-		XM_CLAMP(ch->target_volume);
-		ch->target_volume *= ch->fadeout_volume * ch->volume_envelope_volume;
+
+		if(ch->tremor_on) {
+			ch->target_volume = .0f;
+		} else {
+			ch->target_volume = ch->volume + ch->tremolo_volume;
+			XM_CLAMP(ch->target_volume);
+			ch->target_volume *= ch->fadeout_volume * ch->volume_envelope_volume;
+		}
 
 		if(!XM_RAMPING) {
 			ch->actual_panning = ch->target_panning;
