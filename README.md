@@ -69,7 +69,7 @@ DONE    |14|  E1 |  (*) | Fine porta up
 DONE    |--|  E2 |  (*) | Fine porta down
         |--|  E3 |      | Set gliss control
 UNTESTED|--|  E4 |      | Set vibrato control
-        |--|  E5 |      | Set finetune
+DONE    |--|  E5 |      | Set finetune
 DONE    |--|  E6 |      | Set loop begin/loop
 UNTESTED|--|  E7 |      | Set tremolo control
 DONE    |--|  E9 |      | Retrig note
@@ -131,6 +131,7 @@ ramping2.xm   | PASS           | MilkyTracker           | If XM_RAMPING is ON, n
 tremolo.xm    | PASS           | MilkyTracker           | Should sound identical.
 vibrato.xm    | PASS           | MilkyTracker           | Should sound identical.
 pattern-lo….xm| PASS           | MilkyTracker           | Should play the same notes at the same time.
+finetune.xm   | PASS           | MilkyTracker           | Left and right channels should sound identical.
 ~~~
 
 Thanks

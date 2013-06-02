@@ -151,6 +151,8 @@ struct xm_sample_s {
 	 float note;
 	 xm_instrument_t* instrument; /* Could be NULL */
 	 xm_sample_t* sample; /* Could be NULL */
+	 xm_pattern_slot_t* current;
+
 	 float sample_position;
 	 float period;
 	 float frequency;
@@ -166,10 +168,6 @@ struct xm_sample_s {
 	 float panning_envelope_panning;
 	 uint16_t volume_envelope_frame_count;
 	 uint16_t panning_envelope_frame_count;
-
-	 uint8_t current_volume_effect;
-	 uint8_t current_effect;
-	 uint8_t current_effect_param;
 
 	 bool arp_in_progress;
 	 uint8_t arp_note_offset;
@@ -187,7 +185,6 @@ struct xm_sample_s {
 	 float tone_portamento_target_period;
 	 uint8_t multi_retrig_param;
 	 uint8_t note_delay_param;
-	 xm_pattern_slot_t* note_delay_note;
 	 uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
 	 uint8_t pattern_loop_count; /* How many loop passes have been done */
 	 bool vibrato_in_progress;
