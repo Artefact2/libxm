@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
 		FATAL("Usage: %s <filename>\n", argv[0]);
 
 	create_context_from_file(&ctx, rate, argv[1]);
+	xm_set_max_loop_count(ctx, 1);
 
 	puts_uint32_be(0x2E736E64); /* .snd magic number */
 	puts_uint32_be(24); /* Header size */

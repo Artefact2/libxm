@@ -20,8 +20,6 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 	}
 
 	bytes_needed = xm_get_memory_needed_for_context(moddata);
-
-	DEBUG("allocating %i bytes", (int)bytes_needed);
 	mempool = malloc(bytes_needed);
 	if(mempool == NULL && bytes_needed > 0) {
 		/* malloc() failed, trouble ahead */
@@ -39,8 +37,9 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 	ctx->rate = rate;
 	mempool = xm_load_module(ctx, moddata, mempool);
 
-	DEBUG("module name: %.*s", MODULE_NAME_LENGTH, ctx->module.name);
-	DEBUG("tracker name: %.*s", TRACKER_NAME_LENGTH, ctx->module.trackername);
+	if(XM_DEBUG && ctx->module.frequency_type == XM_AMIGA_FREQUENCIES) {
+		DEBUG("module should use Amiga frequencies (type %i), expect garbage", ctx->module.frequency_type);
+	}
 
 	ctx->channels = (xm_channel_context_t*)mempool;
 	mempool += ctx->module.num_channels * sizeof(xm_channel_context_t);
@@ -75,6 +74,50 @@ void xm_free_context(xm_context_t* context) {
 	free(context->allocated_memory);
 }
 
-uint32_t xm_get_loop_count(xm_context_t* context) {
+void xm_set_max_loop_count(xm_context_t* context, uint8_t loopcnt) {
+	context->max_loop_count = loopcnt;
+}
+
+uint8_t xm_get_loop_count(xm_context_t* context) {
 	return context->loop_count;
+}
+
+const char* xm_get_module_name(xm_context_t* ctx) {
+	return ctx->module.name;
+}
+
+const char* xm_get_tracker_name(xm_context_t* ctx) {
+	return ctx->module.trackername;
+}
+
+uint16_t xm_get_module_length(xm_context_t* ctx) {
+	return ctx->module.length;
+}
+
+uint16_t xm_get_number_of_patterns(xm_context_t* ctx) {
+	return ctx->module.num_patterns;
+}
+
+uint16_t xm_get_number_of_rows(xm_context_t* ctx, uint16_t pattern) {
+	return ctx->module.patterns[pattern].num_rows;
+}
+
+uint16_t xm_get_number_of_instruments(xm_context_t* ctx) {
+	return ctx->module.num_instruments;
+}
+
+uint16_t xm_get_number_of_samples(xm_context_t* ctx, uint16_t instrument) {
+	return ctx->module.instruments[instrument].num_samples;
+}
+
+void xm_get_playing_speed(xm_context_t* ctx, uint16_t* bpm, uint16_t* tempo) {
+	if(bpm) *bpm = ctx->bpm;
+	if(tempo) *tempo = ctx->tempo;
+}
+
+void xm_get_position(xm_context_t* ctx, uint8_t* pattern_index, uint8_t* pattern, uint8_t* row, uint64_t* samples) {
+	if(pattern_index) *pattern_index = ctx->current_table_index;
+	if(pattern) *pattern = ctx->module.pattern_table[ctx->current_table_index];
+	if(row) *row = ctx->current_row;
+	if(samples) *samples = ctx->generated_samples;
 }

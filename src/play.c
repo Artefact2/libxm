@@ -1153,6 +1153,10 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	*left = 0.f;
 	*right = 0.f;
 
+	if(ctx->max_loop_count > 0 && ctx->loop_count >= ctx->max_loop_count) {
+		return;
+	}
+
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
@@ -1177,15 +1181,17 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	*left *= fgvol;
 	*right *= fgvol;
 
-	if(XM_DEBUG && (*left > 1 || *left < -1)) {
-		DEBUG("clipping will occur, final sample value is %f", *left);
+	if(XM_DEBUG && (*left > 32 || *left < -32)) {
+		DEBUG("final sample value is %f, this is a bug", *left);
 	}
-	if(XM_DEBUG && (*right > 1 || *right < -1)) {
-		DEBUG("clipping will occur, final sample value is %f", *right);
+	if(XM_DEBUG && (*right > 32 || *right < -32)) {
+		DEBUG("final sample value is %f, this is a bug", *right);
 	}
 }
 
 void xm_generate_samples(xm_context_t* ctx, float* output, size_t numsamples) {
+	ctx->generated_samples += numsamples;
+
 	for(size_t i = 0; i < numsamples; i++) {
 		xm_sample(ctx, output + (2 * i), output + (2 * i + 1));
 	}

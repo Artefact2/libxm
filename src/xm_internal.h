@@ -82,7 +82,7 @@ struct xm_envelope_s {
 typedef struct xm_envelope_s xm_envelope_t;
 
 struct xm_sample_s {
-	char name[SAMPLE_NAME_LENGTH];
+	char name[SAMPLE_NAME_LENGTH + 1];
 	int8_t bits; /* Either 8 or 16 */
 
 	uint32_t length;
@@ -100,7 +100,7 @@ struct xm_sample_s {
  typedef struct xm_sample_s xm_sample_t;
 
  struct xm_instrument_s {
-	 char name[INSTRUMENT_NAME_LENGTH];
+	 char name[INSTRUMENT_NAME_LENGTH + 1];
 	 uint16_t num_samples;
 	 uint8_t sample_of_notes[NUM_NOTES];
 	 xm_envelope_t volume_envelope;
@@ -131,8 +131,8 @@ struct xm_sample_s {
  typedef struct xm_pattern_s xm_pattern_t;
 
  struct xm_module_s {
-	 char name[MODULE_NAME_LENGTH];
-	 char trackername[TRACKER_NAME_LENGTH];
+	 char name[MODULE_NAME_LENGTH + 1];
+	 char trackername[TRACKER_NAME_LENGTH + 1];
 	 uint16_t length;
 	 uint16_t restart_position;
 	 uint16_t num_channels;
@@ -233,6 +233,7 @@ struct xm_sample_s {
 	 uint8_t current_row;
 	 uint16_t current_tick; /* Can go below 255, with high tempo and a pattern delay */
 	 float remaining_samples_in_tick;
+	 uint64_t generated_samples;
 
 	 bool position_jump;
 	 bool pattern_break;
@@ -244,6 +245,7 @@ struct xm_sample_s {
 
 	 uint8_t* row_loop_count; /* Array of size MAX_NUM_ROWS * module_length */
 	 uint8_t loop_count;
+	 uint8_t max_loop_count;
 
 	 xm_channel_context_t* channels;
 };

@@ -28,7 +28,9 @@ Three example programs are provided.
     mplayer file.wav
 	~~~
 
-* `xmtoalsa` is a simple player that uses the ALSA library.
+* `xmtoalsa` is a simple player that uses the ALSA library. It
+  produces `xmp`-like output while playing. Use `xmtoalsa --help` (or
+  check the source) to see the full usage.
 
 * `xmbench` is a benchmark program.
 
@@ -115,6 +117,16 @@ General
 * Autovibrato is not supported yet.
 
 * Amiga frequency tables are not supported yet.
+
+Known issues
+------------
+
+* Only loads Fasttracker II-compatible XM files.
+
+* Loading a bogus file (that has a valid 60-byte header) will probably
+  result in a segmentation fault.
+
+* Big endian architectures are not yet supported.
 
 Tests
 =====

@@ -37,15 +37,12 @@ size_t xm_get_memory_needed_for_context(char* moddata) {
 	/* Read the module header */
 
 	num_channels = READ(uint16_t, moddata + offset + 8);
-	DEBUG("got %i channels", num_channels);
 
 	num_patterns = READ(uint16_t, moddata + offset + 10);
 	memory_needed += num_patterns * sizeof(xm_pattern_t);
-	DEBUG("got %i patterns", num_patterns);
 
 	num_instruments = READ(uint16_t, moddata + offset + 12);
 	memory_needed += num_instruments * sizeof(xm_instrument_t);
-	DEBUG("got %i instruments", num_instruments);
 
 	memory_needed += MAX_NUM_ROWS * READ(uint16_t, moddata + offset + 4) * sizeof(uint8_t); /* Module length */
 

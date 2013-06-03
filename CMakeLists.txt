@@ -1,8 +1,6 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
 PROJECT(libxm C)
 
-FIND_PACKAGE(ALSA)
-
 FUNCTION(OPTION_AND_DEFINE name description default_value)
 OPTION(${name} ${description} ${default_value})
 IF(${name})
