@@ -37,10 +37,6 @@ int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
 	ctx->rate = rate;
 	mempool = xm_load_module(ctx, moddata, mempool);
 
-	if(XM_DEBUG && ctx->module.frequency_type == XM_AMIGA_FREQUENCIES) {
-		DEBUG("module should use Amiga frequencies (type %i), expect garbage", ctx->module.frequency_type);
-	}
-
 	ctx->channels = (xm_channel_context_t*)mempool;
 	mempool += ctx->module.num_channels * sizeof(xm_channel_context_t);
 

@@ -111,15 +111,10 @@ DONE    | $e0-$ef | Panning slide right
 DONE    | $f0-$ff | Tone porta
 ~~~
 
-General
--------
-
-* Autovibrato is not supported yet.
-
-* Amiga frequency tables are not supported yet.
-
 Known issues
 ------------
+
+* Autovibrato is not supported yet.
 
 * Only loads Fasttracker II-compatible XM files.
 

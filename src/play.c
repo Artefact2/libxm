@@ -23,7 +23,12 @@ static float xm_envelope_lerp(xm_envelope_point_t*, xm_envelope_point_t*, uint16
 static void xm_envelope_tick(xm_channel_context_t*, xm_envelope_t*, uint16_t*, float*);
 static void xm_envelopes(xm_channel_context_t*);
 
-static void xm_post_pattern_change(xm_context_t*);
+static float xm_linear_period(float);
+static float xm_linear_frequency(float);
+static float xm_amiga_period(float);
+static float xm_amiga_frequency(float);
+static float xm_period(xm_context_t*, float);
+static float xm_frequency(xm_context_t*, float, float);
 static void xm_update_frequency(xm_context_t*, xm_channel_context_t*);
 
 static void xm_handle_note_and_instrument(xm_context_t*, xm_channel_context_t*, xm_pattern_slot_t*);
@@ -31,6 +36,7 @@ static void xm_trigger_note(xm_context_t*, xm_channel_context_t*, unsigned int f
 static void xm_cut_note(xm_channel_context_t*);
 static void xm_key_off(xm_channel_context_t*);
 
+static void xm_post_pattern_change(xm_context_t*);
 static void xm_row(xm_context_t*);
 static void xm_tick(xm_context_t*);
 
@@ -42,6 +48,13 @@ static void xm_sample(xm_context_t*, float*, float*);
 #define XM_TRIGGER_KEEP_VOLUME (1 << 0)
 #define XM_TRIGGER_KEEP_PERIOD (1 << 1)
 #define XM_TRIGGER_KEEP_SAMPLE_POSITION (1 << 2)
+
+static const uint16_t amiga_frequencies[] = {
+	1712, 1616, 1525, 1440, /* C-0, C#0, D-0, D#0 */
+	1357, 1281, 1209, 1141, /* E-0, F-0, F#0, G-0 */
+	1077, 1017,  961,  907, /* G#0, A-0, A#0, B-0 */
+	856,                    /* C-1 */
+};
 
 static const float multi_retrig_add[] = {
 	 0.f,  -1.f,  -2.f,  -4.f,  /* 0, 1, 2, 3 */
@@ -84,9 +97,7 @@ static const float multi_retrig_multiply[] = {
 	} while(0)
 
 #define XM_LERP(u, v, t) ((u) + (t) * ((v) - (u)))
-
-#define XM_PERIOD_OF_NOTE(note) (7680.f - (note) * 64.f)
-#define XM_LINEAR_FREQUENCY_OF_PERIOD(period) (8363.f * powf(2.f, (4608.f - (period)) / 768.f))
+#define XM_INVERSE_LERP(u, v, lerp) (((lerp) - (u)) / ((v) - (u)))
 
 #define HAS_TONE_PORTAMENTO(s) ((s)->effect_type == 3 \
 								 || (s)->effect_type == 5 \
@@ -251,14 +262,65 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	}
 }
 
-static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
-	/* XXX Amiga frequencies? */
-	ch->frequency = XM_LINEAR_FREQUENCY_OF_PERIOD(
-		ch->period - 64.f * (
-			(ch->arp_note_offset > 0 ? ch->arp_note_offset : ch->vibrato_note_offset)
-		)
-	);
+static float xm_linear_period(float note) {
+	return 7680.f - note * 64.f;
+}
 
+static float xm_linear_frequency(float period) {
+	return 8363.f * powf(2.f, (4608.f - period) / 768.f);
+}
+
+static float xm_amiga_period(float note) {
+	unsigned int intnote = note;
+	uint8_t a = intnote % 12;
+	uint8_t octave = note / 12.f - 2;
+
+	return XM_LERP(amiga_frequencies[a] >> octave, amiga_frequencies[a + 1] >> octave, note - intnote);
+}
+
+static float xm_amiga_frequency(float period) {
+	if(period == .0f) return .0f;
+
+	/* This is the PAL value. No reason to choose this one over the
+	 * NTSC value. */
+	return 7093789.2f / (period * 2.f);
+}
+
+static float xm_period(xm_context_t* ctx, float note) {
+	switch(ctx->module.frequency_type) {
+	case XM_LINEAR_FREQUENCIES:
+		return xm_linear_period(note);
+	case XM_AMIGA_FREQUENCIES:
+		return xm_amiga_period(note);
+	}
+	return .0f;
+}
+
+static float xm_frequency(xm_context_t* ctx, float period, float note_offset) {
+	uint8_t a = 0, octave = 0;
+	float note;
+
+	switch(ctx->module.frequency_type) {
+	case XM_LINEAR_FREQUENCIES:
+		return xm_linear_frequency(period - 64.f * note_offset);
+	case XM_AMIGA_FREQUENCIES:
+		/* FIXME: this is very crappy at best */
+		while(period < (amiga_frequencies[12] >> octave)) ++octave;
+		while(period < (amiga_frequencies[a] >> octave)) ++a;
+
+		note = 12.f * (octave + 2) + a +
+			XM_INVERSE_LERP(amiga_frequencies[a] >> octave, amiga_frequencies[a + 1] >> octave, period);
+
+		return xm_amiga_frequency(xm_amiga_period(note + note_offset));
+	}
+	return .0f;
+}
+
+static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
+	ch->frequency = xm_frequency(
+		ctx, ch->period,
+		(ch->arp_note_offset > 0 ? ch->arp_note_offset : ch->vibrato_note_offset)
+	);
 	ch->step = ch->frequency / ctx->rate;
 }
 
@@ -293,7 +355,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 		if(HAS_TONE_PORTAMENTO(ch->current) && instr != NULL && ch->sample != NULL) {
 			/* Tone portamento in effect */
 			ch->note = s->note + ch->sample->relative_note + ch->sample->finetune / 128.f - 1.f;
-			ch->tone_portamento_target_period = XM_PERIOD_OF_NOTE(ch->note);
+			ch->tone_portamento_target_period = xm_period(ctx, ch->note);
 		} else if(instr == NULL || ch->instrument->num_samples == 0) {
 			/* Bad instrument */
 			xm_cut_note(ch);
@@ -483,7 +545,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			if(NOTE_IS_VALID(ch->current->note) && ch->sample != NULL) {
 				ch->note = ch->current->note + ch->sample->relative_note +
 					(float)(((s->effect_param & 0x0F) - 8) << 4) / 128.f - 1.f;
-				ch->period = XM_PERIOD_OF_NOTE(ch->note);
+				ch->period = xm_period(ctx, ch->note);
 				xm_update_frequency(ctx, ch);
 			}
 			break;
@@ -653,7 +715,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 	}
 
 	if(!(flags & XM_TRIGGER_KEEP_PERIOD)) {
-		ch->period = XM_PERIOD_OF_NOTE(ch->note);
+		ch->period = xm_period(ctx, ch->note);
 		xm_update_frequency(ctx, ch);
 	}
 }
