@@ -138,6 +138,7 @@ ramping2.xm   | PASS           | MilkyTracker           | If XM_RAMPING is ON, n
 tremolo.xm    | PASS           | MilkyTracker           | Should sound identical.
 vibrato.xm    | PASS           | MilkyTracker           | Should sound identical.
 tremor.xm     | PASS           | MilkyTracker           | Should sound identical.
+amiga.xm      | FAIL           | MilkyTracker, xmp      | Should sound identical.
 pattern-lo….xm| PASS           | MilkyTracker           | Should play the same notes at the same time.
 finetune.xm   | PASS           | MilkyTracker           | Left and right channels should sound identical.
 ~~~

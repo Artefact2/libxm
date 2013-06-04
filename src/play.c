@@ -50,10 +50,10 @@ static void xm_sample(xm_context_t*, float*, float*);
 #define XM_TRIGGER_KEEP_SAMPLE_POSITION (1 << 2)
 
 static const uint16_t amiga_frequencies[] = {
-	1712, 1616, 1525, 1440, /* C-0, C#0, D-0, D#0 */
-	1357, 1281, 1209, 1141, /* E-0, F-0, F#0, G-0 */
-	1077, 1017,  961,  907, /* G#0, A-0, A#0, B-0 */
-	856,                    /* C-1 */
+	1712, 1616, 1525, 1440, /* C-2, C#2, D-2, D#2 */
+	1357, 1281, 1209, 1141, /* E-2, F-2, F#2, G-2 */
+	1077, 1017,  961,  907, /* G#2, A-2, A#2, B-2 */
+	856,                    /* C-3 */
 };
 
 static const float multi_retrig_add[] = {
@@ -273,9 +273,18 @@ static float xm_linear_frequency(float period) {
 static float xm_amiga_period(float note) {
 	unsigned int intnote = note;
 	uint8_t a = intnote % 12;
-	uint8_t octave = note / 12.f - 2;
+	int8_t octave = note / 12.f - 2;
+	uint16_t p1 = amiga_frequencies[a], p2 = amiga_frequencies[a + 1];
 
-	return XM_LERP(amiga_frequencies[a] >> octave, amiga_frequencies[a + 1] >> octave, note - intnote);
+	if(octave > 0) {
+		p1 >>= octave;
+		p2 >>= octave;
+	} else if(octave < 0) {
+		p1 <<= (-octave);
+		p2 <<= (-octave);
+	}
+
+	return XM_LERP(p1, p2, note - intnote);
 }
 
 static float xm_amiga_frequency(float period) {
@@ -297,22 +306,62 @@ static float xm_period(xm_context_t* ctx, float note) {
 }
 
 static float xm_frequency(xm_context_t* ctx, float period, float note_offset) {
-	uint8_t a = 0, octave = 0;
+	uint8_t a;
+	int8_t octave;
 	float note;
+	uint16_t p1, p2;
 
 	switch(ctx->module.frequency_type) {
+
 	case XM_LINEAR_FREQUENCIES:
 		return xm_linear_frequency(period - 64.f * note_offset);
-	case XM_AMIGA_FREQUENCIES:
-		/* FIXME: this is very crappy at best */
-		while(period < (amiga_frequencies[12] >> octave)) ++octave;
-		while(period < (amiga_frequencies[a] >> octave)) ++a;
 
-		note = 12.f * (octave + 2) + a +
-			XM_INVERSE_LERP(amiga_frequencies[a] >> octave, amiga_frequencies[a + 1] >> octave, period);
+	case XM_AMIGA_FREQUENCIES:
+		if(note_offset == 0) {
+			/* A chance to escape from insanity */
+			return xm_amiga_frequency(period);
+		}
+
+		/* FIXME: this is very crappy at best */
+		a = octave = 0;
+
+		/* Find the octave of the current period */
+		if(period > amiga_frequencies[0]) {
+			--octave;
+			while(period > (amiga_frequencies[0] << (-octave))) --octave;
+		} else if(period < amiga_frequencies[12]) {
+			++octave;
+			while(period < (amiga_frequencies[12] >> octave)) ++octave;
+		}
+
+		/* Find the smallest note closest to the current period */
+		for(uint8_t i = 0; i < 12; ++i) {
+			p1 = amiga_frequencies[i], p2 = amiga_frequencies[i + 1];
+
+			if(octave > 0) {
+				p1 >>= octave;
+				p2 >>= octave;
+			} else if(octave < 0) {
+				p1 <<= (-octave);
+				p2 <<= (-octave);
+			}
+
+			if(p2 <= period && period <= p1) {
+				a = i;
+				break;
+			}
+		}
+
+		if(XM_DEBUG && (p1 < period || p2 > period)) {
+			DEBUG("%i <= %f <= %i should hold but doesn't, this is a bug", p2, period, p1);
+		}
+
+		note = 12.f * (octave + 2) + a + XM_INVERSE_LERP(p1, p2, period);
 
 		return xm_amiga_frequency(xm_amiga_period(note + note_offset));
+
 	}
+
 	return .0f;
 }
 
