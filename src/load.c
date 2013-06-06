@@ -262,6 +262,11 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 			instr->panning_envelope.loop_enabled = flags & (1 << 2);
 
 			instr->vibrato_type = READ(uint8_t, moddata + offset + 235);
+			if(instr->vibrato_type == 2) {
+				instr->vibrato_type = 1;
+			} else if(instr->vibrato_type == 1) {
+				instr->vibrato_type = 2;
+			}
 			instr->vibrato_sweep = READ(uint8_t, moddata + offset + 236);
 			instr->vibrato_depth = READ(uint8_t, moddata + offset + 237);
 			instr->vibrato_rate = READ(uint8_t, moddata + offset + 238);

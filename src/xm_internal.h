@@ -47,6 +47,7 @@ enum xm_waveform_type_e {
 	XM_RAMP_DOWN_WAVEFORM = 1,
 	XM_SQUARE_WAVEFORM = 2,
 	XM_RANDOM_WAVEFORM = 3,
+	XM_RAMP_UP_WAVEFORM = 4,
 };
 typedef enum xm_waveform_type_e xm_waveform_type_t;
 
@@ -105,10 +106,11 @@ struct xm_sample_s {
 	 uint8_t sample_of_notes[NUM_NOTES];
 	 xm_envelope_t volume_envelope;
 	 xm_envelope_t panning_envelope;
-	 uint8_t vibrato_type;
+	 xm_waveform_type_t vibrato_type;
 	 uint8_t vibrato_sweep;
 	 uint8_t vibrato_depth;
 	 uint8_t vibrato_rate;
+	 uint16_t vibrato_ticks;
 	 uint16_t volume_fadeout;
 
 	 xm_sample_t* samples;
@@ -168,6 +170,8 @@ struct xm_sample_s {
 	 float panning_envelope_panning;
 	 uint16_t volume_envelope_frame_count;
 	 uint16_t panning_envelope_frame_count;
+
+	 float autovibrato_note_offset;
 
 	 bool arp_in_progress;
 	 uint8_t arp_note_offset;

@@ -38,6 +38,7 @@ Here are some interesting modules, most showcase unusual or advanced
 tracking techniques (and thus are a good indicator of a player's
 accuracy):
 
+* [Cerror - Expatarimental](http://modarchive.org/module.php?136603)
 * [Lamb - Among the stars](http://modarchive.org/module.php?165819)
 * [Raina - Cyberculosis](http://modarchive.org/module.php?165308)
 * [Raina - Slumberjack](http://modarchive.org/module.php?148721)
@@ -114,12 +115,10 @@ DONE    | $f0-$ff | Tone porta
 Known issues
 ------------
 
-* Autovibrato is not supported yet.
+* Only loads FastTracker II-compatible XM files.
 
-* Only loads Fasttracker II-compatible XM files.
-
-* Loading a bogus file (that has a valid 60-byte header) will probably
-  result in a segmentation fault.
+* Loading a bogus file (that yet has a valid 60-byte header) will
+  probably result in a segmentation fault.
 
 * Big endian architectures are not yet supported.
 
@@ -159,3 +158,5 @@ Thanks to:
 * All the MilkyTracker contributors, for the [thorough
   documentation](http://www.milkytracker.org/docs/MilkyTracker.html#effects)
   of effects.
+
+* All the people that helped on `#milkytracker` IRC.

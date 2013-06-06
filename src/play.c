@@ -11,6 +11,7 @@
 /* ----- Static functions ----- */
 
 static float xm_waveform(xm_waveform_type_t, uint8_t);
+static void xm_autovibrato(xm_context_t*, xm_channel_context_t*);
 static void xm_vibrato(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t);
 static void xm_tremolo(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t);
 static void xm_arpeggio(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t);
@@ -128,7 +129,7 @@ static float xm_waveform(xm_waveform_type_t waveform, uint8_t step) {
 
 	case XM_SQUARE_WAVEFORM:
 		/* Square with a 50% duty */
-		return (step >= 0x20) ? -1.f : 1.f;
+		return (step >= 0x20) ? 1.f : -1.f;
 
 	case XM_RANDOM_WAVEFORM:
 		/* Use the POSIX.1-2001 example, just to be deterministic
@@ -136,12 +137,34 @@ static float xm_waveform(xm_waveform_type_t waveform, uint8_t step) {
 		next_rand = next_rand * 1103515245 + 12345;
 		return (float)((next_rand >> 16) & 0x7FFF) / (float)0x4000 - 1.f;
 
+	case XM_RAMP_UP_WAVEFORM:
+		/* Ramp up: -1.f when step = 0; 1.f when step = 0x40 */
+		return (float)(step - 0x20) / 0x20;
+
 	default:
 		break;
 
 	}
 
 	return .0f;
+}
+
+static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
+	if(ch->instrument == NULL || ch->instrument->vibrato_depth == 0) return;
+	xm_instrument_t* instr = ch->instrument;
+	float sweep = 1.f;
+
+	if(instr->vibrato_ticks < instr->vibrato_sweep) {
+		/* No idea if this is correct, but it sounds close enough… */
+		sweep = XM_LERP(0.f, 1.f, (float)instr->vibrato_ticks / (float)instr->vibrato_sweep);
+	}
+
+	/* Don't really know when vibrato_ticks should be reset to zero…
+	 * Early tests seem to indicate never. */
+	unsigned int step = (instr->vibrato_ticks++) * instr->vibrato_rate >> 2;
+	ch->autovibrato_note_offset = .25f * xm_waveform(instr->vibrato_type, step)
+		* (float)instr->vibrato_depth / (float)0xF * sweep;
+	xm_update_frequency(ctx, ch);
 }
 
 static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, uint16_t pos) {
@@ -368,7 +391,9 @@ static float xm_frequency(xm_context_t* ctx, float period, float note_offset) {
 static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->frequency = xm_frequency(
 		ctx, ch->period,
-		(ch->arp_note_offset > 0 ? ch->arp_note_offset : ch->vibrato_note_offset)
+		(ch->arp_note_offset > 0 ? ch->arp_note_offset : (
+			ch->vibrato_note_offset + ch->autovibrato_note_offset
+		))
 	);
 	ch->step = ch->frequency / ctx->rate;
 }
@@ -918,6 +943,7 @@ static void xm_tick(xm_context_t* ctx) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
 		xm_envelopes(ch);
+		xm_autovibrato(ctx, ch);
 
 		if(ch->arp_in_progress && !HAS_ARPEGGIO(ch->current)) {
 			ch->arp_in_progress = false;
