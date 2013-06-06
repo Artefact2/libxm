@@ -154,14 +154,12 @@ static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
 	xm_instrument_t* instr = ch->instrument;
 	float sweep = 1.f;
 
-	if(instr->vibrato_ticks < instr->vibrato_sweep) {
+	if(ch->autovibrato_ticks < instr->vibrato_sweep) {
 		/* No idea if this is correct, but it sounds close enough… */
-		sweep = XM_LERP(0.f, 1.f, (float)instr->vibrato_ticks / (float)instr->vibrato_sweep);
+		sweep = XM_LERP(0.f, 1.f, (float)ch->autovibrato_ticks / (float)instr->vibrato_sweep);
 	}
 
-	/* Don't really know when vibrato_ticks should be reset to zero…
-	 * Early tests seem to indicate never. */
-	unsigned int step = (instr->vibrato_ticks++) * instr->vibrato_rate >> 2;
+	unsigned int step = ((ch->autovibrato_ticks++) * instr->vibrato_rate) >> 2;
 	ch->autovibrato_note_offset = .25f * xm_waveform(instr->vibrato_type, step)
 		* (float)instr->vibrato_depth / (float)0xF * sweep;
 	xm_update_frequency(ctx, ch);
@@ -779,6 +777,8 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 	ch->vibrato_note_offset = 0.f;
 	ch->tremolo_volume = 0.f;
 	ch->tremor_on = false;
+
+	ch->autovibrato_ticks = 0;
 
 	if(ch->vibrato_waveform_retrigger) {
 		ch->vibrato_ticks = 0; /* XXX: should the waveform itself also

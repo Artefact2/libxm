@@ -110,7 +110,6 @@ struct xm_sample_s {
 	 uint8_t vibrato_sweep;
 	 uint8_t vibrato_depth;
 	 uint8_t vibrato_rate;
-	 uint16_t vibrato_ticks;
 	 uint16_t volume_fadeout;
 
 	 xm_sample_t* samples;
@@ -163,6 +162,8 @@ struct xm_sample_s {
 
 	 float volume; /* Ideally between 0 (muted) and 1 (loudest) */
 	 float panning; /* Between 0 (left) and 1 (right); 0.5 is centered */
+
+	 uint16_t autovibrato_ticks;
 
 	 bool sustained;
 	 float fadeout_volume;
