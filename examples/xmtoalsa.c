@@ -32,9 +32,9 @@
 		}													\
 	} while(0)
 
-static const size_t buffer_size = 2048; /* Average buffer size, should
-										 * be enough even on slow CPUs
-										 * and not too laggy */
+static size_t buffer_size = 2048; /* Average buffer size, should
+								   * be enough even on slow CPUs
+								   * and not too laggy */
 static const unsigned int channels = 2;
 static const unsigned int rate = 48000;
 
@@ -102,8 +102,11 @@ int main(int argc, char** argv) {
 	CHECK_ALSA_CALL(snd_pcm_hw_params_set_format(device, params, SND_PCM_FORMAT_FLOAT));
 	CHECK_ALSA_CALL(snd_pcm_hw_params_set_rate(device, params, rate, 0));
 	CHECK_ALSA_CALL(snd_pcm_hw_params_set_channels(device, params, channels));
-	CHECK_ALSA_CALL(snd_pcm_hw_params_set_buffer_size(device, params, buffer_size << 2));
-	CHECK_ALSA_CALL(snd_pcm_hw_params_set_period_size(device, params, buffer_size, 0));
+
+	buffer_size <<= 2;
+	CHECK_ALSA_CALL(snd_pcm_hw_params_set_buffer_size_near(device, params, &buffer_size));
+	buffer_size >>= 2;
+	CHECK_ALSA_CALL(snd_pcm_hw_params_set_period_size_near(device, params, &buffer_size, 0));
 	CHECK_ALSA_CALL(snd_pcm_hw_params(device, params));
 	snd_pcm_hw_params_free(params);
 	CHECK_ALSA_CALL(snd_pcm_sw_params_malloc((snd_pcm_sw_params_t**)(&params)));
