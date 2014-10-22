@@ -9,7 +9,6 @@
 #include "xm_internal.h"
 
 /* .xm files are little-endian. (XXX: Are they really?) */
-#define READ_S8(pointer) (*(int8_t*)(pointer))
 #define READ_U8(pointer) (*(uint8_t*)(pointer))
 #define READ_U16(pointer) ((uint16_t)READ_U8(pointer) | ((uint16_t)READ_U8((pointer) + 1) << 8))
 #define READ_U32(pointer) ((uint32_t)READ_U16(pointer) | ((uint32_t)READ_U16((pointer) + 2) << 16))
@@ -294,7 +293,7 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 			sample->loop_length = READ_U32(moddata + offset + 8);
 			sample->loop_end = sample->loop_start + sample->loop_length;
 			sample->volume = (float)READ_U8(moddata + offset + 12) / (float)0x40;
-			sample->finetune = READ_S8(moddata + offset + 13);
+			sample->finetune = (int8_t)READ_U8(moddata + offset + 13);
 
 			uint8_t flags = READ_U8(moddata + offset + 14);
 			if((flags & 3) == 0) {
@@ -308,7 +307,7 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 			sample->bits = (flags & (1 << 4)) ? 16 : 8;
 
 			sample->panning = (float)READ_U8(moddata + offset + 15) / (float)0xFF;
-			sample->relative_note = READ_S8(moddata + offset + 16);
+			sample->relative_note = (int8_t)READ_U8(moddata + offset + 16);
 			memcpy(sample->name, moddata + 18, SAMPLE_NAME_LENGTH);
 			sample->data = (float*)mempool;
 
@@ -333,18 +332,16 @@ char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
 			uint32_t length = sample->length;
 
 			if(sample->bits == 16) {
-				int16_t* sampledata = (int16_t*)(moddata + offset);
 				int16_t v = 0;
 				for(uint32_t k = 0; k < length; ++k) {
-					v = v + sampledata[k];
+					v = v + (int16_t)READ_U16(moddata + offset + (k << 1));
 					sample->data[k] = (float)v / (float)(1 << 15);
 				}
 				offset += sample->length << 1;
 			} else {
-				int8_t* sampledata = (int8_t*)(moddata + offset);
 				int8_t v = 0;
 				for(uint32_t k = 0; k < length; ++k) {
-					v = v + sampledata[k];
+					v = v + (int8_t)READ_U8(moddata + offset + k);
 					sample->data[k] = (float)v / (float)(1 << 7);
 				}
 				offset += sample->length;
