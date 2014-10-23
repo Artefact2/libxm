@@ -403,7 +403,6 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 	if(s->instrument > 0) {
 		if(HAS_TONE_PORTAMENTO(ch->current) && ch->instrument != NULL && ch->sample != NULL) {
 			/* Tone portamento in effect, unclear stuff happens */
-			if(ch->note == 0) ch->note = 1;
 			xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_PERIOD | XM_TRIGGER_KEEP_SAMPLE_POSITION);
 		} else if(s->instrument > ctx->module.num_instruments) {
 			/* Invalid instrument, Cut current note */
@@ -1188,7 +1187,7 @@ static void xm_tick(xm_context_t* ctx) {
 }
 
 static float xm_next_of_sample(xm_channel_context_t* ch) {
-	if(ch->note == 0 || ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
+	if(ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
 		if(XM_RAMPING && ch->frame_count < XM_SAMPLE_RAMPING_POINTS) {
 			return XM_LERP(ch->end_of_previous_sample[ch->frame_count], .0f,
 						   (float)ch->frame_count / (float)XM_SAMPLE_RAMPING_POINTS);
@@ -1300,7 +1299,7 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 		if(XM_RAMPING)
 			ch->frame_count++;
 
-		if(ch->note == 0 || ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
+		if(ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
 			continue;
 		}
 
