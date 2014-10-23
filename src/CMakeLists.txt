@@ -1,6 +1,7 @@
+IF(XM_BUILD_SHARED_LIBS)
 ADD_LIBRARY(xm SHARED xm.c context.c load.c play.c)
-ADD_LIBRARY(xms STATIC xm.c context.c load.c play.c)
-
 SET_TARGET_PROPERTIES(xm PROPERTIES VERSION 0.1 SOVERSION 0.0.0)
+ENDIF()
 
+ADD_LIBRARY(xms STATIC xm.c context.c load.c play.c)
 INCLUDE_DIRECTORIES(${XM_INCLUDE_DIRS})

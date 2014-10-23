@@ -15,6 +15,9 @@ OPTION_AND_DEFINE(XM_BIG_ENDIAN "Assume big endian byte order (default: little e
 OPTION_AND_DEFINE(XM_LINEAR_INTERPOLATION "Use linear interpolation (CPU hungry)" "ON")
 OPTION_AND_DEFINE(XM_RAMPING "Enable ramping (smooth volume/panning transitions, CPU hungry)" "ON")
 
+OPTION(XM_BUILD_SHARED_LIBS "Build shared library" "ON")
+OPTION(XM_BUILD_EXAMPLES "Build example programs" "ON")
+
 ADD_DEFINITIONS("-g -Os -Wall -pedantic --std=c11")
 ADD_DEFINITIONS("-fdata-sections -ffunction-sections")
 SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
@@ -23,4 +26,8 @@ LIST(APPEND XM_INCLUDE_DIRS "${libxm_SOURCE_DIR}/include")
 LIST(APPEND XM_LIBRARIES "m")
 
 ADD_SUBDIRECTORY(src)
+
+IF(XM_BUILD_EXAMPLES)
 ADD_SUBDIRECTORY(examples)
+ENDIF()
+
