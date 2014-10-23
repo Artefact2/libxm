@@ -167,7 +167,9 @@ static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, uint16_t pos) {
 	unsigned int step = pos * (param >> 4);
-	ch->vibrato_note_offset = 2.f * xm_waveform(ch->vibrato_waveform, step)
+	ch->vibrato_note_offset =
+		2.f
+		* xm_waveform(ch->vibrato_waveform, step)
 		* (float)(param & 0x0F) / (float)0xF;
 	xm_update_frequency(ctx, ch);
 }
@@ -202,19 +204,19 @@ static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t par
 static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(ch->period != ch->tone_portamento_target_period) {
 		XM_SLIDE_TOWARDS(ch->period,
-						 ch->tone_portamento_target_period,
-						 4.f * ch->tone_portamento_param);
+		                 ch->tone_portamento_target_period,
+		                 (ctx->module.frequency_type == XM_LINEAR_FREQUENCIES ?
+		                  4.f : 1.f) * ch->tone_portamento_param
+		);
 		xm_update_frequency(ctx, ch);
 	}
 }
 
 static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch, float period_offset) {
-	/* The vibrato interference was guessed from MilkyTracker, it may
-	 * very well be wrong. xmp 4.0.4 doesn't take it in account. */
-	if(!HAS_VIBRATO(ch->current)) {
-		ch->vibrato_note_offset = 0;
-	} else {
-		ch->vibrato_in_progress = true;
+	/* Don't ask about the 4.f coefficient. I found mention of it
+	 * nowhere. Found by ear™. */
+	if(ctx->module.frequency_type == XM_LINEAR_FREQUENCIES) {
+		period_offset *= 4.f;
 	}
 
 	ch->period += period_offset;
@@ -598,14 +600,14 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			if(s->effect_param & 0x0F) {
 				ch->fine_portamento_up_param = s->effect_param & 0x0F;
 			}
-			xm_pitch_slide(ctx, ch, -4.f * ch->fine_portamento_up_param);
+			xm_pitch_slide(ctx, ch, -ch->fine_portamento_up_param);
 			break;
 
 		case 2: /* E2y: Fine portamento down */
 			if(s->effect_param & 0x0F) {
 				ch->fine_portamento_down_param = s->effect_param & 0x0F;
 			}
-			xm_pitch_slide(ctx, ch, 4.f * ch->fine_portamento_down_param);
+			xm_pitch_slide(ctx, ch, ch->fine_portamento_down_param);
 			break;
 
 		case 4: /* E4y: Set vibrato control */
@@ -1026,14 +1028,12 @@ static void xm_tick(xm_context_t* ctx) {
 
 		case 1: /* 1xx: Portamento up */
 			if(ctx->current_tick == 0) break;
-			/* Don't ask about the 4.f coefficient. I found mention of
-			 * it nowhere. Found by ear™. */
-			xm_pitch_slide(ctx, ch, -4.f * ch->portamento_up_param);
+			xm_pitch_slide(ctx, ch, -ch->portamento_up_param);
 			break;
 
 		case 2: /* 2xx: Portamento down */
 			if(ctx->current_tick == 0) break;
-			xm_pitch_slide(ctx, ch, 4.f * ch->portamento_down_param);
+			xm_pitch_slide(ctx, ch, ch->portamento_down_param);
 			break;
 
 		case 3: /* 3xx: Tone portamento */
