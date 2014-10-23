@@ -13,7 +13,7 @@
 #define READ_U16(pointer) ((uint16_t)READ_U8(pointer) | ((uint16_t)READ_U8((pointer) + 1) << 8))
 #define READ_U32(pointer) ((uint32_t)READ_U16(pointer) | ((uint32_t)READ_U16((pointer) + 2) << 16))
 
-int xm_check_header_sanity(char* module) {
+int xm_check_header_sanity(const char* module) {
 	if(memcmp("Extended Module: ", module, 17) != 0) {
 		return 1;
 	}
@@ -30,7 +30,7 @@ int xm_check_header_sanity(char* module) {
 	return 0;
 }
 
-size_t xm_get_memory_needed_for_context(char* moddata) {
+size_t xm_get_memory_needed_for_context(const char* moddata) {
 	size_t memory_needed = 0;
 	size_t offset = 60; /* Skip the first header */
 	uint16_t num_channels;
@@ -107,7 +107,7 @@ size_t xm_get_memory_needed_for_context(char* moddata) {
 	return memory_needed;
 }
 
-char* xm_load_module(xm_context_t* ctx, char* moddata, char* mempool) {
+char* xm_load_module(xm_context_t* ctx, const char* moddata, char* mempool) {
 	size_t offset = 0;
 	xm_module_t* mod = &(ctx->module);
 

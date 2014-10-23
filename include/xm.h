@@ -25,7 +25,7 @@ typedef struct xm_context_s xm_context_t;
  * @returns 1 if module data is not sane
  * @returns 2 if memory allocation failed
  */
-int xm_create_context(xm_context_t**, char* moddata, uint32_t rate);
+int xm_create_context(xm_context_t**, const char* moddata, uint32_t rate);
 
 /** Free a XM context created by xm_create_context(). */
 void xm_free_context(xm_context_t*);

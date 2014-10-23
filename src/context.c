@@ -8,7 +8,7 @@
 
 #include "xm_internal.h"
 
-int xm_create_context(xm_context_t** ctxp, char* moddata, uint32_t rate) {
+int xm_create_context(xm_context_t** ctxp, const char* moddata, uint32_t rate) {
 	int ret;
 	size_t bytes_needed;
 	char* mempool;
