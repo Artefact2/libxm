@@ -3,7 +3,7 @@ libxm
 
 A small XM (FastTracker II Extended Module) player library. Designed
 for easy integration in demos and such, and provides timing functions
-for easy sync (well, not yet, but it's planned).
+for easy sync against specific instruments, samples or channels.
 
 Written in C11 and released under the WTFPL license, version 2.
 

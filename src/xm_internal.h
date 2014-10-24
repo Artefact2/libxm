@@ -95,6 +95,7 @@ struct xm_sample_s {
 	xm_loop_type_t loop_type;
 	float panning;
 	int8_t relative_note;
+	uint64_t latest_trigger;
 
 	float* data;
  };
@@ -111,6 +112,7 @@ struct xm_sample_s {
 	 uint8_t vibrato_depth;
 	 uint8_t vibrato_rate;
 	 uint16_t volume_fadeout;
+	 uint64_t latest_trigger;
 
 	 xm_sample_t* samples;
  };
@@ -208,6 +210,7 @@ struct xm_sample_s {
 
 	 unsigned long frame_count;
 	 float end_of_previous_sample[XM_SAMPLE_RAMPING_POINTS];
+	 uint64_t latest_trigger;
 
 	 float actual_panning;
 	 float target_panning;

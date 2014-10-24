@@ -86,6 +86,12 @@ const char* xm_get_tracker_name(xm_context_t* ctx) {
 	return ctx->module.trackername;
 }
 
+
+
+uint16_t xm_get_number_of_channels(xm_context_t* ctx) {
+	return ctx->module.num_channels;
+}
+
 uint16_t xm_get_module_length(xm_context_t* ctx) {
 	return ctx->module.length;
 }
@@ -103,8 +109,10 @@ uint16_t xm_get_number_of_instruments(xm_context_t* ctx) {
 }
 
 uint16_t xm_get_number_of_samples(xm_context_t* ctx, uint16_t instrument) {
-	return ctx->module.instruments[instrument].num_samples;
+	return ctx->module.instruments[instrument - 1].num_samples;
 }
+
+
 
 void xm_get_playing_speed(xm_context_t* ctx, uint16_t* bpm, uint16_t* tempo) {
 	if(bpm) *bpm = ctx->bpm;
@@ -116,4 +124,16 @@ void xm_get_position(xm_context_t* ctx, uint8_t* pattern_index, uint8_t* pattern
 	if(pattern) *pattern = ctx->module.pattern_table[ctx->current_table_index];
 	if(row) *row = ctx->current_row;
 	if(samples) *samples = ctx->generated_samples;
+}
+
+uint64_t xm_get_latest_trigger_of_instrument(xm_context_t* ctx, uint16_t instr) {
+	return ctx->module.instruments[instr - 1].latest_trigger;
+}
+
+uint64_t xm_get_latest_trigger_of_sample(xm_context_t* ctx, uint16_t instr, uint16_t sample) {
+	return ctx->module.instruments[instr - 1].samples[sample].latest_trigger;
+}
+
+uint64_t xm_get_latest_trigger_of_channel(xm_context_t* ctx, uint16_t chn) {
+	return ctx->channels[chn - 1].latest_trigger;
 }

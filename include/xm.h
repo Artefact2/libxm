@@ -63,19 +63,30 @@ const char* xm_get_tracker_name(xm_context_t*);
 
 
 
+/** Get the number of channels. */
+uint16_t xm_get_number_of_channels(xm_context_t*);
+
 /** Get the module length (in patterns). */
 uint16_t xm_get_module_length(xm_context_t*);
 
 /** Get the number of patterns. */
 uint16_t xm_get_number_of_patterns(xm_context_t*);
 
-/** Get the number of rows of a pattern. */
+/** Get the number of rows of a pattern.
+ *
+ * @note Pattern numbers go from 0 to
+ * xm_get_number_of_patterns(...)-1.
+ */
 uint16_t xm_get_number_of_rows(xm_context_t*, uint16_t);
 
 /** Get the number of instruments. */
 uint16_t xm_get_number_of_instruments(xm_context_t*);
 
-/** Get the number of samples of an instrument. */
+/** Get the number of samples of an instrument.
+ *
+ * @note Instrument numbers go from 1 to
+ * xm_get_number_of_instruments(...).
+ */
 uint16_t xm_get_number_of_samples(xm_context_t*, uint16_t);
 
 
@@ -89,13 +100,43 @@ void xm_get_playing_speed(xm_context_t*, uint16_t* bpm, uint16_t* tempo);
 
 /** Get the current position in the module being played.
  *
- * @param pattern_index will receive the current pattern index in the
- * POT (pattern order table)
- * @param pattern will receive the current pattern number
- * @param row will receive the current row
- * @param samples will receive the total number of generated samples
- * (divide by sample rate to get seconds of generated audio)
+ * @param pattern_index if not NULL, will receive the current pattern
+ * index in the POT (pattern order table)
+ * 
+ * @param pattern if not NULL, will receive the current pattern number
+ * 
+ * @param row if not NULL, will receive the current row
+ * 
+ * @param samples if not NULL, will receive the total number of
+ * generated samples (divide by sample rate to get seconds of
+ * generated audio)
  */
 void xm_get_position(xm_context_t*, uint8_t* pattern_index, uint8_t* pattern, uint8_t* row, uint64_t* samples);
+
+/** Get the latest time (in number of generated samples) when a
+ * particular instrument was triggered in any channel.
+ *
+ * @note Instrument numbers go from 1 to
+ * xm_get_number_of_instruments(...).
+ */
+uint64_t xm_get_latest_trigger_of_instrument(xm_context_t*, uint16_t);
+
+/** Get the latest time (in number of generated samples) when a
+ * particular sample was triggered in any channel.
+ *
+ * @note Instrument numbers go from 1 to
+ * xm_get_number_of_instruments(...).
+ *
+ * @note Sample numbers go from 0 to
+ * xm_get_nubmer_of_samples(...,instr)-1.
+ */
+uint64_t xm_get_latest_trigger_of_sample(xm_context_t*, uint16_t instr, uint16_t sample);
+
+/** Get the latest time (in number of generated samples) when any
+ * instrument was triggered in a given channel.
+ *
+ * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
+ */
+uint64_t xm_get_latest_trigger_of_channel(xm_context_t*, uint16_t);
 
 #endif

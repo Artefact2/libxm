@@ -793,6 +793,14 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 		ch->period = xm_period(ctx, ch->note);
 		xm_update_frequency(ctx, ch);
 	}
+
+	ch->latest_trigger = ctx->generated_samples;
+	if(ch->instrument != NULL) {
+		ch->instrument->latest_trigger = ctx->generated_samples;
+	}
+	if(ch->sample != NULL) {
+		ch->sample->latest_trigger = ctx->generated_samples;
+	}
 }
 
 static void xm_cut_note(xm_channel_context_t* ch) {
