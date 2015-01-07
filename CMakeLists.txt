@@ -20,7 +20,11 @@ OPTION(XM_BUILD_EXAMPLES "Build example programs" "ON")
 
 ADD_DEFINITIONS("-g -Os -Wall -pedantic --std=c11")
 ADD_DEFINITIONS("-fdata-sections -ffunction-sections")
+IF(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -dead_strip")
+ELSE()
 SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+ENDIF()
 
 LIST(APPEND XM_INCLUDE_DIRS "${libxm_SOURCE_DIR}/include")
 LIST(APPEND XM_LIBRARIES "m")
