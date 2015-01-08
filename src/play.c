@@ -484,12 +484,15 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 		break;
 
 	case 0xC: /* Set panning */
-		ch->panning = (float)(s->volume_column - 0xC0) / (float)0xF;
+		ch->panning = (float)(
+			((s->volume_column & 0x0F) << 4) | (s->volume_column & 0x0F)
+			) / (float)0xFF;
 		break;
 
 	case 0xF: /* Tone portamento */
 		if(s->volume_column & 0x0F) {
-			ch->tone_portamento_param = s->volume_column;
+			ch->tone_portamento_param = ((s->volume_column & 0x0F) << 4)
+				| (s->volume_column & 0x0F);
 		}
 		break;
 
