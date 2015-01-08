@@ -489,7 +489,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 
 	case 0xF: /* Tone portamento */
 		if(s->volume_column & 0x0F) {
-			ch->tone_portamento_param = (s->volume_column & 0x0F);
+			ch->tone_portamento_param = (s->volume_column & 0x0F) << 4;
 		}
 		break;
 
