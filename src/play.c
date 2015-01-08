@@ -202,6 +202,10 @@ static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t par
 }
 
 static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
+	/* 3xx called without a note, wait until we get an actual
+	 * target note. */
+	if(ch->tone_portamento_target_period == 0.f) return;
+	
 	if(ch->period != ch->tone_portamento_target_period) {
 		XM_SLIDE_TOWARDS(ch->period,
 		                 ch->tone_portamento_target_period,
