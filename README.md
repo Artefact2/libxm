@@ -140,6 +140,7 @@ tremor.xm     | PASS           | MilkyTracker           | Should sound identical
 amiga.xm      | FAIL           | MilkyTracker, xmp      | Should sound identical.
 pattern-lo….xm| PASS           | MilkyTracker           | Should play the same notes at the same time.
 finetune.xm   | PASS           | MilkyTracker           | Left and right channels should sound identical.
+tone-porta….xm| FAIL           | MilkyTracker           | Should sound identical.
 ~~~
 
 Thanks
