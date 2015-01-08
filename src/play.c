@@ -1,4 +1,5 @@
 /* Author: Romain "Artefact2" Dalmaso <artefact2@gmail.com> */
+/* Contributor: Daniel Oaks <daniel@danieloaks.net> */
 
 /* This program is free software. It comes without any warranty, to the
  * extent permitted by applicable law. You can redistribute it and/or
@@ -1209,6 +1210,9 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 		}
 		return .0f;
 	}
+	if(ch->sample->length == 0) {
+		return .0f;
+	}
 
 	float u, v, t;
 	uint32_t a, b;
@@ -1262,6 +1266,11 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 				ch->ping = false;
 				ch->sample_position = (ch->sample->loop_end << 1) - ch->sample_position;
 			}
+			/* sanity checking */
+			if(ch->sample_position >= ch->sample->length) {
+				ch->ping = false;
+				ch->sample_position -= ch->sample->length - 1;
+			}
 		} else {
 			if(XM_LINEAR_INTERPOLATION) {
 				v = u;
@@ -1270,6 +1279,11 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 			if(ch->sample_position <= ch->sample->loop_start) {
 				ch->ping = true;
 				ch->sample_position = (ch->sample->loop_start << 1) - ch->sample_position;
+			}
+			/* sanity checking */
+			if(ch->sample_position <= .0f) {
+				ch->ping = true;
+				ch->sample_position = .0f;
 			}
 		}
 		break;
