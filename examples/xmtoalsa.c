@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
 	size_t buffer_size = 0;
 	size_t period_size = 0;
 	const unsigned int channels = 2;
-	unsigned int rate = 96000;
+	unsigned int rate = 192000;
 	snd_pcm_format_t format = SND_PCM_FORMAT_FLOAT;
 	size_t bps = sizeof(float);
 	double preamp = 1.0;
@@ -218,6 +218,7 @@ int main(int argc, char** argv) {
 		CHECK_ALSA_CALL(snd_pcm_hw_params_set_format(device, params, format = SND_PCM_FORMAT_S16));
 	}
 	if(snd_pcm_hw_params_set_rate(device, params, rate, 0) < 0
+	   && snd_pcm_hw_params_set_rate(device, params, rate = 192000, 0) < 0
 	   && snd_pcm_hw_params_set_rate(device, params, rate = 96000, 0) < 0
 	   && snd_pcm_hw_params_set_rate(device, params, rate = 48000, 0) < 0) {
 		CHECK_ALSA_CALL(snd_pcm_hw_params_set_rate(device, params, rate = 44100, 0));
