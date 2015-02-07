@@ -6,9 +6,12 @@
  * License, Version 2, as published by Sam Hocevar. See
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
+#define _DEFAULT_SOURCE
+
 #include "testprog.h"
 #include <string.h>
 #include <stdbool.h>
+#include <unistd.h>
 #include <alsa/asoundlib.h>
 
 /* NB: these headers may not be very portable, but since ALSA is
@@ -89,7 +92,7 @@ int main(int argc, char** argv) {
 	unsigned long loop = 1;
 	unsigned long izero = 1; /* Index in argv of the first filename */
 	
-	bool paused = false, jump = false, random = false;
+	bool paused = false, waspaused = false, jump = false, random = false;
 
 	if(argc == 1 || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
 		usage(argv[0]);
@@ -271,10 +274,11 @@ int main(int argc, char** argv) {
 			switch(get_command()) {
 			case ' ':
 				paused = !paused;
-				if(paused == true) {
-					memset(xmbuffer, 0, sizeof(xmbuffer));
-					printf("\r      ----- PAUSE -----             "
-					       "                                       ");
+				if(paused) {
+					snd_pcm_pause(device, 1);
+					fflush(stdout);
+				} else {
+					waspaused = true;
 				}
 				break;
 			case 'q':
@@ -296,26 +300,27 @@ int main(int argc, char** argv) {
 				break;
 			}
 
-			if(!paused) {
-				xm_get_position(ctx, &pos, &pat, &row, &samples);
-				xm_get_playing_speed(ctx, &bpm, &tempo);
-				printf("\rSpeed[%.2X] BPM[%.2X] Pos[%.2X/%.2X]"
-					   " Pat[%.2X/%.2X] Row[%.2X/%.2X] Loop[%.2X/%.2lX]"
-					   " %.2i:%.2i:%.2i.%.2i ",
-					   tempo, bpm,
-					   pos, length,
-					   pat, num_patterns,
-					   row, xm_get_number_of_rows(ctx, pat),
-					   xm_get_loop_count(ctx), loop,
-					   (unsigned int)((float)samples / (3600 * rate)),
-					   (unsigned int)((float)(samples % (3600 * rate) / (60 * rate))),
-					   (unsigned int)((float)(samples % (60 * rate)) / rate),
-					   (unsigned int)(100 * (float)(samples % rate) / rate)
-				);
-				xm_generate_samples(ctx, xmbuffer, nframes);
+			if(paused) {
+				usleep(10000);
+				continue;
 			}
-
-			fflush(stdout);
+			
+			xm_get_position(ctx, &pos, &pat, &row, &samples);
+			xm_get_playing_speed(ctx, &bpm, &tempo);
+			printf("\rSpeed[%.2X] BPM[%.2X] Pos[%.2X/%.2X]"
+			       " Pat[%.2X/%.2X] Row[%.2X/%.2X] Loop[%.2X/%.2lX]"
+			       " %.2i:%.2i:%.2i.%.2i ",
+			       tempo, bpm,
+			       pos, length,
+			       pat, num_patterns,
+			       row, xm_get_number_of_rows(ctx, pat),
+			       xm_get_loop_count(ctx), loop,
+			       (unsigned int)((float)samples / (3600 * rate)),
+			       (unsigned int)((float)(samples % (3600 * rate) / (60 * rate))),
+			       (unsigned int)((float)(samples % (60 * rate)) / rate),
+			       (unsigned int)(100 * (float)(samples % rate) / rate)
+				);
+			xm_generate_samples(ctx, xmbuffer, nframes);
 
 			if(format == SND_PCM_FORMAT_FLOAT && preamp == 1.0) {
 				CHECK_ALSA_CALL(snd_pcm_writei(device, xmbuffer, nframes));
@@ -336,6 +341,13 @@ int main(int argc, char** argv) {
 				
 				CHECK_ALSA_CALL(snd_pcm_writei(device, alsabuffer, nframes));
 			}
+
+			if(waspaused) {
+				waspaused = false;
+				snd_pcm_pause(device, 0);
+			}
+
+			fflush(stdout);
 		}
 
 		printf("\n");
