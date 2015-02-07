@@ -37,7 +37,7 @@ static struct termios customflags, previousflags;
 void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s --help\n"
 		  "\t\tShow this message.\n"
-	      "\t%s [--loop N] [--device default] [--buffer-size 4096] [--period-size 2048] [--rate 96000] [--format float|s16|s32] [--] <filenames…>\n"
+	      "\t%s [--loop N] [--random] [--device default] [--buffer-size 4096] [--period-size 2048] [--rate 96000] [--format float|s16|s32] [--] <filenames…>\n"
 		  "\t\tPlay modules in this order. Loop each module N times (0 to loop indefinitely).\n\n"
 		  "Interactive controls:\n"
 		  "\tspace: pause/resume playback\n"
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
 	unsigned long loop = 1;
 	unsigned long izero = 1; /* Index in argv of the first filename */
 	
-	bool paused = false, jump = false;
+	bool paused = false, jump = false, random = false;
 
 	if(argc == 1 || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
 		usage(argv[0]);
@@ -102,6 +102,11 @@ int main(int argc, char** argv) {
 			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
 			loop = strtol(argv[i+1], NULL, 0);
 			++i;
+			continue;
+		}
+
+		if(!strcmp(argv[i], "--random")) {
+			random = true;
 			continue;
 		}
 
@@ -160,6 +165,21 @@ int main(int argc, char** argv) {
 
 		izero = i;
 		break;
+	}
+
+	if(random) {
+		char* t;
+		size_t r;
+
+		srand(time(NULL));
+
+		/* Randomize argv[izero..] using the well-known Knuth algorithm */
+		for(size_t i = argc-1; i > izero; --i) {
+			r = (rand() % (i - izero + 1)) + izero;
+			t = argv[i];
+			argv[i] = argv[r];
+			argv[r] = t;
+		}
 	}
 
 	if(buffer_size == 0 && period_size == 0) period_size = 2048;
