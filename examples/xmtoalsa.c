@@ -32,12 +32,14 @@
 		}													\
 	} while(0)
 
+#define CLAMP(f) (f > 1.f ? 1.f : (f < -1.f ? -1.f : f))
+
 static struct termios customflags, previousflags;
 
 void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s --help\n"
 		  "\t\tShow this message.\n"
-	      "\t%s [--loop N] [--random] [--device default] [--buffer-size 4096] [--period-size 2048] [--rate 96000] [--format float|s16|s32] [--] <filenames…>\n"
+	      "\t%s [--loop N] [--random] [--preamp 1.0] [--device default] [--buffer-size 4096] [--period-size 2048] [--rate 96000] [--format float|s16|s32] [--] <filenames…>\n"
 		  "\t\tPlay modules in this order. Loop each module N times (0 to loop indefinitely).\n\n"
 		  "Interactive controls:\n"
 		  "\tspace: pause/resume playback\n"
@@ -83,6 +85,7 @@ int main(int argc, char** argv) {
 	unsigned int rate = 96000;
 	snd_pcm_format_t format = SND_PCM_FORMAT_FLOAT;
 	size_t bps = sizeof(float);
+	double preamp = 1.0;
 	unsigned long loop = 1;
 	unsigned long izero = 1; /* Index in argv of the first filename */
 	
@@ -96,6 +99,13 @@ int main(int argc, char** argv) {
 		if(!strcmp(argv[i], "--")) {
 			izero = i+1;
 			break;
+		}
+		
+		if(!strcmp(argv[i], "--preamp")) {
+			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
+			preamp = strtod(argv[i+1], NULL);
+			++i;
+			continue;
 		}
 		
 		if(!strcmp(argv[i], "--loop")) {
@@ -307,16 +317,20 @@ int main(int argc, char** argv) {
 
 			fflush(stdout);
 
-			if(format == SND_PCM_FORMAT_FLOAT) {
+			if(format == SND_PCM_FORMAT_FLOAT && preamp == 1.0) {
 				CHECK_ALSA_CALL(snd_pcm_writei(device, xmbuffer, nframes));
 			} else {
 				if(format == SND_PCM_FORMAT_S16) {
 					for(size_t i = 0; i < period_size; ++i) {
-						((int16_t*)alsabuffer)[i] = (int16_t)((double)xmbuffer[i] * 32767.);
+						((int16_t*)alsabuffer)[i] = (int16_t)(CLAMP((double)xmbuffer[i] * preamp) * 32767.);
 					}
 				} else if(format == SND_PCM_FORMAT_S32) {
 					for(size_t i = 0; i < period_size; ++i) {
-						((int32_t*)alsabuffer)[i] = (int32_t)((double)xmbuffer[i] * 2147483647.);
+						((int32_t*)alsabuffer)[i] = (int32_t)(CLAMP((double)xmbuffer[i] * preamp) * 2147483647.);
+					}
+				} else if(format == SND_PCM_FORMAT_FLOAT) {
+					for(size_t i = 0; i < period_size; ++i) {
+						alsabuffer[i] = xmbuffer[i] * preamp;
 					}
 				}
 				
