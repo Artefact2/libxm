@@ -45,6 +45,6 @@ static void create_context_from_file(xm_context_t** ctx, uint32_t rate, const ch
 
 	fclose(xmfile);
 
-	if((ret = xm_create_context(ctx, data, rate)) != 0)
-		FATAL("Context creation failed (xm_create_context() returned %i)\n", ret);
+	if((ret = xm_create_context_safe(ctx, data, size, rate)) != 0)
+		FATAL("Context creation failed (xm_create_context_safe() returned %i)\n", ret);
 }
