@@ -17,6 +17,20 @@
 #define READ_U8(offset) (((offset) < moddata_length) ? (*(uint8_t*)(moddata + (offset))) : 0)
 #define READ_U16(offset) ((uint16_t)READ_U8(offset) | ((uint16_t)READ_U8((offset) + 1) << 8))
 #define READ_U32(offset) ((uint32_t)READ_U16(offset) | ((uint32_t)READ_U16((offset) + 2) << 16))
+#define READ_MEMCPY(ptr, offset, length) memcpy_pad(ptr, length, moddata, moddata_length, offset)
+
+static inline void memcpy_pad(void* dst, size_t dst_len, const void* src, size_t src_len, size_t offset) {
+	uint8_t* dst_c = dst;
+	const uint8_t* src_c = src;
+
+	/* how many bytes can be copied without overrunning `src` */
+	size_t copy_bytes = (src_len >= offset) ? (src_len - offset) : 0;
+	copy_bytes = copy_bytes > dst_len ? dst_len : copy_bytes;
+
+	memcpy(dst_c, src_c + offset, copy_bytes);
+	/* padded bytes */
+	memset(dst_c + copy_bytes, 0, dst_len - copy_bytes);
+}
 
 int xm_check_header_sanity(const char* module, size_t module_length) {
 	if(module_length < 60) {
@@ -122,8 +136,8 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 	xm_module_t* mod = &(ctx->module);
 
 	/* Read XM header */
-	memcpy(mod->name, moddata + offset + 17, MODULE_NAME_LENGTH);
-	memcpy(mod->trackername, moddata + offset + 38, TRACKER_NAME_LENGTH);
+	READ_MEMCPY(mod->name, offset + 17, MODULE_NAME_LENGTH);
+	READ_MEMCPY(mod->trackername, offset + 38, TRACKER_NAME_LENGTH);
 	offset += 60;
 
 	/* Read module header */
@@ -147,7 +161,7 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 	ctx->tempo = READ_U16(offset + 16);
 	ctx->bpm = READ_U16(offset + 18);
 
-	memcpy(mod->pattern_table, moddata + offset + 20, PATTERN_ORDER_TABLE_LENGTH);
+	READ_MEMCPY(mod->pattern_table, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
 	offset += header_size;
 
 	/* Read patterns */
@@ -235,13 +249,13 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 		uint32_t sample_header_size = 0;
 		xm_instrument_t* instr = mod->instruments + i;
 
-		memcpy(instr->name, moddata + offset + 4, INSTRUMENT_NAME_LENGTH);
+		READ_MEMCPY(instr->name, offset + 4, INSTRUMENT_NAME_LENGTH);
 	    instr->num_samples = READ_U16(offset + 27);
 
 		if(instr->num_samples > 0) {
 			/* Read extra header properties */
 			sample_header_size = READ_U32(offset + 29);
-			memcpy(instr->sample_of_notes, moddata + offset + 33, NUM_NOTES);
+			READ_MEMCPY(instr->sample_of_notes, offset + 33, NUM_NOTES);
 
 			instr->volume_envelope.num_points = READ_U8(offset + 225);
 			instr->panning_envelope.num_points = READ_U8(offset + 226);
@@ -318,7 +332,7 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 
 			sample->panning = (float)READ_U8(offset + 15) / (float)0xFF;
 			sample->relative_note = (int8_t)READ_U8(offset + 16);
-			memcpy(sample->name, moddata + 18, SAMPLE_NAME_LENGTH);
+			READ_MEMCPY(sample->name, 18, SAMPLE_NAME_LENGTH);
 			sample->data = (float*)mempool;
 
 			if(sample->bits == 16) {
