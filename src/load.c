@@ -1,4 +1,5 @@
 /* Author: Romain "Artefact2" Dalmaso <artefact2@gmail.com> */
+/* Contributor: Dan Spencer <dan@atomicpotato.net> */
 
 /* This program is free software. It comes without any warranty, to the
  * extent permitted by applicable law. You can redistribute it and/or
