@@ -9,17 +9,21 @@
 #include "xm_internal.h"
 
 int xm_create_context(xm_context_t** ctxp, const char* moddata, uint32_t rate) {
+	return xm_create_context_safe(ctxp, moddata, SIZE_MAX, rate);
+}
+
+int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t moddata_length, uint32_t rate) {
 	int ret;
 	size_t bytes_needed;
 	char* mempool;
 	xm_context_t* ctx;
 
-	if((ret = xm_check_header_sanity(moddata))) {
+	if((ret = xm_check_header_sanity(moddata, moddata_length))) {
 		DEBUG("xm_check_header_sanity() returned %i", ret);
 		return 1;
 	}
 
-	bytes_needed = xm_get_memory_needed_for_context(moddata);
+	bytes_needed = xm_get_memory_needed_for_context(moddata, moddata_length);
 	mempool = malloc(bytes_needed);
 	if(mempool == NULL && bytes_needed > 0) {
 		/* malloc() failed, trouble ahead */
@@ -35,7 +39,7 @@ int xm_create_context(xm_context_t** ctxp, const char* moddata, uint32_t rate) {
 	mempool += sizeof(xm_context_t);
 
 	ctx->rate = rate;
-	mempool = xm_load_module(ctx, moddata, mempool);
+	mempool = xm_load_module(ctx, moddata, moddata_length, mempool);
 
 	ctx->channels = (xm_channel_context_t*)mempool;
 	mempool += ctx->module.num_channels * sizeof(xm_channel_context_t);

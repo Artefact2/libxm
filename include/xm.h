@@ -1,4 +1,5 @@
 /* Author: Romain "Artefact2" Dalmaso <artefact2@gmail.com> */
+/* Contributor: Dan Spencer <dan@atomicpotato.net> */
 
 /* This program is free software. It comes without any warranty, to the
  * extent permitted by applicable law. You can redistribute it and/or
@@ -24,8 +25,23 @@ typedef struct xm_context_s xm_context_t;
  * @returns 0 on success
  * @returns 1 if module data is not sane
  * @returns 2 if memory allocation failed
+ *
+ * @deprecated This function is unsafe!
+ * @see xm_create_context_safe()
  */
 int xm_create_context(xm_context_t**, const char* moddata, uint32_t rate);
+
+/** Create a XM context.
+ *
+ * @param moddata the contents of the module
+ * @param moddata_length the length of the contents of the module, in bytes
+ * @param rate play rate in Hz, recommended value of 48000
+ *
+ * @returns 0 on success
+ * @returns 1 if module data is not sane
+ * @returns 2 if memory allocation failed
+ */
+int xm_create_context_safe(xm_context_t**, const char* moddata, size_t moddata_length, uint32_t rate);
 
 /** Free a XM context created by xm_create_context(). */
 void xm_free_context(xm_context_t*);
@@ -102,11 +118,11 @@ void xm_get_playing_speed(xm_context_t*, uint16_t* bpm, uint16_t* tempo);
  *
  * @param pattern_index if not NULL, will receive the current pattern
  * index in the POT (pattern order table)
- * 
+ *
  * @param pattern if not NULL, will receive the current pattern number
- * 
+ *
  * @param row if not NULL, will receive the current row
- * 
+ *
  * @param samples if not NULL, will receive the total number of
  * generated samples (divide by sample rate to get seconds of
  * generated audio)

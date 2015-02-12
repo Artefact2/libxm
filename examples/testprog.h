@@ -46,7 +46,7 @@ static void create_context_from_file(xm_context_t** ctx, uint32_t rate, const ch
 	if(data == MAP_FAILED)
 		FATAL_ERR("mmap() failed");
 
-	switch(xm_create_context(ctx, data, rate)) {
+	switch(xm_create_context_safe(ctx, data, size, rate)) {
 		
 	case 0:
 		break;

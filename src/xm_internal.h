@@ -264,7 +264,7 @@ struct xm_sample_s {
  *
  * @returns 0 if everything looks OK.
  */
-int xm_check_header_sanity(const char*);
+int xm_check_header_sanity(const char*, size_t);
 
 /** Get the number of bytes needed to store the module data in a
  * dynamically allocated blank context.
@@ -278,11 +278,13 @@ int xm_check_header_sanity(const char*);
  * - instrument structures in module
  * - channel contexts
  * - context structure itself
+
+ * @returns 0 if everything looks OK.
  */
-size_t xm_get_memory_needed_for_context(const char*);
+size_t xm_get_memory_needed_for_context(const char*, size_t);
 
 /** Populate the context from module data.
  *
  * @returns pointer to the memory pool
  */
-char* xm_load_module(xm_context_t*, const char*, char*);
+char* xm_load_module(xm_context_t*, const char*, size_t, char*);
