@@ -7,11 +7,12 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
 #include <xm.h>
-#include <errno.h>
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #define FATAL(...) do {							\
 		fprintf(stderr, __VA_ARGS__);			\
@@ -26,25 +27,44 @@
 	} while(0)
 
 static void create_context_from_file(xm_context_t** ctx, uint32_t rate, const char* filename) {
-	FILE* xmfile;
-	long size;
-	int ret;
+	int xmfiledes;
+	off_t size;
 
-	xmfile = fopen(filename, "rb");
-
-	if(xmfile == NULL)
+	xmfiledes = open(filename, O_RDONLY);
+	if(xmfiledes == -1)
 		FATAL_ERR("Could not open input file");
 
-	fseek(xmfile, 0, SEEK_END);
-	size = ftell(xmfile);
-	char data[size];
-	rewind(xmfile);
+	size = lseek(xmfiledes, 0, SEEK_END);
+	if(size == -1)
+		FATAL_ERR("lseek() failed");
 
-	if(fread(data, 1, size, xmfile) != size)
-		FATAL_ERR("Could not read input file");
+	/* NB: using a VLA here was a bad idea, as the size of the
+	 * module file has no upper bound, whereas the stack has a
+	 * very finite (and usually small) size. Using mmap bypasses
+	 * the issue (at the cost of portability…). */
+	char* data = mmap(NULL, size, PROT_READ, MAP_SHARED, xmfiledes, (off_t)0);
+	if(data == MAP_FAILED)
+		FATAL_ERR("mmap() failed");
 
-	fclose(xmfile);
+	switch(xm_create_context(ctx, data, rate)) {
+		
+	case 0:
+		break;
 
-	if((ret = xm_create_context(ctx, data, rate)) != 0)
-		FATAL("Context creation failed (xm_create_context() returned %i)\n", ret);
+	case 1:
+		FATAL("could not create context: module is not sane");
+		break;
+
+	case 2:
+		FATAL("could not create context: malloc failed");
+		break;
+		
+	default:
+		FATAL("could not create context: unknown error");
+		break;
+		
+	}
+	
+	munmap(data, size);
+	close(xmfiledes);
 }
