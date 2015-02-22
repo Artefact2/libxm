@@ -38,7 +38,9 @@ extern int __fail[-1];
 #define NUM_ENVELOPE_POINTS 12
 #define MAX_NUM_ROWS 256
 
-#define XM_SAMPLE_RAMPING_POINTS 0x80
+#if XM_RAMPING
+#define XM_SAMPLE_RAMPING_POINTS 0x20
+#endif
 
 /* ----- Data types ----- */
 
@@ -208,17 +210,20 @@ struct xm_sample_s {
 	 uint8_t tremor_param;
 	 bool tremor_on;
 
-	 unsigned long frame_count;
-	 float end_of_previous_sample[XM_SAMPLE_RAMPING_POINTS];
 	 uint64_t latest_trigger;
 
-	 float actual_panning;
+#if XM_RAMPING
+	 /* These values are updated at the end of each tick, to save
+	  * a couple of float operations on every generated sample. */
 	 float target_panning;
+	 float target_volume;
+	 
+	 unsigned long frame_count;
+	 float end_of_previous_sample[XM_SAMPLE_RAMPING_POINTS];
+#endif
+
+	 float actual_panning;
 	 float actual_volume;
-	 float target_volume; /* These values are updated at the end
-						   * of each tick, to save a couple of
-						   * float operations on every generated
-						   * sample. */
  };
  typedef struct xm_channel_context_s xm_channel_context_t;
 
@@ -231,11 +236,14 @@ struct xm_sample_s {
 	 uint16_t bpm;
 	 float global_volume;
 	 float amplification;
-	 float volume_ramp; /* How much is a channel final volume allowed
-						 * to change per sample; this is used to avoid
-						 * abrubt volume changes which manifest as
-						 * "clicks" in the generated sound. */
+
+#if XM_RAMPING
+	 /* How much is a channel final volume allowed to change per
+	  * sample; this is used to avoid abrubt volume changes which
+	  * manifest as "clicks" in the generated sound. */
+	 float volume_ramp;
 	 float panning_ramp; /* Same for panning. */
+#endif
 
 	 uint8_t current_table_index;
 	 uint8_t current_row;
@@ -248,8 +256,9 @@ struct xm_sample_s {
 	 uint8_t jump_dest;
 	 uint8_t jump_row;
 
-	 uint16_t extra_ticks; /* Extra ticks to be played before going to
-							* the next row - Used for EEy effect */
+	 /* Extra ticks to be played before going to the next row -
+	  * Used for EEy effect */
+	 uint16_t extra_ticks;
 
 	 uint8_t* row_loop_count; /* Array of size MAX_NUM_ROWS * module_length */
 	 uint8_t loop_count;
@@ -260,7 +269,7 @@ struct xm_sample_s {
 
 /* ----- Internal API ----- */
 
-#ifdef XM_DEFENSIVE
+#if XM_DEFENSIVE
 
 /** Check the module data for errors/inconsistencies.
  *

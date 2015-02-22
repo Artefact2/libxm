@@ -439,12 +439,12 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			xm_cut_note(ch);
 		} else {
 			if(instr->sample_of_notes[s->note - 1] < instr->num_samples) {
-				if(XM_RAMPING) {
-					for(unsigned int z = 0; z < XM_SAMPLE_RAMPING_POINTS; ++z) {
-						ch->end_of_previous_sample[z] = xm_next_of_sample(ch);
-					}
-					ch->frame_count = 0;
+#if XM_RAMPING
+				for(unsigned int z = 0; z < XM_SAMPLE_RAMPING_POINTS; ++z) {
+					ch->end_of_previous_sample[z] = xm_next_of_sample(ch);
 				}
+				ch->frame_count = 0;
+#endif
 				ch->sample = instr->samples + instr->sample_of_notes[s->note - 1];
 				ch->note = s->note + ch->sample->relative_note
 					+ ch->sample->finetune / 128.f - 1.f;
@@ -1175,25 +1175,30 @@ static void xm_tick(xm_context_t* ctx) {
 
 		}
 
-		ch->target_panning = ch->panning +
+		float panning, volume;
+		
+		panning = ch->panning +
 			(ch->panning_envelope_panning - .5f) * (.5f - fabsf(ch->panning - .5f)) * 2.0f;
 
 		if(ch->tremor_on) {
-			ch->target_volume = .0f;
+		        volume = .0f;
 		} else {
-			ch->target_volume = ch->volume + ch->tremolo_volume;
-			XM_CLAMP(ch->target_volume);
-			ch->target_volume *= ch->fadeout_volume * ch->volume_envelope_volume;
+			volume = ch->volume + ch->tremolo_volume;
+			XM_CLAMP(volume);
+			volume *= ch->fadeout_volume * ch->volume_envelope_volume;
 		}
 
-		if(!XM_RAMPING) {
-			ch->actual_panning = ch->target_panning;
-			ch->actual_volume = ch->target_volume;
-		}
+#if XM_RAMPING
+		ch->target_panning = panning;
+		ch->target_volume = volume;
+#else
+		ch->actual_panning = panning;
+		ch->actual_volume = volume;
+#endif
 	}
 
 	ctx->current_tick++;
-    if(ctx->current_tick >= ctx->tempo + ctx->extra_ticks) {
+	if(ctx->current_tick >= ctx->tempo + ctx->extra_ticks) {
 		ctx->current_tick = 0;
 		ctx->extra_ticks = 0;
 	}
@@ -1204,10 +1209,12 @@ static void xm_tick(xm_context_t* ctx) {
 
 static float xm_next_of_sample(xm_channel_context_t* ch) {
 	if(ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
-		if(XM_RAMPING && ch->frame_count < XM_SAMPLE_RAMPING_POINTS) {
+#if XM_RAMPING
+		if(ch->frame_count < XM_SAMPLE_RAMPING_POINTS) {
 			return XM_LERP(ch->end_of_previous_sample[ch->frame_count], .0f,
-						   (float)ch->frame_count / (float)XM_SAMPLE_RAMPING_POINTS);
+			               (float)ch->frame_count / (float)XM_SAMPLE_RAMPING_POINTS);
 		}
+#endif
 		return .0f;
 	}
 	if(ch->sample->length == 0) {
@@ -1295,16 +1302,13 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 
 	float endval = XM_LINEAR_INTERPOLATION ? XM_LERP(u, v, t) : u;
 
-	if(XM_RAMPING && ch->frame_count < XM_SAMPLE_RAMPING_POINTS) {
-		/* For those interested, this transformation is an homotopy:
-		 * the sound "continously" (linearly, actually) goes from the
-		 * old sample waveform to the new sample waveform. Why do
-		 * this? To avoid discontinuities in the result signal, which
-		 * can be heard as disgraceful loud clicks or pops in the
-		 * sound. */
+#if XM_RAMPING
+	if(ch->frame_count < XM_SAMPLE_RAMPING_POINTS) {
+		/* Smoothly transition between old and new sample. */
 		return XM_LERP(ch->end_of_previous_sample[ch->frame_count], endval,
-					   (float)ch->frame_count / (float)XM_SAMPLE_RAMPING_POINTS);
+		               (float)ch->frame_count / (float)XM_SAMPLE_RAMPING_POINTS);
 	}
+#endif
 
 	return endval;
 }
@@ -1325,9 +1329,6 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
-		if(XM_RAMPING)
-			ch->frame_count++;
-
 		if(ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
 			continue;
 		}
@@ -1336,10 +1337,11 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 		*left += fval * ch->actual_volume * (1.f - ch->actual_panning);
 		*right += fval * ch->actual_volume * ch->actual_panning;
 
-		if(XM_RAMPING) {
-			XM_SLIDE_TOWARDS(ch->actual_volume, ch->target_volume, ctx->volume_ramp);
-			XM_SLIDE_TOWARDS(ch->actual_panning, ch->target_panning, ctx->panning_ramp);
-		}
+#if XM_RAMPING
+		ch->frame_count++;
+		XM_SLIDE_TOWARDS(ch->actual_volume, ch->target_volume, ctx->volume_ramp);
+		XM_SLIDE_TOWARDS(ch->actual_panning, ch->target_panning, ctx->panning_ramp);
+#endif
 	}
 
 	const float fgvol = ctx->global_volume * ctx->amplification;
