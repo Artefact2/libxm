@@ -42,7 +42,7 @@ static struct termios customflags, previousflags;
 void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s --help\n"
 		  "\t\tShow this message.\n"
-	      "\t%s [--loop N] [--random] [--preamp 1.0] [--device default] [--buffer-size 4096] [--period-size 2048] [--rate 96000] [--format float|s16|s32] [--] <filenames…>\n"
+	      "\t%s [--loop N] [--random] [--preamp 1.0] [--device default] [--buffer-size 4096] [--period-size 2048] [--rate 48000] [--format float|s16|s32] [--] <filenames…>\n"
 		  "\t\tPlay modules in this order. Loop each module N times (0 to loop indefinitely).\n\n"
 		  "Interactive controls:\n"
 		  "\tspace: pause/resume playback\n"
@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
 	size_t buffer_size = 0;
 	size_t period_size = 0;
 	const unsigned int channels = 2;
-	unsigned int rate = 192000;
+	unsigned int rate = 48000;
 	snd_pcm_format_t format = SND_PCM_FORMAT_FLOAT;
 	size_t bps = sizeof(float);
 	double preamp = 1.0;
@@ -203,10 +203,6 @@ int main(int argc, char** argv) {
 	if(period_size == 0) {
 		period_size = buffer_size >> 1;
 	}
-	
-	char alsabuffer[period_size * bps];
-	float xmbuffer[period_size];
-	const snd_pcm_uframes_t nframes = period_size / channels;
 
 	CHECK_ALSA_CALL(snd_pcm_open(&device, devicename, SND_PCM_STREAM_PLAYBACK, 0));
 	CHECK_ALSA_CALL(snd_pcm_hw_params_malloc((snd_pcm_hw_params_t**)(&params)));
@@ -218,8 +214,6 @@ int main(int argc, char** argv) {
 		CHECK_ALSA_CALL(snd_pcm_hw_params_set_format(device, params, format = SND_PCM_FORMAT_S16));
 	}
 	if(snd_pcm_hw_params_set_rate(device, params, rate, 0) < 0
-	   && snd_pcm_hw_params_set_rate(device, params, rate = 192000, 0) < 0
-	   && snd_pcm_hw_params_set_rate(device, params, rate = 96000, 0) < 0
 	   && snd_pcm_hw_params_set_rate(device, params, rate = 48000, 0) < 0) {
 		CHECK_ALSA_CALL(snd_pcm_hw_params_set_rate(device, params, rate = 44100, 0));
 	}
@@ -242,6 +236,10 @@ int main(int argc, char** argv) {
 	       period_size,
 	       buffer_size
 		);
+	
+	float xmbuffer[period_size];
+	char alsabuffer[period_size * bps];
+	const snd_pcm_uframes_t nframes = period_size / channels;
 
 	tcgetattr(0, &previousflags);
 	atexit(restoreterm);
@@ -334,9 +332,9 @@ int main(int argc, char** argv) {
 					for(size_t i = 0; i < period_size; ++i) {
 						((int32_t*)alsabuffer)[i] = (int32_t)(CLAMP((double)xmbuffer[i] * preamp) * 2147483647.);
 					}
-				} else if(format == SND_PCM_FORMAT_FLOAT) {
+				} else if(format == SND_PCM_FORMAT_FLOAT) {					
 					for(size_t i = 0; i < period_size; ++i) {
-						alsabuffer[i] = xmbuffer[i] * preamp;
+						((float*)alsabuffer)[i] = xmbuffer[i] * preamp;
 					}
 				}
 				
