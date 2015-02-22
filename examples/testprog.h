@@ -14,16 +14,26 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#define FATAL(...) do {							\
-		fprintf(stderr, __VA_ARGS__);			\
-		fflush(stderr);							\
-		exit(1);								\
+#define DEBUG(...) do {	  \
+		fprintf(stderr, __VA_ARGS__); \
+		fflush(stderr); \
 	} while(0)
 
-#define FATAL_ERR(...) do {								\
-		perror(__VA_ARGS__);							\
-		fflush(stderr);									\
-		exit(1);										\
+#define DEBUG_ERR(...) do {	  \
+		perror(__VA_ARGS__); \
+		fflush(stderr); \
+	} while(0)
+
+#define FATAL(...) do {	  \
+		fprintf(stderr, __VA_ARGS__); \
+		fflush(stderr); \
+		exit(1); \
+	} while(0)
+
+#define FATAL_ERR(...) do {	  \
+		perror(__VA_ARGS__); \
+		fflush(stderr); \
+		exit(1); \
 	} while(0)
 
 static void create_context_from_file(xm_context_t** ctx, uint32_t rate, const char* filename) {
@@ -31,12 +41,19 @@ static void create_context_from_file(xm_context_t** ctx, uint32_t rate, const ch
 	off_t size;
 
 	xmfiledes = open(filename, O_RDONLY);
-	if(xmfiledes == -1)
-		FATAL_ERR("Could not open input file");
+	if(xmfiledes == -1) {
+		DEBUG_ERR("Could not open input file");
+		*ctx = NULL;
+		return;
+	}
 
 	size = lseek(xmfiledes, 0, SEEK_END);
-	if(size == -1)
-		FATAL_ERR("lseek() failed");
+	if(size == -1) {
+		close(xmfiledes);
+		DEBUG_ERR("lseek() failed");
+		*ctx = NULL;
+		return;
+	}
 
 	/* NB: using a VLA here was a bad idea, as the size of the
 	 * module file has no upper bound, whereas the stack has a
@@ -52,15 +69,16 @@ static void create_context_from_file(xm_context_t** ctx, uint32_t rate, const ch
 		break;
 
 	case 1:
-		FATAL("could not create context: module is not sane");
+		DEBUG("could not create context: module is not sane\n");
+		*ctx = NULL;
 		break;
 
 	case 2:
-		FATAL("could not create context: malloc failed");
+		FATAL("could not create context: malloc failed\n");
 		break;
 		
 	default:
-		FATAL("could not create context: unknown error");
+		FATAL("could not create context: unknown error\n");
 		break;
 		
 	}

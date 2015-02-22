@@ -50,6 +50,7 @@ int main(int argc, char** argv) {
 		FATAL("Usage: %s <xm-file-input> <wav-file-out>\n", argv[0]);
 
 	create_context_from_file(&ctx, rate, argv[1]);
+	if(ctx == NULL) exit(1);
 	xm_set_max_loop_count(ctx, 1);
 
 	out = fopen(argv[2], "w");

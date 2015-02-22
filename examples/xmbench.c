@@ -27,7 +27,8 @@ int main(int argc, char** argv) {
 	if(argc != 2)
 		FATAL("Usage: %s <filename>\n", argv[0]);
 
-    create_context_from_file(&ctx, rate, argv[1]);
+	create_context_from_file(&ctx, rate, argv[1]);
+	if(ctx == NULL) exit(1);
 
 	start = clock();
 	while((clock() - start) < ideal_running_time * CLOCKS_PER_SEC) {

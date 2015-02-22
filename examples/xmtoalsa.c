@@ -258,6 +258,12 @@ int main(int argc, char** argv) {
 
 		jump = false;
 		create_context_from_file(&ctx, rate, argv[i]);
+
+		if(ctx == NULL) {
+			DEBUG("module file %s failed to load, skipping\n", argv[i]);
+			continue;
+		}
+		
 		xm_set_max_loop_count(ctx, loop);
 		num_patterns = xm_get_number_of_patterns(ctx);
 		length = xm_get_module_length(ctx);
