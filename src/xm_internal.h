@@ -260,11 +260,21 @@ struct xm_sample_s {
 
 /* ----- Internal API ----- */
 
-/** Check the module header (first 60 bytes).
+#ifdef XM_DEFENSIVE
+
+/** Check the module data for errors/inconsistencies.
+ *
+ * @returns 0 if everything looks OK. Module should be safe to load.
+ */
+int xm_check_sanity_preload(const char*, size_t);
+
+/** Check a loaded module for errors/inconsistencies.
  *
  * @returns 0 if everything looks OK.
  */
-int xm_check_header_sanity(const char*, size_t);
+int xm_check_sanity_postload(xm_context_t*);
+
+#endif
 
 /** Get the number of bytes needed to store the module data in a
  * dynamically allocated blank context.

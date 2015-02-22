@@ -33,7 +33,9 @@ static inline void memcpy_pad(void* dst, size_t dst_len, const void* src, size_t
 	memset(dst_c + copy_bytes, 0, dst_len - copy_bytes);
 }
 
-int xm_check_header_sanity(const char* module, size_t module_length) {
+#if XM_DEFENSIVE
+
+int xm_check_sanity_preload(const char* module, size_t module_length) {
 	if(module_length < 60) {
 		return 4;
 	}
@@ -53,6 +55,24 @@ int xm_check_header_sanity(const char* module, size_t module_length) {
 
 	return 0;
 }
+
+int xm_check_sanity_postload(xm_context_t* ctx) {
+	/* @todo: plenty of stuff to do here… */
+
+	/* Check the POT */
+	for(uint8_t i = 0; i < ctx->module.length; ++i) {
+		if(ctx->module.pattern_table[i] >= ctx->module.num_patterns) {
+			DEBUG("module has invalid POT, pos %i references nonexistent pattern %i",
+			      i,
+			      ctx->module.pattern_table[i]);
+			return 1;
+		}
+	}
+	
+	return 0;
+}
+
+#endif
 
 size_t xm_get_memory_needed_for_context(const char* moddata, size_t moddata_length) {
 	size_t memory_needed = 0;
@@ -153,7 +173,7 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 	mod->patterns = (xm_pattern_t*)mempool;
 	mempool += mod->num_patterns * sizeof(xm_pattern_t);
 
-    mod->instruments = (xm_instrument_t*)mempool;
+	mod->instruments = (xm_instrument_t*)mempool;
 	mempool += mod->num_instruments * sizeof(xm_instrument_t);
 
 	uint16_t flags = READ_U32(offset + 14);
@@ -164,7 +184,7 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 
 	READ_MEMCPY(mod->pattern_table, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
 	offset += header_size;
-
+	
 	/* Read patterns */
 	for(uint16_t i = 0; i < mod->num_patterns; ++i) {
 		uint16_t packed_patterndata_size = READ_U16(offset + 7);
