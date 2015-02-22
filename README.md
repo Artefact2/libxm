@@ -12,25 +12,35 @@ Examples
 
 Three example programs are provided.
 
-* `xmtoau` will play a module and output a `.au` file to standard
-  output. Example usages:
-
-  * Directly play a module (requires the `sox` package):
-
-    ~~~
-	./xmtoau my_module.xm | play -
-	~~~
-
-  * Convert the data to a .wav file on the fly, then play it with `mplayer`:
-
-    ~~~
-    ./xmtoau my_module.xm | ffmpeg -i - file.wav
-    mplayer file.wav
-	~~~
-
 * `xmtoalsa` is a simple player that uses the ALSA library. It
   produces `xmp`-like output while playing. Use `xmtoalsa --help` (or
   check the source) to see the full usage.
+
+  ~~~
+  ./xmtoalsa --random **/*.xm
+  ~~~
+
+* `xmtowav` will play a module and output a `.wav` file.
+
+  ~~~
+  ./xmtowav my_module.xm my_module.wav
+  mplayer my_module.wav # Or use cvlc, mpg123, etc…
+  ~~~
+
+* `xmtoau` will play a module and output a `.au` file to standard
+  output.
+
+  ~~~
+  ./xmtoau my_module.xm | play -
+
+  # Alternative (trancode to Opus using ffmpeg+libopus)
+  ./xmtoau my_module.xm | ffmpeg -i - -c:a libopus my_module.opus
+  mplayer my_module.opus
+
+  # Alternative (trancode to MP3 using ffmpeg+lame)
+  ./xmtoau my_module.xm | ffmpeg -i - -c:a libmp3lame -q:a 0 my_module.mp3
+  mplayer my_module.mp3
+  ~~~
 
 * `xmbench` is a benchmark program.
 
