@@ -62,7 +62,7 @@ int xm_check_sanity_postload(xm_context_t* ctx) {
 	/* Check the POT */
 	for(uint8_t i = 0; i < ctx->module.length; ++i) {
 		if(ctx->module.pattern_table[i] >= ctx->module.num_patterns) {
-			DEBUG("module has invalid POT, pos %i references nonexistent pattern %i",
+			DEBUG("module has invalid POT, pos %X references nonexistent pattern %X",
 			      i,
 			      ctx->module.pattern_table[i]);
 			return 1;
