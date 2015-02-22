@@ -41,11 +41,12 @@ int main(int argc, char** argv) {
 	xm_set_max_loop_count(ctx, 1);
 
 	puts_uint32_be(0x2E736E64); /* .snd magic number */
-	puts_uint32_be(24); /* Header size */
+	puts_uint32_be(28); /* Header size */
 	puts_uint32_be((uint32_t)(-1)); /* Data size, unknown */
 	puts_uint32_be(6); /* Encoding: 32-bit IEEE floating point */
 	puts_uint32_be(rate); /* Sample rate */
 	puts_uint32_be(channels); /* Number of interleaved channels */
+	puts_uint32_be(0); /* Optional text information */
 
 	while(xm_get_loop_count(ctx) == 0) {
 		xm_generate_samples(ctx, buffer, sizeof(buffer) / (channels * sizeof(float)));
