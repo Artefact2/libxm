@@ -1346,12 +1346,11 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	*left *= fgvol;
 	*right *= fgvol;
 
-	if(XM_DEBUG && (*left > 1 || *left < -1)) {
-		DEBUG("clipping sample: %f, this is a bug", *left);
+#if XM_DEBUG
+	if(fabs(*left) > 1 || fabs(*right) > 1) {
+		DEBUG("clipping frame: %f %f, this is a bad module or a libxm bug", *left, *right);
 	}
-	if(XM_DEBUG && (*right > 1 || *right < -1)) {
-		DEBUG("clipping sample: %f, this is a bug", *right);
-	}
+#endif
 }
 
 void xm_generate_samples(xm_context_t* ctx, float* output, size_t numsamples) {
