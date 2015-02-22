@@ -45,7 +45,7 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 	mempool += ctx->module.num_channels * sizeof(xm_channel_context_t);
 
 	ctx->global_volume = 1.f;
-	ctx->amplification = .5f; /* Purely empirical value */
+	ctx->amplification = 1.f / (float)ctx->module.num_channels;
 	ctx->volume_ramp = (1.f / 128.f);
 	ctx->panning_ramp = (1.f / 128.f);
 

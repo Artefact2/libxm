@@ -1346,11 +1346,11 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	*left *= fgvol;
 	*right *= fgvol;
 
-	if(XM_DEBUG && (*left > 32 || *left < -32)) {
-		DEBUG("final sample value is %f, this is a bug", *left);
+	if(XM_DEBUG && (*left > 1 || *left < -1)) {
+		DEBUG("clipping sample: %f, this is a bug", *left);
 	}
-	if(XM_DEBUG && (*right > 32 || *right < -32)) {
-		DEBUG("final sample value is %f, this is a bug", *right);
+	if(XM_DEBUG && (*right > 1 || *right < -1)) {
+		DEBUG("clipping sample: %f, this is a bug", *right);
 	}
 }
 
