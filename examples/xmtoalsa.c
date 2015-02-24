@@ -9,33 +9,16 @@
 #define _DEFAULT_SOURCE
 
 #include "testprog.h"
+#include "alsa_common.h"
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include <alsa/asoundlib.h>
 
 /* NB: these headers may not be very portable, but since ALSA is
  * already being used (and is Linux-only), portability was never a
  * concern. */
 #include <sys/select.h>
 #include <termios.h>
-
-#define FATAL_ALSA_ERR(s, err) do {							\
-		fprintf(stderr, s ": %s\n", snd_strerror((err)));	\
-		fflush(stderr);										\
-		exit(1);											\
-	} while(0)
-
-#define CHECK_ALSA_CALL(call) do {							\
-		int ret = (call);									\
-		if(ret < 0)	{										\
-			ret = snd_pcm_recover(device, ret, 0);			\
-			if(ret < 0)										\
-				FATAL_ALSA_ERR("ALSA internal error", ret);	\
-		}													\
-	} while(0)
-
-#define CLAMP(f) (f > 1.f ? 1.f : (f < -1.f ? -1.f : f))
 
 static struct termios customflags, previousflags;
 
@@ -77,18 +60,12 @@ char get_command(void) {
 
 int main(int argc, char** argv) {
 	xm_context_t* ctx;
-	
 	snd_pcm_t* device;
-	void* params;
-
-	char* devicename = "default";
-	size_t buffer_size = 0;
-	size_t period_size = 0;
-	const unsigned int channels = 2;
-	unsigned int rate = 48000;
-	snd_pcm_format_t format = SND_PCM_FORMAT_FLOAT;
-	size_t bps = sizeof(float);
-	double preamp = 1.0;
+	
+	size_t period_size;
+	unsigned int rate;
+	snd_pcm_format_t format;
+	float preamp = 1.f;
 	unsigned long loop = 1;
 	unsigned long izero = 1; /* Index in argv of the first filename */
 	
@@ -106,7 +83,7 @@ int main(int argc, char** argv) {
 		
 		if(!strcmp(argv[i], "--preamp")) {
 			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
-			preamp = strtod(argv[i+1], NULL);
+			preamp = strtof(argv[i+1], NULL);
 			++i;
 			continue;
 		}
@@ -123,57 +100,13 @@ int main(int argc, char** argv) {
 			continue;
 		}
 
-		if(!strcmp(argv[i], "--device")) {
-			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
-			devicename = argv[i+1];
+		if(!strcmp(argv[i], "--device")
+		   || !strcmp(argv[i], "--buffer-size")
+		   || !strcmp(argv[i], "--period-size")
+		   || !strcmp(argv[i], "--rate")
+		   || !strcmp(argv[i], "--format")) {
 			++i;
 			continue;
-		}
-
-		if(!strcmp(argv[i], "--buffer-size")) {
-			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
-			buffer_size = (size_t)strtol(argv[i+1], NULL, 0);
-			++i;
-			continue;
-		}
-
-		if(!strcmp(argv[i], "--period-size")) {
-			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
-			period_size = (size_t)strtol(argv[i+1], NULL, 0);
-			++i;
-			continue;
-		}
-
-		if(!strcmp(argv[i], "--rate")) {
-			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
-			rate = (unsigned int)strtol(argv[i+1], NULL, 0);
-			++i;
-			continue;
-		}
-
-		if(!strcmp(argv[i], "--format")) {
-			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
-			++i;
-
-			if(!strcmp(argv[i], "float")) {
-				format = SND_PCM_FORMAT_FLOAT;
-				bps = sizeof(float);
-				continue;
-			}
-
-			if(!strcmp(argv[i], "s16")) {
-				format = SND_PCM_FORMAT_S16;
-				bps = 2;
-				continue;
-			}
-
-			if(!strcmp(argv[i], "s32")) {
-				format = SND_PCM_FORMAT_S32;
-				bps = 4;
-				continue;
-			}
-
-			FATAL("%s: unknown format %s\n", argv[0], argv[i]);
 		}
 
 		izero = i;
@@ -195,51 +128,10 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	if(buffer_size == 0 && period_size == 0) period_size = 2048;
-	
-	if(buffer_size == 0) {
-		buffer_size = period_size << 1;
-	}
-	if(period_size == 0) {
-		period_size = buffer_size >> 1;
-	}
-
-	CHECK_ALSA_CALL(snd_pcm_open(&device, devicename, SND_PCM_STREAM_PLAYBACK, 0));
-	CHECK_ALSA_CALL(snd_pcm_hw_params_malloc((snd_pcm_hw_params_t**)(&params)));
-	CHECK_ALSA_CALL(snd_pcm_hw_params_any(device, params));
-	CHECK_ALSA_CALL(snd_pcm_hw_params_set_access(device, params, SND_PCM_ACCESS_RW_INTERLEAVED));
-	if(snd_pcm_hw_params_set_format(device, params, format) < 0
-	   && snd_pcm_hw_params_set_format(device, params, format = SND_PCM_FORMAT_FLOAT) < 0
-	   && snd_pcm_hw_params_set_format(device, params, format = SND_PCM_FORMAT_S32) < 0) {
-		CHECK_ALSA_CALL(snd_pcm_hw_params_set_format(device, params, format = SND_PCM_FORMAT_S16));
-	}
-	if(snd_pcm_hw_params_set_rate(device, params, rate, 0) < 0
-	   && snd_pcm_hw_params_set_rate(device, params, rate = 48000, 0) < 0) {
-		CHECK_ALSA_CALL(snd_pcm_hw_params_set_rate(device, params, rate = 44100, 0));
-	}
-	CHECK_ALSA_CALL(snd_pcm_hw_params_set_channels(device, params, channels));
-
-	CHECK_ALSA_CALL(snd_pcm_hw_params_set_buffer_size_near(device, params, &buffer_size));
-	CHECK_ALSA_CALL(snd_pcm_hw_params_set_period_size_near(device, params, &period_size, 0));
-	CHECK_ALSA_CALL(snd_pcm_hw_params(device, params));
-	snd_pcm_hw_params_free(params);
-	CHECK_ALSA_CALL(snd_pcm_sw_params_malloc((snd_pcm_sw_params_t**)(&params)));
-	CHECK_ALSA_CALL(snd_pcm_sw_params_current(device, params));
-	CHECK_ALSA_CALL(snd_pcm_sw_params_set_start_threshold(device, params, buffer_size));
-	CHECK_ALSA_CALL(snd_pcm_sw_params(device, params));
-	snd_pcm_sw_params_free(params);
-
-	printf("Opened ALSA device: %s, %s, %i Hz, %lu/%lu\n",
-	       devicename,
-	       format == SND_PCM_FORMAT_FLOAT ? "float" : (format == SND_PCM_FORMAT_S32 ? "s32" : "s16"),
-	       rate,
-	       period_size,
-	       buffer_size
-		);
+	init_alsa_device(argc, argv, &device, &period_size, &rate, &format);
 	
 	float xmbuffer[period_size];
-	char alsabuffer[period_size * bps];
-	const snd_pcm_uframes_t nframes = period_size / channels;
+	float alsabuffer[period_size];
 
 	tcgetattr(0, &previousflags);
 	atexit(restoreterm);
@@ -325,27 +217,8 @@ int main(int argc, char** argv) {
 			       (unsigned int)((float)(samples % (60 * rate)) / rate),
 			       (unsigned int)(100 * (float)(samples % rate) / rate)
 				);
-			xm_generate_samples(ctx, xmbuffer, nframes);
-
-			if(format == SND_PCM_FORMAT_FLOAT && preamp == 1.0) {
-				CHECK_ALSA_CALL(snd_pcm_writei(device, xmbuffer, nframes));
-			} else {
-				if(format == SND_PCM_FORMAT_S16) {
-					for(size_t i = 0; i < period_size; ++i) {
-						((int16_t*)alsabuffer)[i] = (int16_t)(CLAMP((double)xmbuffer[i] * preamp) * 32767.);
-					}
-				} else if(format == SND_PCM_FORMAT_S32) {
-					for(size_t i = 0; i < period_size; ++i) {
-						((int32_t*)alsabuffer)[i] = (int32_t)(CLAMP((double)xmbuffer[i] * preamp) * 2147483647.);
-					}
-				} else if(format == SND_PCM_FORMAT_FLOAT) {					
-					for(size_t i = 0; i < period_size; ++i) {
-						((float*)alsabuffer)[i] = xmbuffer[i] * preamp;
-					}
-				}
-				
-				CHECK_ALSA_CALL(snd_pcm_writei(device, alsabuffer, nframes));
-			}
+			xm_generate_samples(ctx, xmbuffer, period_size >> 1);
+			play_floatbuffer(device, format, period_size, preamp, xmbuffer, alsabuffer);
 
 			if(waspaused) {
 				waspaused = false;
