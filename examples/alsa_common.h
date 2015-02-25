@@ -28,8 +28,8 @@
 /* Create an ALSA device from command line arguments:
  *
  * --device default
- * --buffer-size 4096
- * --period-size 2048
+ * --buffer-size 512
+ * --period-size 256
  * --rate 48000
  * --format float|s16|s32
  *
@@ -117,7 +117,7 @@ void init_alsa_device(int argc, char** argv,
 		break;
 	}
 
-	if(buffer_size == 0 && period_size == 0) period_size = 2048;
+	if(buffer_size == 0 && period_size == 0) period_size = 256;
 	
 	if(buffer_size == 0) {
 		buffer_size = period_size << 1;

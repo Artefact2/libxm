@@ -156,3 +156,26 @@ uint64_t xm_get_latest_trigger_of_sample(xm_context_t* ctx, uint16_t instr, uint
 uint64_t xm_get_latest_trigger_of_channel(xm_context_t* ctx, uint16_t chn) {
 	return ctx->channels[chn - 1].latest_trigger;
 }
+
+bool xm_is_channel_active(xm_context_t* ctx, uint16_t chn) {
+	xm_channel_context_t* ch = ctx->channels + (chn - 1);
+	return ch->instrument != NULL && ch->sample != NULL && ch->sample_position >= 0;
+}
+
+float xm_get_frequency_of_channel(xm_context_t* ctx, uint16_t chn) {
+	return ctx->channels[chn - 1].frequency;
+}
+
+float xm_get_volume_of_channel(xm_context_t* ctx, uint16_t chn) {
+	return ctx->channels[chn - 1].actual_volume;
+}
+
+float xm_get_panning_of_channel(xm_context_t* ctx, uint16_t chn) {
+	return ctx->channels[chn - 1].actual_panning;
+}
+
+uint16_t xm_get_instrument_of_channel(xm_context_t* ctx, uint16_t chn) {
+	xm_channel_context_t* ch = ctx->channels + (chn - 1);
+	if(ch->instrument == NULL) return 0;
+	return 1 + (ch->instrument - ctx->module.instruments) / sizeof(xm_instrument_t*);
+}

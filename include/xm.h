@@ -13,6 +13,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 struct xm_context_s;
 typedef struct xm_context_s xm_context_t;
@@ -154,5 +155,51 @@ uint64_t xm_get_latest_trigger_of_sample(xm_context_t*, uint16_t instr, uint16_t
  * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
  */
 uint64_t xm_get_latest_trigger_of_channel(xm_context_t*, uint16_t);
+
+/** Checks whether a channel is active (ie: is playing something).
+ *
+ * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
+ */
+bool xm_is_channel_active(xm_context_t*, uint16_t);
+
+/** Get the instrument number currently playing in a channel.
+ *
+ * @returns instrument number, or 0 if channel is not active.
+ *
+ * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
+ *
+ * @note Instrument numbers go from 1 to
+ * xm_get_number_of_instruments(...).
+ */
+uint16_t xm_get_instrument_of_channel(xm_context_t*, uint16_t);
+
+/** Get the frequency of the sample currently playing in a channel.
+ *
+ * @returns a frequency in Hz. If the channel is not active, return
+ * value is undefined.
+ *
+ * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
+ */
+float xm_get_frequency_of_channel(xm_context_t*, uint16_t);
+
+/** Get the volume of the sample currently playing in a channel. This
+ * takes into account envelopes, etc.
+ *
+ * @returns a volume between 0 or 1. If the channel is not active,
+ * return value is undefined.
+ *
+ * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
+ */
+float xm_get_volume_of_channel(xm_context_t*, uint16_t);
+
+/** Get the panning of the sample currently playing in a channel. This
+ * takes into account envelopes, etc.
+ *
+ * @returns a panning between 0 (L) and 1 (R). If the channel is not
+ * active, return value is undefined.
+ *
+ * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
+ */
+float xm_get_panning_of_channel(xm_context_t*, uint16_t);
 
 #endif
