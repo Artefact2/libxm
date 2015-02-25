@@ -12,7 +12,6 @@
 #include "../testprog.h"
 #include "../alsa_common.h"
 #include <GLFW/glfw3.h>
-#include <pthread.h>
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -28,8 +27,6 @@ static snd_pcm_format_t format;
 static xm_context_t* xmctx;
 static uint8_t loop = 0;
 
-static pthread_t audiothread;
-static pthread_mutex_t xmsem;
 static uint16_t channels, instruments;
 
 static GLuint vertexn, elementn, progn, varrayn, xmdatau;
@@ -52,18 +49,13 @@ void usage(char* progname) {
 		  progname, progname);
 }
 
-void* play_audio(void* p) {
-	float xmbuffer[period_size];
-	float alsabuffer[period_size];
-	
-	while(true) {
-		pthread_mutex_lock(&xmsem);
+void play_audio(float* xmbuffer, float* alsabuffer) {
+	snd_pcm_sframes_t avail;
+
+	while((avail = snd_pcm_avail_update(device)) >= period_size) {
 		xm_generate_samples(xmctx, xmbuffer, period_size >> 1);
-		pthread_mutex_unlock(&xmsem);
 		play_floatbuffer(device, format, period_size, 1.f, xmbuffer, alsabuffer);
 	}
-
-	return p;
 }
 
 void setup(int argc, char** argv) {
@@ -141,23 +133,15 @@ void setup(int argc, char** argv) {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 	
-	init_alsa_device(argc, argv, &device, &period_size, &rate, &format);
+	init_alsa_device(argc, argv, 64, 2048, SND_PCM_NONBLOCK, &device, &period_size, &rate, &format);
 	create_context_from_file(&xmctx, rate, argv[argc - 1]);
 	xm_set_max_loop_count(xmctx, 1);
 	channels = xm_get_number_of_channels(xmctx);
 	instruments = xm_get_number_of_instruments(xmctx);
 	CHECK_ALSA_CALL(snd_pcm_prepare(device));
-	pthread_mutex_init(&xmsem, NULL);
-	pthread_create(&audiothread, NULL, play_audio, NULL);
 }
 
 void teardown(void) {
-	void* retval;
-
-	snd_pcm_pause(device, 1);
-	pthread_cancel(audiothread);
-	pthread_join(audiothread, &retval);
-	pthread_mutex_destroy(&xmsem);
 	snd_pcm_drop(device);
 	snd_pcm_close(device);
 	xm_free_context(xmctx);
@@ -176,7 +160,6 @@ void render(void) {
 	glViewport(0, 0, width, height);
 	glClear(GL_COLOR_BUFFER_BIT);
 	
-	pthread_mutex_lock(&xmsem);
 	loop = xm_get_loop_count(xmctx);
 
 	for(uint16_t i = 1; i <= channels; ++i) {
@@ -189,7 +172,6 @@ void render(void) {
 			);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);
 	}
-	pthread_mutex_unlock(&xmsem);
 }
 
 int main(int argc, char** argv) {
@@ -200,7 +182,11 @@ int main(int argc, char** argv) {
 	
 	setup(argc, argv);
 	
+	float xmbuffer[period_size];
+	float alsabuffer[period_size];
+	
 	while(!glfwWindowShouldClose(window)) {
+		play_audio(xmbuffer, alsabuffer);
 		render();
 
 		glfwSwapBuffers(window);

@@ -9,7 +9,7 @@
 #include <alsa/asoundlib.h>
 
 #define FATAL_ALSA_ERR(s, err) do {							\
-		fprintf(stderr, s ": %s\n", snd_strerror((err)));	\
+		fprintf(stderr, "%s(%i) " s " : %s\n", __FILE__, __LINE__, snd_strerror((err))); \
 		fflush(stderr);										\
 		exit(1);											\
 	} while(0)
@@ -39,6 +39,9 @@
  *
  * @param argc number of arguments in argv
  * @param argv the program arguments
+ * @param default_period_size the default period size, if not specified in argv
+ * @param default_buffer_size the default buffer size, if not specified in argv
+ * @param mode open mode for the ALSA device (SND_PCM_NONBLOCK, SND_PCM_ASYNC)
  *
  * @param out_device will receive the ALSA device
  * @param out_period_size will receive the chosen period size
@@ -46,6 +49,9 @@
  * @param out_format will receive the chosen sample format
  */
 void init_alsa_device(int argc, char** argv,
+                      size_t default_period_size,
+                      size_t default_buffer_size,
+                      int mode,
                       snd_pcm_t** out_device,
 		      size_t* out_period_size,
 		      unsigned int* out_rate,
@@ -53,8 +59,8 @@ void init_alsa_device(int argc, char** argv,
 	snd_pcm_t* device;
 	void* params;
 	char* devicename = "default";
-	size_t buffer_size = 0;
-	size_t period_size = 0;
+	size_t buffer_size = default_buffer_size;
+	size_t period_size = default_period_size;
 	const unsigned int channels = 2;
 	unsigned int rate = 48000;
 	snd_pcm_format_t format = SND_PCM_FORMAT_FLOAT;
@@ -117,16 +123,7 @@ void init_alsa_device(int argc, char** argv,
 		break;
 	}
 
-	if(buffer_size == 0 && period_size == 0) period_size = 256;
-	
-	if(buffer_size == 0) {
-		buffer_size = period_size << 1;
-	}
-	if(period_size == 0) {
-		period_size = buffer_size >> 1;
-	}
-
-	CHECK_ALSA_CALL(snd_pcm_open(&device, devicename, SND_PCM_STREAM_PLAYBACK, 0));
+	CHECK_ALSA_CALL(snd_pcm_open(&device, devicename, SND_PCM_STREAM_PLAYBACK, mode));
 	CHECK_ALSA_CALL(snd_pcm_hw_params_malloc((snd_pcm_hw_params_t**)(&params)));
 	CHECK_ALSA_CALL(snd_pcm_hw_params_any(device, params));
 	CHECK_ALSA_CALL(snd_pcm_hw_params_set_access(device, params, SND_PCM_ACCESS_RW_INTERLEAVED));
@@ -151,7 +148,8 @@ void init_alsa_device(int argc, char** argv,
 	
 	CHECK_ALSA_CALL(snd_pcm_sw_params_malloc((snd_pcm_sw_params_t**)(&params)));
 	CHECK_ALSA_CALL(snd_pcm_sw_params_current(device, params));
-	CHECK_ALSA_CALL(snd_pcm_sw_params_set_start_threshold(device, params, buffer_size));
+	CHECK_ALSA_CALL(snd_pcm_sw_params_set_start_threshold(device, params, buffer_size - period_size));
+	CHECK_ALSA_CALL(snd_pcm_sw_params_set_avail_min(device, params, period_size));
 	CHECK_ALSA_CALL(snd_pcm_sw_params(device, params));
 	snd_pcm_sw_params_free(params);
 

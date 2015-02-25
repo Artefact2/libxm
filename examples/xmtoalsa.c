@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	init_alsa_device(argc, argv, &device, &period_size, &rate, &format);
+	init_alsa_device(argc, argv, 1024, 2048, 0, &device, &period_size, &rate, &format);
 	
 	float xmbuffer[period_size];
 	float alsabuffer[period_size];
