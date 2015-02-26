@@ -23,6 +23,6 @@ void main() {
 	
 	fragcolor = vec4(
 		hsv2rgb(vec3(xmdata.y * 1445.683229480096030348f, 1.f, .5f)),
-		(xmdata.w / 2.f)
+		(xmdata.w * .9f)
 		);
 }

@@ -18,6 +18,8 @@
 #include <math.h>
 
 static GLFWwindow* window;
+static int interval = 0, width = 1024, height = 1024;
+static bool fullscreen = false;
 
 static snd_pcm_t* device;
 static size_t period_size;
@@ -42,9 +44,9 @@ const GLbyte indices[] = {
 };
 
 void usage(char* progname) {
-	FATAL("Usage:\n" "\t%s --help\n"
+	FATAL("Usage:\n" "\t%s\n"
 		  "\t\tShow this message.\n"
-	      "\t%s [--preamp 1.0] [--device default] [--buffer-size 4096] [--period-size 2048] [--rate 48000] [--format float|s16|s32] [--] <filename>\n"
+	      "\t%s [--preamp 1.0] [--device default] [--buffer-size 2048] [--period-size 64] [--rate 48000] [--format float|s16|s32] [--fullscreen] [--width 1024] [--height 1024] [--interval 0] [--] <filename>\n"
 		  "\t\tPlay this module.\n",
 		  progname, progname);
 }
@@ -59,13 +61,67 @@ void play_audio(float* xmbuffer, float* alsabuffer) {
 }
 
 void setup(int argc, char** argv) {
+	size_t filenameidx = 1;
+	
+	for(size_t i = 1; i < argc; ++i) {
+		if(!strcmp(argv[i], "--")) {
+			filenameidx = i+1;
+			break;
+		}
+		
+		if(!strcmp(argv[i], "--width")) {
+			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
+			width = strtol(argv[i+1], NULL, 0);
+			++i;
+			continue;
+		}
+		
+		if(!strcmp(argv[i], "--height")) {
+			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
+			height = strtol(argv[i+1], NULL, 0);
+			++i;
+			continue;
+		}
+		
+		if(!strcmp(argv[i], "--interval")) {
+			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
+			interval = strtol(argv[i+1], NULL, 0);
+			++i;
+			continue;
+		}
+
+		if(!strcmp(argv[i], "--fullscreen")) {
+			fullscreen = true;
+			continue;
+		}
+
+		if(!strcmp(argv[i], "--device")
+		   || !strcmp(argv[i], "--buffer-size")
+		   || !strcmp(argv[i], "--period-size")
+		   || !strcmp(argv[i], "--rate")
+		   || !strcmp(argv[i], "--format")) {
+			++i;
+			continue;
+		}
+
+		filenameidx = i;
+		break;
+	}
+
+	if(filenameidx+1 != argc) {
+		usage(argv[0]);
+		exit(1);
+	}
+	
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	window = glfwCreateWindow(800, 800, argv[0], NULL, NULL);
+	window = glfwCreateWindow(width, height, argv[0], fullscreen ? glfwGetPrimaryMonitor() : NULL, NULL);
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+	glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
 	glfwMakeContextCurrent(window);
-	glfwSwapInterval(1);
+	glfwSwapInterval(interval);
 
 	printf("Using GL renderer: %s %s\n", glGetString(GL_VENDOR), glGetString(GL_RENDERER));
 
@@ -134,7 +190,8 @@ void setup(int argc, char** argv) {
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 	
 	init_alsa_device(argc, argv, 64, 2048, SND_PCM_NONBLOCK, &device, &period_size, &rate, &format);
-	create_context_from_file(&xmctx, rate, argv[argc - 1]);
+	create_context_from_file(&xmctx, rate, argv[filenameidx]);
+	if(xmctx == NULL) exit(1);
 	xm_set_max_loop_count(xmctx, 1);
 	channels = xm_get_number_of_channels(xmctx);
 	instruments = xm_get_number_of_instruments(xmctx);
@@ -152,11 +209,8 @@ void teardown(void) {
 
 void render(void) {
 	int width, height, active;
-	float ratio;
 
 	glfwGetFramebufferSize(window, &width, &height);
-	ratio = (float)width / (float)height;
-
 	glViewport(0, 0, width, height);
 	glClear(GL_COLOR_BUFFER_BIT);
 	
@@ -174,12 +228,7 @@ void render(void) {
 	}
 }
 
-int main(int argc, char** argv) {
-	if(argc < 2) {
-		usage(argv[0]);
-		exit(1);
-	}
-	
+int main(int argc, char** argv) {	
 	setup(argc, argv);
 	
 	float xmbuffer[period_size];
