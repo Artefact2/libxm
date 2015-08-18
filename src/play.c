@@ -34,6 +34,7 @@ static float xm_frequency(xm_context_t*, float, float);
 static void xm_update_frequency(xm_context_t*, xm_channel_context_t*);
 
 static void xm_handle_note_and_instrument(xm_context_t*, xm_channel_context_t*, xm_pattern_slot_t*);
+static void xm_handle_note_and_instrument_i(xm_context_t*, xm_channel_context_t*, xm_pattern_slot_t*, uint8_t instrument);
 static void xm_trigger_note(xm_context_t*, xm_channel_context_t*, unsigned int flags);
 static void xm_cut_note(xm_channel_context_t*);
 static void xm_key_off(xm_channel_context_t*);
@@ -405,17 +406,22 @@ static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_t* ch,
 										  xm_pattern_slot_t* s) {
-	if(s->instrument > 0) {
+	xm_handle_note_and_instrument_i(ctx, ch, s, s->instrument);
+}
+
+static void xm_handle_note_and_instrument_i(xm_context_t* ctx, xm_channel_context_t* ch,
+										  xm_pattern_slot_t* s, uint8_t instrument) {
+	if(instrument > 0) {
 		if(HAS_TONE_PORTAMENTO(ch->current) && ch->instrument != NULL && ch->sample != NULL) {
 			/* Tone portamento in effect, unclear stuff happens */
 			xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_PERIOD | XM_TRIGGER_KEEP_SAMPLE_POSITION);
-		} else if(s->instrument > ctx->module.num_instruments) {
+		} else if(instrument > ctx->module.num_instruments) {
 			/* Invalid instrument, Cut current note */
 			xm_cut_note(ch);
 			ch->instrument = NULL;
 			ch->sample = NULL;
 		} else {
-			ch->instrument = ctx->module.instruments + (s->instrument - 1);
+			ch->instrument = ctx->module.instruments + (instrument - 1);
 			if(s->note == 0 && ch->sample != NULL) {
 				/* Ghost instrument, trigger note */
 				/* Sample position is kept, but envelopes are reset */
@@ -868,7 +874,18 @@ static void xm_row(xm_context_t* ctx) {
 		xm_pattern_slot_t* s = cur->slots + ctx->current_row * ctx->module.num_channels + i;
 		xm_channel_context_t* ch = ctx->channels + i;
 
+		uint8_t orig_instrument = 0;
+		if(ch->current != NULL) {
+			orig_instrument = ch->current->instrument;
+		}
+
 		ch->current = s;
+
+		if(ch->current->instrument != 0) {
+			ch->current->floating_instrument = ch->current->instrument;
+		} else if(orig_instrument != 0) {
+			ch->current->floating_instrument = orig_instrument;
+		}
 
 		if(s->effect_type != 0xE || s->effect_param >> 4 != 0xD) {
 			xm_handle_note_and_instrument(ctx, ch, s);
@@ -1123,7 +1140,7 @@ static void xm_tick(xm_context_t* ctx) {
 
 			case 0xD: /* EDy: Note delay */
 				if(ch->note_delay_param == ctx->current_tick) {
-					xm_handle_note_and_instrument(ctx, ch, ch->current);
+					xm_handle_note_and_instrument_i(ctx, ch, ch->current, ch->current->floating_instrument);
 					xm_envelopes(ch);
 				}
 				break;

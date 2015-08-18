@@ -122,6 +122,7 @@ struct xm_sample_s {
 
  struct xm_pattern_slot_s {
 	 uint8_t note; /* 1-96, 97 = Key Off note */
+	 uint8_t floating_instrument; /* 1-128 */
 	 uint8_t instrument; /* 1-128 */
 	 uint8_t volume_column;
 	 uint8_t effect_type;
