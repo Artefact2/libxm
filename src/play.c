@@ -446,7 +446,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 				ch->frame_count = 0;
 #endif
 				ch->sample = instr->samples + instr->sample_of_notes[s->note - 1];
-				ch->note = s->note + ch->sample->relative_note
+				ch->orig_note = ch->note = s->note + ch->sample->relative_note
 					+ ch->sample->finetune / 128.f - 1.f;
 				if(s->instrument > 0) {
 					xm_trigger_note(ctx, ch, 0);
@@ -672,7 +672,25 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			break;
 
 		case 0xD: /* EDy: Note delay */
-			/* Already taken care of */
+			/* XXX: figure this out better. EDx triggers
+			 * the note even when there no note and no
+			 * instrument. But ED0 acts like like a ghost
+			 * note, EDx (x ≠ 0) does not. */
+			if(s->note == 0 && s->instrument == 0) {
+				unsigned int flags = XM_TRIGGER_KEEP_VOLUME;
+				
+				if(ch->current->effect_param & 0x0F) {
+					ch->note = ch->orig_note;
+					xm_trigger_note(ctx, ch, flags);
+				} else {
+					xm_trigger_note(
+						ctx, ch,
+						flags
+						| XM_TRIGGER_KEEP_PERIOD
+						| XM_TRIGGER_KEEP_SAMPLE_POSITION
+						);
+				}
+			}
 			break;
 
 		case 0xE: /* EEy: Pattern delay */

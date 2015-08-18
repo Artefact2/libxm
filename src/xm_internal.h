@@ -154,6 +154,7 @@ struct xm_sample_s {
 
  struct xm_channel_context_s {
 	 float note;
+	 float orig_note; /* The original note before effect modifications, as read in the pattern. */
 	 xm_instrument_t* instrument; /* Could be NULL */
 	 xm_sample_t* sample; /* Could be NULL */
 	 xm_pattern_slot_t* current;

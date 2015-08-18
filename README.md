@@ -144,7 +144,8 @@ they are supposed to test) is in the table below.
 -------------------------------+----------------+------------------------+------------------------------------------------
 amiga.xm                       | FAIL           | MilkyTracker, xmp      | Should sound identical.
 finetune.xm                    | PASS           | MilkyTracker           | Left and right channels should sound identical.
-ghost-note-delay.xm            | FAIL           | MilkyTracker           | Should sound identical.
+note-delay-ghost.xm            | PASS           | MilkyTracker, FT2      | Should sound identical.
+note-delay-retrig.xm           | PASS           | MilkyTracker           | Should sound identical.
 pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
 ramping.xm                     | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
 ramping2.xm                    | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
