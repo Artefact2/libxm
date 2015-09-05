@@ -140,17 +140,19 @@ a certain feature against regressions. A summary of tests (and what
 they are supposed to test) is in the table below.
 
 ~~~
-     Test     |     Status     |     Tested against     | Extras
---------------+----------------+------------------------+------------------------------------------------
-ramping.xm    | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
-ramping2.xm   | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
-tremolo.xm    | PASS           | MilkyTracker           | Should sound identical.
-vibrato.xm    | PASS           | MilkyTracker           | Should sound identical.
-tremor.xm     | PASS           | MilkyTracker           | Should sound identical.
-amiga.xm      | FAIL           | MilkyTracker, xmp      | Should sound identical.
-pattern-lo….xm| PASS           | MilkyTracker           | Should play the same notes at the same time.
-finetune.xm   | PASS           | MilkyTracker           | Left and right channels should sound identical.
-tone-porta….xm| PASS           | MilkyTracker           | Should sound identical.
+     Test                      |     Status     |     Tested against     | Extras
+-------------------------------+----------------+------------------------+------------------------------------------------
+amiga.xm                       | FAIL           | MilkyTracker, xmp      | Should sound identical.
+finetune.xm                    | PASS           | MilkyTracker           | Left and right channels should sound identical.
+note-delay-ghost.xm            | PASS           | MilkyTracker, FT2      | Should sound identical.
+note-delay-retrig.xm           | PASS           | MilkyTracker           | Should sound identical.
+pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
+ramping.xm                     | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
+ramping2.xm                    | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
+tone-portamento.xm             | PASS           | MilkyTracker           | Should sound identical.
+tremolo.xm                     | PASS           | MilkyTracker           | Should sound identical.
+tremor.xm                      | PASS           | MilkyTracker           | Should sound identical.
+vibrato.xm                     | PASS           | MilkyTracker           | Should sound identical.
 ~~~
 
 Thanks
