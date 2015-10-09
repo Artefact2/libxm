@@ -41,16 +41,17 @@ static struct termios customflags, previousflags;
 
 void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s --help\n"
-		  "\t\tShow this message.\n"
+	      "\t\tShow this message.\n"
 	      "\t%s [--loop N] [--random] [--preamp 1.0] [--device default] [--buffer-size 4096] [--period-size 2048] [--rate 48000] [--format float|s16|s32] [--] <filenames…>\n"
-		  "\t\tPlay modules in this order. Loop each module N times (0 to loop indefinitely).\n\n"
-		  "Interactive controls:\n"
-		  "\tspace: pause/resume playback\n"
-		  "\tq: exit program\n"
-		  "\tp: previous module\n"
-		  "\tn: next module\n"
-		  "\tl: toggle looping\n",
-		  progname, progname);
+	      "\t\tPlay modules in this order. Loop each module N times (0 to loop indefinitely).\n\n"
+	      "Interactive controls:\n"
+	      "\tspace: pause/resume playback\n"
+	      "\tq: exit program\n"
+	      "\tp: previous module\n"
+	      "\tn: next module\n"
+	      "\tl: toggle looping\n"
+	      "\t0...9A...V: toggle channel mute\n",
+	      progname, progname);
 }
 
 void restoreterm(void) {
@@ -93,6 +94,7 @@ int main(int argc, char** argv) {
 	unsigned long izero = 1; /* Index in argv of the first filename */
 	
 	bool paused = false, waspaused = false, jump = false, random = false;
+	uint64_t samples, channel_map_until = 0;
 
 	if(argc == 1 || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
 		usage(argv[0]);
@@ -252,9 +254,9 @@ int main(int argc, char** argv) {
 	tcsetattr(0, TCSANOW, &customflags);
 
 	for(unsigned long i = izero; i < argc; ++i) {
-		uint16_t num_patterns, length, bpm, tempo;
-		uint64_t samples;
+		uint16_t num_patterns, num_channels, length, bpm, tempo;
 		uint8_t pos, pat, row;
+		char command;
 
 		jump = false;
 		create_context_from_file(&ctx, rate, argv[i]);
@@ -266,6 +268,7 @@ int main(int argc, char** argv) {
 		
 		xm_set_max_loop_count(ctx, loop);
 		num_patterns = xm_get_number_of_patterns(ctx);
+		num_channels = xm_get_number_of_channels(ctx);
 		length = xm_get_module_length(ctx);
 
 		printf("==> Playing: %s\n"
@@ -276,7 +279,7 @@ int main(int argc, char** argv) {
 		CHECK_ALSA_CALL(snd_pcm_prepare(device));
 
 		while(!jump && (loop == 0 || xm_get_loop_count(ctx) < loop)) {
-			switch(get_command()) {
+			switch(command = get_command()) {
 			case ' ':
 				paused = !paused;
 				if(paused) {
@@ -302,6 +305,17 @@ int main(int argc, char** argv) {
 				xm_set_max_loop_count(ctx, loop);
 				break;
 			default:
+				if(command >= '0' && command <= '9') {
+					uint16_t ch = 1 + (command - '0');
+					if(ch > num_channels) break;
+					xm_mute_channel(ctx, ch, !xm_mute_channel(ctx, ch, true));
+					channel_map_until = samples + rate;
+				} else if(command >= 'A' && command <= 'V') {
+					uint16_t ch = 11 + (command - 'A');
+					if(ch > num_channels) break;
+					xm_mute_channel(ctx, ch, !xm_mute_channel(ctx, ch, true));
+					channel_map_until = samples + rate;
+				}
 				break;
 			}
 
@@ -312,19 +326,32 @@ int main(int argc, char** argv) {
 			
 			xm_get_position(ctx, &pos, &pat, &row, &samples);
 			xm_get_playing_speed(ctx, &bpm, &tempo);
-			printf("\rSpeed[%.2X] BPM[%.2X] Pos[%.2X/%.2X]"
-			       " Pat[%.2X/%.2X] Row[%.2X/%.2X] Loop[%.2X/%.2lX]"
-			       " %.2i:%.2i:%.2i.%.2i ",
-			       tempo, bpm,
-			       pos, length,
-			       pat, num_patterns,
-			       row, xm_get_number_of_rows(ctx, pat),
-			       xm_get_loop_count(ctx), loop,
-			       (unsigned int)((float)samples / (3600 * rate)),
-			       (unsigned int)((float)(samples % (3600 * rate) / (60 * rate))),
-			       (unsigned int)((float)(samples % (60 * rate)) / rate),
-			       (unsigned int)(100 * (float)(samples % rate) / rate)
-				);
+			
+			if(samples > channel_map_until) {
+				printf("\rSpeed[%.2X] BPM[%.2X] Pos[%.2X/%.2X]"
+				       " Pat[%.2X/%.2X] Row[%.2X/%.2X] Loop[%.2X/%.2lX]"
+				       " %.2i:%.2i:%.2i.%.2i ",
+				       tempo, bpm,
+				       pos, length,
+				       pat, num_patterns,
+				       row, xm_get_number_of_rows(ctx, pat),
+				       xm_get_loop_count(ctx), loop,
+				       (unsigned int)((float)samples / (3600 * rate)),
+				       (unsigned int)((float)(samples % (3600 * rate) / (60 * rate))),
+				       (unsigned int)((float)(samples % (60 * rate)) / rate),
+				       (unsigned int)(100 * (float)(samples % rate) / rate)
+					);
+			} else {
+				putchar('\r');
+				uint16_t ch = 1;
+				bool m;
+				for(ch = 1; ch <= num_channels; ++ch) {
+					m = xm_mute_channel(ctx, ch, true);
+					xm_mute_channel(ctx, ch, m);
+					putchar(m ? '.' : '~');
+				}
+				for(ch = num_channels; ch < 75; ++ch) putchar(' ');
+			}
 			xm_generate_samples(ctx, xmbuffer, nframes);
 
 			if(format == SND_PCM_FORMAT_FLOAT && preamp == 1.0) {

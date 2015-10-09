@@ -13,6 +13,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 struct xm_context_s;
 typedef struct xm_context_s xm_context_t;
@@ -68,6 +69,25 @@ void xm_set_max_loop_count(xm_context_t*, uint8_t loopcnt);
  * 0 when the module is still playing, 1 when the module has looped
  * once, etc. */
 uint8_t xm_get_loop_count(xm_context_t*);
+
+
+
+/** Mute or unmute a channel.
+ * 
+ * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
+ *
+ * @return whether the channel was muted.
+ */
+bool xm_mute_channel(xm_context_t*, uint16_t, bool);
+
+/** Mute or unmute an instrument.
+ *
+ * @note Instrument numbers go from 1 to
+ * xm_get_number_of_instruments(...).
+ *
+ * @return whether the instrument was muted.
+ */
+bool xm_mute_instrument(xm_context_t*, uint16_t, bool);
 
 
 

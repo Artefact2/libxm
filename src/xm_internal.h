@@ -115,6 +115,7 @@ struct xm_sample_s {
 	 uint8_t vibrato_rate;
 	 uint16_t volume_fadeout;
 	 uint64_t latest_trigger;
+	 bool muted;
 
 	 xm_sample_t* samples;
  };
@@ -212,6 +213,7 @@ struct xm_sample_s {
 	 bool tremor_on;
 
 	 uint64_t latest_trigger;
+	 bool muted;
 
 #if XM_RAMPING
 	 /* These values are updated at the end of each tick, to save

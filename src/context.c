@@ -31,7 +31,7 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 	mempool = malloc(bytes_needed);
 	if(mempool == NULL && bytes_needed > 0) {
 		/* malloc() failed, trouble ahead */
-		DEBUG("call to malloc() failed, returned %p", mempool);
+		DEBUG("call to malloc() failed, returned %p", (void*)mempool);
 		return 2;
 	}
 
@@ -96,6 +96,22 @@ void xm_set_max_loop_count(xm_context_t* context, uint8_t loopcnt) {
 uint8_t xm_get_loop_count(xm_context_t* context) {
 	return context->loop_count;
 }
+
+
+
+bool xm_mute_channel(xm_context_t* ctx, uint16_t channel, bool mute) {
+	bool old = ctx->channels[channel - 1].muted;
+	ctx->channels[channel - 1].muted = mute;
+	return old;
+}
+
+bool xm_mute_instrument(xm_context_t* ctx, uint16_t instr, bool mute) {
+	bool old = ctx->module.instruments[instr - 1].muted;
+	ctx->module.instruments[instr - 1].muted = mute;
+	return old;
+}
+
+
 
 const char* xm_get_module_name(xm_context_t* ctx) {
 	return ctx->module.name;
