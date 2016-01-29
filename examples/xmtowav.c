@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
 	fseek(out, 4, SEEK_SET);
 	puts_uint32_le(36 + num_samples * sizeof(float), out);
 
-	fseek(out, 32, SEEK_SET);
+	fseek(out, 40, SEEK_SET);
 	puts_uint32_le(num_samples * sizeof(float), out);
 
 	fclose(out);
