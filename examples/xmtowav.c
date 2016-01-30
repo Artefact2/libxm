@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
 	if(ctx == NULL) exit(1);
 	xm_set_max_loop_count(ctx, 1);
 
-	out = fopen(argv[2], "w");
+	out = fopen(argv[2], "wb");
 	if(out == NULL) FATAL_ERR("could not open output file for writing");
 
 	/* WAVE format info taken from
