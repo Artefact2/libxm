@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
 	if(ctx == NULL) exit(1);
 	xm_set_max_loop_count(ctx, 1);
 
-	out = fopen(argv[2], "w");
+	out = fopen(argv[2], "wb");
 	if(out == NULL) FATAL_ERR("could not open output file for writing");
 
 	/* WAVE format info taken from
@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
 	fseek(out, 4, SEEK_SET);
 	puts_uint32_le(36 + num_samples * sizeof(float), out);
 
-	fseek(out, 32, SEEK_SET);
+	fseek(out, 40, SEEK_SET);
 	puts_uint32_le(num_samples * sizeof(float), out);
 
 	fclose(out);
