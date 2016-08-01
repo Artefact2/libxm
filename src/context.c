@@ -193,5 +193,5 @@ float xm_get_panning_of_channel(xm_context_t* ctx, uint16_t chn) {
 uint16_t xm_get_instrument_of_channel(xm_context_t* ctx, uint16_t chn) {
 	xm_channel_context_t* ch = ctx->channels + (chn - 1);
 	if(ch->instrument == NULL) return 0;
-	return 1 + (ch->instrument - ctx->module.instruments) / sizeof(xm_instrument_t*);
+	return 1 + (ch->instrument - ctx->module.instruments);
 }
