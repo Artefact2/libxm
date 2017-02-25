@@ -2,27 +2,25 @@
 
 in vec2 vposition;
 out vec4 fragcolor;
-uniform vec4 xmdata; /* Chn/NChns, Instr/NInstrs, log2(Freq), Vol */
+uniform vec4 xmci; /* Chn, NChns, Instr, NInstrs */
+uniform vec4 xmdata; /* log2(Freq), Vol, SecsSinceLastTrigger, unused */
 
-/* Stolen from Sam Hocevar. See:
- * https://gamedev.stackexchange.com/a/59808 */
-vec3 hsv2rgb(vec3 c) {
-	vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-	vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-	return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+vec3 color(float hue) {
+	hue *= 6.28;
+	return vec3(.5) + .5 * vec3(cos(hue), cos(hue + 2.0), cos(hue + 4.0));
 }
 
 void main() {
-	float r = length(vposition);
-	float oct = xmdata.z / 20.f;
-	vec2 target = vec2(r * cos(6.28318530717958647688f * xmdata.z), r *sin(6.28318530717958647688f * xmdata.z));
-	float dist = length(vposition - target);
-
-	if(dist > .2 * r) discard;
-	if(abs(r - oct) > 0.02) discard;
+	float vol = smoothstep(0.0, 1.0, xmdata.y);
+	float y = 2.0 * xmci.x / xmci.y - 1.0 - 1.0 / xmci.y;
+	if(abs(vposition.y - y) > min(.05, .9 / xmci.y) * vol) discard;
 	
-	fragcolor = vec4(
-		hsv2rgb(vec3(xmdata.y * 1445.683229480096030348f, 1.f, .5f)),
-		(xmdata.w * .9f)
-		);
+	float x = (xmdata.x - 12.0) / 8.0;
+	float beat = exp(-10.0 * xmdata.z);
+	
+	if(abs(x - vposition.x) > 0.05) {
+		fragcolor = vec4(vec3(1.0), .02 * beat);
+	} else {	
+		fragcolor = vec4(mix(color(xmci.z / xmci.w), vec3(1.0), .5 * beat), .5 + .5 * vol);
+	}
 }

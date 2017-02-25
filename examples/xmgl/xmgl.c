@@ -28,10 +28,11 @@ static snd_pcm_format_t format;
 
 static xm_context_t* xmctx;
 static uint8_t loop = 0;
+static uint64_t samples = 0;
 
 static uint16_t channels, instruments;
 
-static GLuint vertexn, elementn, progn, varrayn, xmdatau;
+static GLuint vertexn, elementn, progn, varrayn, xmdatau, xmciu;
 const GLfloat vertices[] = {
 	-1.f, -1.f,
 	1.f, -1.f,
@@ -56,6 +57,7 @@ void play_audio(float* xmbuffer, float* alsabuffer) {
 
 	while((avail = snd_pcm_avail_update(device)) >= period_size) {
 		xm_generate_samples(xmctx, xmbuffer, period_size >> 1);
+		xm_get_position(xmctx, NULL, NULL, NULL, &samples);
 		play_floatbuffer(device, format, period_size, 1.f, xmbuffer, alsabuffer);
 	}
 }
@@ -115,7 +117,7 @@ void setup(int argc, char** argv) {
 	
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	window = glfwCreateWindow(width, height, argv[0], fullscreen ? glfwGetPrimaryMonitor() : NULL, NULL);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
@@ -184,6 +186,7 @@ void setup(int argc, char** argv) {
 	}
 
 	xmdatau = glGetUniformLocation(progn, "xmdata");
+	xmciu = glGetUniformLocation(progn, "xmci");
 	glUseProgram(progn);
 
 	glEnable(GL_BLEND);
@@ -218,11 +221,17 @@ void render(void) {
 
 	for(uint16_t i = 1; i <= channels; ++i) {
 		active = xm_is_channel_active(xmctx, i);
+		glUniform4f(xmciu,
+		            (float)i,
+		            (float)channels,
+		            active ? (float)xm_get_instrument_of_channel(xmctx, i) : 0.f,
+		            (float)instruments
+			);
 		glUniform4f(xmdatau,
-		            (float)i / (float)channels,
-		            active ? (float)xm_get_instrument_of_channel(xmctx, i) / (float)instruments : 0.f,
 		            active ? log2f(xm_get_frequency_of_channel(xmctx, i)) : 0.f,
-		            active ? xm_get_volume_of_channel(xmctx, i) : 0.f
+		            active ? xm_get_volume_of_channel(xmctx, i) : 0.f,
+		            (float)(samples - xm_get_latest_trigger_of_channel(xmctx, i)) / (float)rate,
+		            0.f
 			);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);
 	}
