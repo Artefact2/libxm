@@ -10,7 +10,7 @@
 #define GL_GLEXT_PROTOTYPES
 
 #include "../testprog.h"
-#include "../alsa_common.h"
+#include <jack/jack.h>
 #include <GLFW/glfw3.h>
 #include <string.h>
 #include <stdbool.h>
@@ -21,13 +21,16 @@ static GLFWwindow* window;
 static int interval = 0, width = 1024, height = 1024;
 static bool fullscreen = false;
 
-static snd_pcm_t* device;
-static size_t period_size;
+static bool autoconnect = true;
+static bool paused = false;
+
+static jack_client_t* client;
+static jack_port_t* left;
+static jack_port_t* right;
 static unsigned int rate;
-static snd_pcm_format_t format;
 
 static xm_context_t* xmctx;
-static uint8_t loop = 0;
+static uint8_t loop = 1;
 static uint64_t samples = 0;
 
 static uint16_t channels, instruments;
@@ -47,18 +50,53 @@ const GLbyte indices[] = {
 void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s\n"
 		  "\t\tShow this message.\n"
-	      "\t%s [--preamp 1.0] [--device default] [--buffer-size 2048] [--period-size 64] [--rate 48000] [--format float|s16|s32] [--fullscreen] [--width 1024] [--height 1024] [--interval 0] [--] <filename>\n"
-		  "\t\tPlay this module.\n",
+	      "\t%s [--fullscreen] [--width 1024] [--height 1024] [--interval 0] [--no-autoconnect] [--paused] [--loop] [--] <filename>\n"
+		  "\t\tPlay this module.\n\nKey bindings:\n\t<ESC>/q quit\n\t<Space> play/pause\n\tL toggle looping\n",
 		  progname, progname);
 }
 
-void play_audio(float* xmbuffer, float* alsabuffer) {
-	snd_pcm_sframes_t avail;
+int jack_process(jack_nframes_t nframes, void* arg) {
+	/* XXX: be more clever with buffer size: jack_get_buffer_size(), etc. */	
+	float buffer[nframes << 1];
+	float* lbuf = jack_port_get_buffer(left, nframes);
+	float* rbuf = jack_port_get_buffer(right, nframes);;
 
-	while((avail = snd_pcm_avail_update(device)) >= period_size) {
-		xm_generate_samples(xmctx, xmbuffer, period_size >> 1);
+	if(paused) {
+		memset(buffer, 0, sizeof(buffer));
+	} else {
+		xm_generate_samples(xmctx, buffer, nframes);
 		xm_get_position(xmctx, NULL, NULL, NULL, &samples);
-		play_floatbuffer(device, format, period_size, 1.f, xmbuffer, alsabuffer);
+	}
+
+	for(size_t i = 0; i < nframes; ++i) {
+		lbuf[i] = buffer[i << 1];
+		rbuf[i] = buffer[(i << 1) + 1];
+	}
+
+	return 0;
+}
+
+void keyfun(GLFWwindow* window, int key, int scancode, int action, int mods) {
+	if(action != GLFW_PRESS) return;
+	
+	if(key == GLFW_KEY_ESCAPE) {
+		glfwSetWindowShouldClose(window, GL_TRUE);
+	}
+}
+
+void charfun(GLFWwindow* window, unsigned int codepoint) {
+	if(codepoint == 'q' || codepoint == 'Q') {
+		glfwSetWindowShouldClose(window, GL_TRUE);
+	} else if(codepoint == ' ') {
+		paused = !paused;
+	} else if(codepoint == 'l' || codepoint == 'L') {
+		if(loop > 0) {
+			printf("Looping: ON\n");
+			loop = 0;
+		} else {
+			printf("Looping: OFF\n");
+			loop = xm_get_loop_count(xmctx) + 1;
+		}
 	}
 }
 
@@ -97,12 +135,18 @@ void setup(int argc, char** argv) {
 			continue;
 		}
 
-		if(!strcmp(argv[i], "--device")
-		   || !strcmp(argv[i], "--buffer-size")
-		   || !strcmp(argv[i], "--period-size")
-		   || !strcmp(argv[i], "--rate")
-		   || !strcmp(argv[i], "--format")) {
-			++i;
+		if(!strcmp(argv[i], "--no-autoconnect")) {
+			autoconnect = false;
+			continue;
+		}
+
+		if(!strcmp(argv[i], "--paused")) {
+			paused = true;
+			continue;
+		}
+
+		if(!strcmp(argv[i], "--loop")) {
+			loop = 0;
 			continue;
 		}
 
@@ -122,6 +166,8 @@ void setup(int argc, char** argv) {
 	window = glfwCreateWindow(width, height, argv[0], fullscreen ? glfwGetPrimaryMonitor() : NULL, NULL);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 	glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
+	glfwSetKeyCallback(window, keyfun);
+	glfwSetCharCallback(window, charfun);
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(interval);
 
@@ -191,19 +237,50 @@ void setup(int argc, char** argv) {
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
+	client = jack_client_open("xmgl", JackNullOption, NULL);
+	if(client == NULL) {
+		FATAL("jack_client_open() returned NULL\n");
+	}
+	printf("JACK client name: %s\n", jack_get_client_name(client));
+	printf("JACK buffer size: %d frames\n", jack_get_buffer_size(client));
 	
-	init_alsa_device(argc, argv, 64, 2048, SND_PCM_NONBLOCK, &device, &period_size, &rate, &format);
+	jack_set_process_callback(client, jack_process, NULL);
+	rate = jack_get_sample_rate(client);
+	printf("Using JACK sample rate: %d Hz\n", rate);
+
+	left = jack_port_register(client, "Left", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput | JackPortIsTerminal, 0);
+	right = jack_port_register(client, "Right", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput | JackPortIsTerminal, 0);
+        
 	create_context_from_file(&xmctx, rate, argv[filenameidx]);
 	if(xmctx == NULL) exit(1);
-	xm_set_max_loop_count(xmctx, 1);
 	channels = xm_get_number_of_channels(xmctx);
 	instruments = xm_get_number_of_instruments(xmctx);
-	CHECK_ALSA_CALL(snd_pcm_prepare(device));
+
+	jack_activate(client);
+
+	if(autoconnect) {
+		const char** ports = jack_get_ports(client, NULL, NULL, JackPortIsPhysical | JackPortIsInput | JackPortIsTerminal);
+		if(ports != NULL) {
+			if(ports[0] != NULL && ports[1] != NULL) {
+				char ipname[16];
+				
+				snprintf(ipname, 16, "%s:Left", jack_get_client_name(client));
+				printf("Autoconnecting %s -> %s\n", ipname, ports[0]);
+				jack_connect(client, "xmgl:Left", ports[0]);
+				
+				snprintf(ipname, 16, "%s:Right", jack_get_client_name(client));
+				printf("Autoconnecting %s -> %s\n", ipname, ports[1]);
+				jack_connect(client, "xmgl:Right", ports[1]);
+			}
+
+			jack_free(ports);
+		}
+	}
 }
 
 void teardown(void) {
-	snd_pcm_drop(device);
-	snd_pcm_close(device);
+	jack_client_close(client);
 	xm_free_context(xmctx);
 	
 	glfwDestroyWindow(window);
@@ -216,8 +293,6 @@ void render(void) {
 	glfwGetFramebufferSize(window, &width, &height);
 	glViewport(0, 0, width, height);
 	glClear(GL_COLOR_BUFFER_BIT);
-	
-	loop = xm_get_loop_count(xmctx);
 
 	for(uint16_t i = 1; i <= channels; ++i) {
 		active = xm_is_channel_active(xmctx, i);
@@ -240,17 +315,13 @@ void render(void) {
 int main(int argc, char** argv) {	
 	setup(argc, argv);
 	
-	float xmbuffer[period_size];
-	float alsabuffer[period_size];
-	
 	while(!glfwWindowShouldClose(window)) {
-		play_audio(xmbuffer, alsabuffer);
 		render();
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 
-		if(glfwGetKey(window, GLFW_KEY_ESCAPE) || loop > 0) {
+		if(loop > 0 && xm_get_loop_count(xmctx) >= loop) {
 			glfwSetWindowShouldClose(window, GL_TRUE);
 		}
 	}
