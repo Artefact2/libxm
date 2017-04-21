@@ -18,7 +18,7 @@
 #include <math.h>
 
 static GLFWwindow* window;
-static int interval = 0, width = 1024, height = 1024;
+static int interval = 1, width = 1024, height = 1024;
 static bool fullscreen = false;
 
 static bool autoconnect = true;
@@ -50,7 +50,7 @@ const GLbyte indices[] = {
 void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s\n"
 		  "\t\tShow this message.\n"
-	      "\t%s [--fullscreen] [--width 1024] [--height 1024] [--interval 0] [--no-autoconnect] [--paused] [--loop] [--] <filename>\n"
+	      "\t%s [--fullscreen] [--width 1024] [--height 1024] [--interval 1] [--no-autoconnect] [--paused] [--loop] [--] <filename>\n"
 		  "\t\tPlay this module.\n\nKey bindings:\n\t<ESC>/q quit\n\t<Space> play/pause\n\tL toggle looping\n",
 		  progname, progname);
 }
