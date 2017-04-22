@@ -10,7 +10,7 @@
 
 static const unsigned int channels = 2;
 static const unsigned int rate = 48000;
-static const size_t buffer_size = rate;
+static const size_t buffer_size = 48000;
 
 void puts_uint32_le(uint32_t i, FILE* f) {
 	char* c = (char*)(&i);

@@ -1,3 +1,3 @@
-build/
+build*
 examples/xmgl/vs.h
 examples/xmgl/fs.h
