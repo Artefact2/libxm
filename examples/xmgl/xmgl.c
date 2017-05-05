@@ -16,9 +16,13 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <math.h>
+#include <assert.h>
+
+#define NUM_TIMING 512
+#define TIMING_FRAMES 256
 
 static GLFWwindow* window;
-static int interval = 1, width = 1024, height = 1024;
+static int interval = 0, width = 1024, height = 1024;
 static bool fullscreen = false;
 
 static bool autoconnect = true;
@@ -31,7 +35,6 @@ static unsigned int rate;
 
 static xm_context_t* xmctx;
 static uint8_t loop = 1;
-static uint64_t samples = 0;
 
 static uint16_t channels, instruments;
 
@@ -47,6 +50,25 @@ const GLbyte indices[] = {
 	2, 3, 0
 };
 
+struct channel_timing_info {
+	bool active;
+	uint16_t instrument;
+	float frequency;
+	float volume;
+	float panning;
+	uint64_t latest_trigger;
+};
+
+struct module_timing_info {
+	uint64_t latency_comp;
+	size_t i;
+
+	uint64_t* frames;
+	struct channel_timing_info* channels;
+};
+
+struct module_timing_info mti;
+
 void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s\n"
 		  "\t\tShow this message.\n"
@@ -56,24 +78,55 @@ void usage(char* progname) {
 }
 
 int jack_process(jack_nframes_t nframes, void* arg) {
-	/* XXX: be more clever with buffer size: jack_get_buffer_size(), etc. */	
-	float buffer[nframes << 1];
+	float buffer[TIMING_FRAMES * 2];
 	float* lbuf = jack_port_get_buffer(left, nframes);
 	float* rbuf = jack_port_get_buffer(right, nframes);;
 
 	if(paused) {
 		memset(buffer, 0, sizeof(buffer));
 	} else {
-		xm_generate_samples(xmctx, buffer, nframes);
-		xm_get_position(xmctx, NULL, NULL, NULL, &samples);
-	}
+		size_t tframes;
+		if(nframes >= TIMING_FRAMES) {
+			assert(nframes % TIMING_FRAMES == 0);
+			tframes = TIMING_FRAMES;
+		} else {
+			tframes = nframes;
+		}
+		
+		for(size_t off = 0; off < nframes; off += tframes) {
+			xm_generate_samples(xmctx, buffer, tframes);
+		
+			mti.i++;
+			if(mti.i >= NUM_TIMING) mti.i = 0;
+		
+			xm_get_position(xmctx, NULL, NULL, NULL, &(mti.frames[mti.i]));
+			for(size_t k = 1; k <= channels; ++k) {
+				struct channel_timing_info* chn = &(mti.channels[mti.i * channels + k - 1]);
+				chn->active = xm_is_channel_active(xmctx, k);
+				chn->instrument = xm_get_instrument_of_channel(xmctx, k);
+				chn->frequency = xm_get_frequency_of_channel(xmctx, k);
+				chn->volume = xm_get_volume_of_channel(xmctx, k);
+				chn->panning = xm_get_panning_of_channel(xmctx, k);
+				chn->latest_trigger = xm_get_latest_trigger_of_channel(xmctx, k);
+			}
 
-	for(size_t i = 0; i < nframes; ++i) {
-		lbuf[i] = buffer[i << 1];
-		rbuf[i] = buffer[(i << 1) + 1];
+			for(size_t i = 0; i < tframes; ++i) {
+				lbuf[off + i] = buffer[i << 1];
+				rbuf[off + i] = buffer[(i << 1) + 1];
+			}
+		}
 	}
 
 	return 0;
+}
+
+void jack_latency(jack_latency_callback_mode_t mode, void* arg) {
+	if(mode == JackCaptureLatency) return;
+
+	jack_latency_range_t range;
+	jack_port_get_latency_range(left, mode, &range);
+	printf("JACK output latency: %d/%d frames\n", range.min, range.max);
+	mti.latency_comp = range.max;
 }
 
 void keyfun(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -246,6 +299,7 @@ void setup(int argc, char** argv) {
 	printf("JACK buffer size: %d frames\n", jack_get_buffer_size(client));
 	
 	jack_set_process_callback(client, jack_process, NULL);
+	jack_set_latency_callback(client, jack_latency, NULL);
 	rate = jack_get_sample_rate(client);
 	printf("Using JACK sample rate: %d Hz\n", rate);
 
@@ -256,6 +310,11 @@ void setup(int argc, char** argv) {
 	if(xmctx == NULL) exit(1);
 	channels = xm_get_number_of_channels(xmctx);
 	instruments = xm_get_number_of_instruments(xmctx);
+
+	mti.latency_comp = 0;
+	mti.i = 0;
+	mti.frames = malloc(NUM_TIMING * sizeof(float));
+	mti.channels = malloc(NUM_TIMING * channels * sizeof(struct channel_timing_info));
 
 	jack_activate(client);
 
@@ -294,18 +353,33 @@ void render(void) {
 	glViewport(0, 0, width, height);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	for(uint16_t i = 1; i <= channels; ++i) {
-		active = xm_is_channel_active(xmctx, i);
+	struct channel_timing_info* chns = NULL;
+	uint64_t frames;
+	for(size_t k = 0; k < NUM_TIMING; ++k) {
+		size_t j = (mti.i >= k) ? (mti.i - k) : (NUM_TIMING + mti.i - k);
+		if(mti.frames[j] + mti.latency_comp <= mti.frames[mti.i]) {
+			chns = &(mti.channels[j * channels]);
+			frames = mti.frames[j];
+			break;
+		}
+
+		if(k == NUM_TIMING - 1) {
+			FATAL("Latency comp couldn't keep up!\n");
+		}
+	}
+
+	for(uint16_t i = 0; i < channels; ++i) {
+		active = chns[i].active;
 		glUniform4f(xmciu,
 		            (float)i,
 		            (float)channels,
-		            active ? (float)xm_get_instrument_of_channel(xmctx, i) : 0.f,
+		            active ? (float)chns[i].instrument : 0.f,
 		            (float)instruments
 			);
 		glUniform4f(xmdatau,
-		            active ? log2f(xm_get_frequency_of_channel(xmctx, i)) : 0.f,
-		            active ? xm_get_volume_of_channel(xmctx, i) : 0.f,
-		            (float)(samples - xm_get_latest_trigger_of_channel(xmctx, i)) / (float)rate,
+		            active ? log2f(chns[i].frequency) : 0.f,
+		            active ? chns[i].volume : 0.f,
+		            (float)(frames - chns[i].latest_trigger) / (float)rate,
 		            0.f
 			);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);

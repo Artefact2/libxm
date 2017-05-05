@@ -27,7 +27,7 @@ ADD_DEFINITIONS("-g")
 ENDIF()
 
 IF(XM_DEMO_MODE)
-ADD_DEFINITIONS("-Os -fdata-sections -ffunction-sections -flto -fuse-linker-plugin")
+ADD_DEFINITIONS("-Os -fdata-sections -ffunction-sections -flto -fuse-linker-plugin -fvisibility=hidden")
 SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
 ELSE()
 ADD_DEFINITIONS("-O2")
