@@ -12,7 +12,7 @@ vec3 color(float hue) {
 
 void main() {
 	float vol = smoothstep(0.0, 1.0, xmdata.y);
-	float y = 2.0 * xmci.x / xmci.y - 1.0 - 1.0 / xmci.y;
+	float y = 2.0 * xmci.x / xmci.y - 1.0 + 1.0 / xmci.y;
 	if(abs(vposition.y - y) > min(.05, .9 / xmci.y) * vol) discard;
 	
 	float x = (xmdata.x - 15.0) / 4.0;
