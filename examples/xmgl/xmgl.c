@@ -18,7 +18,7 @@
 #include <math.h>
 #include <assert.h>
 
-#define NUM_TIMING 512
+#define NUM_TIMING 256
 #define TIMING_FRAMES 256
 
 static GLFWwindow* window;
@@ -32,6 +32,7 @@ static jack_client_t* client;
 static jack_port_t* left;
 static jack_port_t* right;
 static unsigned int rate;
+static jack_nframes_t time_offset;
 
 static xm_context_t* xmctx;
 static uint8_t loop = 1;
@@ -83,7 +84,9 @@ int jack_process(jack_nframes_t nframes, void* arg) {
 	float* rbuf = jack_port_get_buffer(right, nframes);;
 
 	if(paused) {
-		memset(buffer, 0, sizeof(buffer));
+		memset(lbuf, 0, nframes * sizeof(float));
+		memset(rbuf, 0, nframes * sizeof(float));
+		time_offset += nframes;
 	} else {
 		size_t tframes;
 		if(nframes >= TIMING_FRAMES) {
@@ -125,6 +128,8 @@ void jack_latency(jack_latency_callback_mode_t mode, void* arg) {
 
 	jack_latency_range_t range;
 	jack_port_get_latency_range(left, mode, &range);
+	if(mti.latency_comp == range.max) return;
+	
 	printf("JACK output latency: %d/%d frames\n", range.min, range.max);
 	mti.latency_comp = range.max;
 }
@@ -314,9 +319,12 @@ void setup(int argc, char** argv) {
 	mti.latency_comp = 0;
 	mti.i = 0;
 	mti.frames = malloc(NUM_TIMING * sizeof(float));
+	memset(mti.frames, 0, NUM_TIMING * sizeof(float));
 	mti.channels = malloc(NUM_TIMING * channels * sizeof(struct channel_timing_info));
+	memset(mti.channels, 0, NUM_TIMING * channels * sizeof(struct channel_timing_info));
 
 	jack_activate(client);
+	time_offset = jack_time_to_frames(client, jack_get_time());
 
 	if(autoconnect) {
 		const char** ports = jack_get_ports(client, NULL, NULL, JackPortIsPhysical | JackPortIsInput | JackPortIsTerminal);
@@ -357,14 +365,10 @@ void render(void) {
 	uint64_t frames;
 	for(size_t k = 0; k < NUM_TIMING; ++k) {
 		size_t j = (mti.i >= k) ? (mti.i - k) : (NUM_TIMING + mti.i - k);
-		if(mti.frames[j] + mti.latency_comp <= mti.frames[mti.i]) {
+		if(mti.frames[j] + mti.latency_comp <= (jack_time_to_frames(client, jack_get_time()) - time_offset) || k == NUM_TIMING - 1) {
 			chns = &(mti.channels[j * channels]);
 			frames = mti.frames[j];
 			break;
-		}
-
-		if(k == NUM_TIMING - 1) {
-			FATAL("Latency comp couldn't keep up!\n");
 		}
 	}
 
