@@ -18,11 +18,13 @@
 #include <math.h>
 #include <assert.h>
 
-#define NUM_TIMING 256
+#define MAX_CHANNELS 32
+#define NUM_TIMING 512
 #define TIMING_FRAMES 256
+#define GL_FRAMES_AVG_COUNT 60
 
 static GLFWwindow* window;
-static int interval = 0, width = 1024, height = 1024;
+static int interval = 1, width = 1024, height = 1024;
 static bool fullscreen = false;
 
 static bool autoconnect = true;
@@ -33,6 +35,7 @@ static jack_port_t* left;
 static jack_port_t* right;
 static unsigned int rate;
 static jack_nframes_t time_offset;
+static uint64_t jack_latency_comp = 0;
 
 static xm_context_t* xmctx;
 static uint8_t loop = 1;
@@ -61,14 +64,20 @@ struct channel_timing_info {
 };
 
 struct module_timing_info {
-	uint64_t latency_comp;
+	int64_t latency_comp;
 	size_t i;
 
-	uint64_t* frames;
-	struct channel_timing_info* channels;
+	uint64_t frames[NUM_TIMING];
+	struct channel_timing_info channels[MAX_CHANNELS * NUM_TIMING];
 };
 
-struct module_timing_info mti;
+static struct module_timing_info mti;
+
+static jack_nframes_t glf_total = 0;
+static jack_nframes_t glf_times[GL_FRAMES_AVG_COUNT];
+static jack_nframes_t glf_last = 0;
+static uint64_t gl_framecount = 0;
+static uint64_t gl_latency_comp = 0;
 
 void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s\n"
@@ -78,16 +87,16 @@ void usage(char* progname) {
 		  progname, progname);
 }
 
-int jack_process(jack_nframes_t nframes, void* arg) {
-	float buffer[TIMING_FRAMES * 2];
+int jack_process(jack_nframes_t nframes, void* arg) {	
+	static float buffer[TIMING_FRAMES * 2];
 	float* lbuf = jack_port_get_buffer(left, nframes);
-	float* rbuf = jack_port_get_buffer(right, nframes);;
+	float* rbuf = jack_port_get_buffer(right, nframes);
 
 	if(paused) {
 		memset(lbuf, 0, nframes * sizeof(float));
 		memset(rbuf, 0, nframes * sizeof(float));
 		time_offset += nframes;
-	} else {
+	} else {		
 		size_t tframes;
 		if(nframes >= TIMING_FRAMES) {
 			assert(nframes % TIMING_FRAMES == 0);
@@ -98,10 +107,7 @@ int jack_process(jack_nframes_t nframes, void* arg) {
 		
 		for(size_t off = 0; off < nframes; off += tframes) {
 			xm_generate_samples(xmctx, buffer, tframes);
-		
-			mti.i++;
-			if(mti.i >= NUM_TIMING) mti.i = 0;
-		
+			
 			xm_get_position(xmctx, NULL, NULL, NULL, &(mti.frames[mti.i]));
 			for(size_t k = 1; k <= channels; ++k) {
 				struct channel_timing_info* chn = &(mti.channels[mti.i * channels + k - 1]);
@@ -117,6 +123,8 @@ int jack_process(jack_nframes_t nframes, void* arg) {
 				lbuf[off + i] = buffer[i << 1];
 				rbuf[off + i] = buffer[(i << 1) + 1];
 			}
+		
+			mti.i = (mti.i + 1) % NUM_TIMING;
 		}
 	}
 
@@ -128,10 +136,10 @@ void jack_latency(jack_latency_callback_mode_t mode, void* arg) {
 
 	jack_latency_range_t range;
 	jack_port_get_latency_range(left, mode, &range);
-	if(mti.latency_comp == range.max) return;
+	if(jack_latency_comp == range.max) return;
 	
 	printf("JACK output latency: %d/%d frames\n", range.min, range.max);
-	mti.latency_comp = range.max;
+	jack_latency_comp = range.max;
 }
 
 void keyfun(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -302,7 +310,7 @@ void setup(int argc, char** argv) {
 	}
 	printf("JACK client name: %s\n", jack_get_client_name(client));
 	printf("JACK buffer size: %d frames\n", jack_get_buffer_size(client));
-	
+
 	jack_set_process_callback(client, jack_process, NULL);
 	jack_set_latency_callback(client, jack_latency, NULL);
 	rate = jack_get_sample_rate(client);
@@ -318,10 +326,6 @@ void setup(int argc, char** argv) {
 
 	mti.latency_comp = 0;
 	mti.i = 0;
-	mti.frames = malloc(NUM_TIMING * sizeof(float));
-	memset(mti.frames, 0, NUM_TIMING * sizeof(float));
-	mti.channels = malloc(NUM_TIMING * channels * sizeof(struct channel_timing_info));
-	memset(mti.channels, 0, NUM_TIMING * channels * sizeof(struct channel_timing_info));
 
 	jack_activate(client);
 	time_offset = jack_time_to_frames(client, jack_get_time());
@@ -344,6 +348,8 @@ void setup(int argc, char** argv) {
 			jack_free(ports);
 		}
 	}
+
+	memset(glf_times, 0, GL_FRAMES_AVG_COUNT * sizeof(jack_nframes_t));
 }
 
 void teardown(void) {
@@ -363,15 +369,20 @@ void render(void) {
 
 	struct channel_timing_info* chns = NULL;
 	uint64_t frames;
-	for(size_t k = 0; k < NUM_TIMING; ++k) {
-		size_t j = (mti.i >= k) ? (mti.i - k) : (NUM_TIMING + mti.i - k);
-		if(mti.frames[j] + mti.latency_comp <= (jack_time_to_frames(client, jack_get_time()) - time_offset) || k == NUM_TIMING - 1) {
-			chns = &(mti.channels[j * channels]);
-			frames = mti.frames[j];
-			break;
-		}
-	}
+	jack_nframes_t now = jack_time_to_frames(client, jack_get_time());
+	jack_nframes_t target = now - time_offset;
+	size_t j = 0;
+	mti.latency_comp = jack_latency_comp - gl_latency_comp;
 
+	/* XXX: be smarter */
+	for(size_t i = 1; i < NUM_TIMING; ++i) {
+		if(labs(mti.frames[i] + mti.latency_comp - target) >= labs(mti.frames[j] + mti.latency_comp - target)) continue;
+		j = i;
+		if(labs(mti.frames[i] + mti.latency_comp - target) < TIMING_FRAMES) break;
+	}
+	chns = &(mti.channels[j * channels]);
+	frames = mti.frames[j];
+	
 	for(uint16_t i = 0; i < channels; ++i) {
 		active = chns[i].active;
 		glUniform4f(xmciu,
@@ -388,6 +399,17 @@ void render(void) {
 			);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);
 	}
+
+	if(glf_last == 0) {
+		glf_last = now;
+	}
+
+	glf_total -= glf_times[gl_framecount];
+	glf_times[gl_framecount] = now - glf_last;
+	glf_total += now - glf_last;
+	glf_last = now;
+	gl_latency_comp = glf_total / GL_FRAMES_AVG_COUNT;
+	gl_framecount = (gl_framecount + 1) % GL_FRAMES_AVG_COUNT;
 }
 
 int main(int argc, char** argv) {	
