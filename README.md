@@ -10,7 +10,13 @@ Written in C11 and released under the WTFPL license, version 2.
 Examples
 ========
 
-Three example programs are provided.
+Some example programs are provided.
+
+* `xmgl` is a music visualiser that uses OpenGL and JACK for very
+  precise audio synchronisation. See a demo here:
+  <https://www.youtube.com/watch?v=zZkhl6XBUVM> or something similar
+  that runs in the browser:
+  [libxm.js](https://artefact2.github.io/libxm.js/).
 
 * `xmtoalsa` is a simple player that uses the ALSA library. It
   produces `xmp`-like output while playing. Use `xmtoalsa --help` (or
@@ -31,15 +37,7 @@ Three example programs are provided.
   output.
 
   ~~~
-  ./xmtoau my_module.xm | play -
-
-  # Alternative (trancode to Opus using ffmpeg+libopus)
-  ./xmtoau my_module.xm | ffmpeg -i - -c:a libopus my_module.opus
-  mplayer my_module.opus
-
-  # Alternative (trancode to MP3 using ffmpeg+lame)
-  ./xmtoau my_module.xm | ffmpeg -i - -c:a libmp3lame -q:a 0 my_module.mp3
-  mplayer my_module.mp3
+  mpv <(./xmtoau my_module.xm)
   ~~~
 
 * `xmbench` is a benchmark program.
