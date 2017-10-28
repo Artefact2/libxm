@@ -231,7 +231,7 @@ struct xm_sample_s {
  typedef struct xm_channel_context_s xm_channel_context_t;
 
  struct xm_context_s {
-	 void* allocated_memory;
+	 size_t ctx_size; /* Must be first for xm_load_internal() */
 	 xm_module_t module;
 	 uint32_t rate;
 

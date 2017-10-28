@@ -39,7 +39,7 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 	memset(mempool, 0, bytes_needed);
 
 	ctx = (*ctxp = (xm_context_t*)mempool);
-	ctx->allocated_memory = mempool; /* Keep original pointer for free() */
+	ctx->ctx_size = bytes_needed; /* Keep original requested size for xmconvert */
 	mempool += sizeof(xm_context_t);
 
 	ctx->rate = rate;
@@ -86,7 +86,7 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 }
 
 void xm_free_context(xm_context_t* context) {
-	free(context->allocated_memory);
+	free(context);
 }
 
 void xm_set_max_loop_count(xm_context_t* context, uint8_t loopcnt) {
