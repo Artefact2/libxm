@@ -19,7 +19,7 @@
 int main(int argc, char** argv) {
 	xm_context_t* ctx;
 	FILE* out;
-	size_t i, j;
+	size_t i, j, k;
 	
 	if(argc != 3) FATAL("Usage: %s <in.xm> <out.libxm>\n", argv[0]);
 	create_context_from_file(&ctx, 0, argv[1]);
@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
 	if(out == NULL) FATAL("cannot open output file %s for writing\n", argv[2]);
 
 	fputs("WARNING! The resulting file is highly non-portable.\nIt will most likely not be loadable:\n* On a different CPU architecture\n* On a different libxm version\n* On a libxm compiled with a different compiler\n* On a libxm compiled with different cflags\nYou have been warned!\n", stderr);
-
+	
 	/* Ugly pointer offsetting ahead */
 
 	for(i = 0; i < ctx->module.num_patterns; ++i) {
@@ -37,6 +37,14 @@ int main(int argc, char** argv) {
 
 	for(i = 0; i < ctx->module.num_instruments; ++i) {
 		for(j = 0; j < ctx->module.instruments[i].num_samples; ++j) {
+			if(ctx->module.instruments[i].samples[j].length > 1) {
+				/* Half-ass delta encoding of samples, this compresses
+				 * much better */
+				for(k = ctx->module.instruments[i].samples[j].length - 1; k > 0; --k) {
+					ctx->module.instruments[i].samples[j].data[k] -= ctx->module.instruments[i].samples[j].data[k-1];
+				}
+			}
+			
 			OFFSET(ctx->module.instruments[i].samples[j].data);
 		}
 		

@@ -39,20 +39,15 @@ void puts_uint32_be(uint32_t i) {
 
 /* XXX: refactor me in libxm eventually */
 static void load_internal(xm_context_t** ctxp, unsigned int rate, const char* path) {
-	size_t ctx_size, i, j;
+	size_t ctx_size, i, j, k;
 	FILE* in = fopen(path, "rb");
 	
-	if(!fread(&ctx_size, sizeof(size_t), 1, in)) {
-		*ctxp = NULL;
-		return;
-	}
+	fread(&ctx_size, sizeof(size_t), 1, in);
 
 	*ctxp = malloc(ctx_size);
-	rewind(in);
-	if(!fread(*ctxp, ctx_size, 1, in)) {
-		*ctxp = NULL;
-		return;
-	}
+	fseek(in, 0, SEEK_SET);
+
+	fread(*ctxp, ctx_size, 1, in);
 
 	(*ctxp)->rate = rate;
 
@@ -72,6 +67,12 @@ static void load_internal(xm_context_t** ctxp, unsigned int rate, const char* pa
 		
 		for(j = 0; j < (*ctxp)->module.instruments[i].num_samples; ++j) {
 			OFFSET((*ctxp)->module.instruments[i].samples[j].data);
+
+			if((*ctxp)->module.instruments[i].samples[j].length > 1) {
+				for(k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) {
+					(*ctxp)->module.instruments[i].samples[j].data[k] += (*ctxp)->module.instruments[i].samples[j].data[k-1];
+				}
+			}
 		}
 	}
 }
