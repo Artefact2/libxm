@@ -140,10 +140,10 @@ size_t xm_get_memory_needed_for_context(const char* moddata, size_t moddata_leng
 
 			if(flags & (1 << 4)) {
 				/* 16 bit sample */
-				memory_needed += sample_size * (sizeof(float) >> 1);
+				memory_needed += sample_size;
 			} else {
 				/* 8 bit sample */
-				memory_needed += sample_size * sizeof(float);
+				memory_needed += sample_size << 1;
 			}
 
 			offset += sample_header_size;
@@ -360,18 +360,16 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 			sample->panning = (float)READ_U8(offset + 15) / (float)0xFF;
 			sample->relative_note = (int8_t)READ_U8(offset + 16);
 			READ_MEMCPY(sample->name, 18, SAMPLE_NAME_LENGTH);
-			sample->data = (float*)mempool;
+			sample->data = (int16_t*)mempool;
 
 			if(sample->bits == 16) {
-				/* 16 bit sample */
-				mempool += sample->length * (sizeof(float) >> 1);
+				mempool += sample->length;
 				sample->loop_start >>= 1;
 				sample->loop_length >>= 1;
 				sample->loop_end >>= 1;
 				sample->length >>= 1;
 			} else {
-				/* 8 bit sample */
-				mempool += sample->length * sizeof(float);
+				mempool += sample->length << 1;
 			}
 
 			offset += sample_header_size;
@@ -386,14 +384,14 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 				int16_t v = 0;
 				for(uint32_t k = 0; k < length; ++k) {
 					v = v + (int16_t)READ_U16(offset + (k << 1));
-					sample->data[k] = (float)v / (float)(1 << 15);
+					sample->data[k] = v;
 				}
 				offset += sample->length << 1;
 			} else {
 				int8_t v = 0;
 				for(uint32_t k = 0; k < length; ++k) {
 					v = v + (int8_t)READ_U8(offset + k);
-					sample->data[k] = (float)v / (float)(1 << 7);
+					sample->data[k] = v << 8;
 				}
 				offset += sample->length;
 			}

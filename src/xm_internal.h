@@ -99,7 +99,7 @@ struct xm_sample_s {
 	int8_t relative_note;
 	uint64_t latest_trigger;
 
-	float* data;
+	int16_t* data;
  };
  typedef struct xm_sample_s xm_sample_t;
 

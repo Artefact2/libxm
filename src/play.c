@@ -1318,7 +1318,7 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 		break;
 	}
 
-	float endval = XM_LINEAR_INTERPOLATION ? XM_LERP(u, v, t) : u;
+	float endval = (XM_LINEAR_INTERPOLATION ? XM_LERP(u, v, t) : u) / 32768.f;
 
 #if XM_RAMPING
 	if(ch->frame_count < XM_SAMPLE_RAMPING_POINTS) {

@@ -15,17 +15,16 @@ loaded, see `xmconvert` below) fits in under 7KiB of compressed
 machine code.
 
 ~~~
-Silmeria ~/Projects/libxm/build-prod/examples (master) % wc -c *
- 136004 cerror-expatarimental.libxm
-   4664 cerror-expatarimental.libxm.xz
-  49240 cerror-expatarimental.xm
-   4820 cerror-expatarimental.xm.xz
-  22040 libxmtoau
-   6981 libxmtoau.packed
-  37008 xmtoalsa
-  12449 xmtoalsa.packed
-  26472 xmtoau
-   9565 xmtoau.packed
+pack libxmtoau{,.packed}
+./xmconvert cerror-expatarimental.{xm,libxm}
+xz -9ekf cerror-expatarimental.{xm,libxm}
+wc -c cerror-expatarimental.* libxmtoau.packed
+
+118582 cerror-expatarimental.libxm
+  4320 cerror-expatarimental.libxm.xz
+ 49240 cerror-expatarimental.xm
+  4820 cerror-expatarimental.xm.xz
+  6985 libxmtoau.packed
 ~~~
 
 Pack script used: https://github.com/Artefact2/boilerplate-demo/blob/master/src/pack
