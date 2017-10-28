@@ -40,12 +40,18 @@ int main(int argc, char** argv) {
 			if(ctx->module.instruments[i].samples[j].length > 1) {
 				/* Half-ass delta encoding of samples, this compresses
 				 * much better */
-				for(k = ctx->module.instruments[i].samples[j].length - 1; k > 0; --k) {
-					ctx->module.instruments[i].samples[j].data[k] -= ctx->module.instruments[i].samples[j].data[k-1];
+				if(ctx->module.instruments[i].samples[j].bits == 8) {
+					for(k = ctx->module.instruments[i].samples[j].length - 1; k > 0; --k) {
+						ctx->module.instruments[i].samples[j].data8[k] -= ctx->module.instruments[i].samples[j].data8[k-1];
+					}
+				} else {
+					for(k = ctx->module.instruments[i].samples[j].length - 1; k > 0; --k) {
+						ctx->module.instruments[i].samples[j].data16[k] -= ctx->module.instruments[i].samples[j].data16[k-1];
+					}
 				}
 			}
 			
-			OFFSET(ctx->module.instruments[i].samples[j].data);
+			OFFSET(ctx->module.instruments[i].samples[j].data8);
 		}
 		
 		OFFSET(ctx->module.instruments[i].samples);

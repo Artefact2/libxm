@@ -66,11 +66,17 @@ static void load_internal(xm_context_t** ctxp, unsigned int rate, const char* pa
 		OFFSET((*ctxp)->module.instruments[i].samples);
 		
 		for(j = 0; j < (*ctxp)->module.instruments[i].num_samples; ++j) {
-			OFFSET((*ctxp)->module.instruments[i].samples[j].data);
+			OFFSET((*ctxp)->module.instruments[i].samples[j].data8);
 
 			if((*ctxp)->module.instruments[i].samples[j].length > 1) {
-				for(k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) {
-					(*ctxp)->module.instruments[i].samples[j].data[k] += (*ctxp)->module.instruments[i].samples[j].data[k-1];
+				if((*ctxp)->module.instruments[i].samples[j].bits == 8) {
+					for(k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) {
+						(*ctxp)->module.instruments[i].samples[j].data8[k] += (*ctxp)->module.instruments[i].samples[j].data8[k-1];
+					}
+				} else {
+					for(k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) {
+						(*ctxp)->module.instruments[i].samples[j].data16[k] += (*ctxp)->module.instruments[i].samples[j].data16[k-1];
+					}
 				}
 			}
 		}

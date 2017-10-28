@@ -99,7 +99,10 @@ struct xm_sample_s {
 	int8_t relative_note;
 	uint64_t latest_trigger;
 
-	int16_t* data;
+	union {
+		int8_t* data8;
+		int16_t* data16;
+	};
  };
  typedef struct xm_sample_s xm_sample_t;
 
