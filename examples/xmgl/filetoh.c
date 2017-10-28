@@ -17,12 +17,6 @@
 int main(int argc, char** argv) {
 	FILE *in, *out;
 	int c;
-
-	size_t rlen = strlen(argv[1]);
-	char outname[rlen + 2];
-	memcpy(outname, argv[1], rlen);
-	outname[rlen] = '.';
-	outname[rlen + 1] = 'h';
 	
 	in = fopen(argv[2], "r");
 	if(in == NULL) {
@@ -30,7 +24,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	out = fopen(outname, "w");
+	out = fopen(argv[3], "w");
 	if(out == NULL) {
 		perror("could not open output file");
 		return 1;
