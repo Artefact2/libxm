@@ -1,9 +1,17 @@
 libxm
 =====
 
-A small XM (FastTracker II Extended Module) player library. Designed
-for easy integration in demos and such, and provides timing functions
-for easy sync against specific instruments, samples or channels.
+A small XM (FastTracker II Extended Module) player library. Main
+features:
+
+* Small size in mind; many features can be disabled at compile-time,
+  or are optimized out by the compiler if not used.
+
+* Timing functions for synchronising against specific instruments,
+  samples or channels.
+
+* Samples can be loaded and altered at run-time, making it possible to
+  use libxm with softsynths or other real-time signal processors.
 
 Written in C11 and released under the WTFPL license, version 2.
 
@@ -75,6 +83,8 @@ Some example programs are provided.
   <https://www.youtube.com/watch?v=zZkhl6XBUVM> or something similar
   that runs in the browser:
   [libxm.js](https://artefact2.github.io/libxm.js/).
+
+* `xmprocdemo`: see [README](./examples/xmprocdemo/README.md)
 
 * `xmtoalsa` is a simple player that uses the ALSA library. It
   produces `xmp`-like output while playing. Use `xmtoalsa --help` (or

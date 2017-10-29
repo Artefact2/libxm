@@ -9,15 +9,15 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Usage: ./program <resource_name> <resource_file>
- *
- * Will create a file named resource_name.h containing the resource
- * file as a static, const byte array.
- */
 int main(int argc, char** argv) {
+	if(argc != 4) {
+		fprintf(stderr, "Usage: %s <resource_name> <infile> <outfile.h>\n", argv[0]);
+		return 1;
+	}
+
 	FILE *in, *out;
 	int c;
-	
+
 	in = fopen(argv[2], "r");
 	if(in == NULL) {
 		perror("could not open input file");
@@ -33,9 +33,9 @@ int main(int argc, char** argv) {
 	fprintf(out, "static const char %s[] = {\n", argv[1]);
 
 	while((c = fgetc(in)) != EOF) {
-		fprintf(out, "%i,", c);
+		fprintf(out, "%hhi,", c);
 	}
-	
+
 	fprintf(out, "0\n};\n");
 	fclose(in);
 	fclose(out);
