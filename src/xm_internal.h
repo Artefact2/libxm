@@ -85,7 +85,9 @@ struct xm_envelope_s {
 typedef struct xm_envelope_s xm_envelope_t;
 
 struct xm_sample_s {
+#if XM_STRINGS
 	char name[SAMPLE_NAME_LENGTH + 1];
+#endif
 	int8_t bits; /* Either 8 or 16 */
 
 	uint32_t length;
@@ -103,174 +105,178 @@ struct xm_sample_s {
 		int8_t* data8;
 		int16_t* data16;
 	};
- };
- typedef struct xm_sample_s xm_sample_t;
+};
+typedef struct xm_sample_s xm_sample_t;
 
- struct xm_instrument_s {
-	 char name[INSTRUMENT_NAME_LENGTH + 1];
-	 uint16_t num_samples;
-	 uint8_t sample_of_notes[NUM_NOTES];
-	 xm_envelope_t volume_envelope;
-	 xm_envelope_t panning_envelope;
-	 xm_waveform_type_t vibrato_type;
-	 uint8_t vibrato_sweep;
-	 uint8_t vibrato_depth;
-	 uint8_t vibrato_rate;
-	 uint16_t volume_fadeout;
-	 uint64_t latest_trigger;
-	 bool muted;
+struct xm_instrument_s {
+#if XM_STRINGS
+	char name[INSTRUMENT_NAME_LENGTH + 1];
+#endif
+	uint16_t num_samples;
+	uint8_t sample_of_notes[NUM_NOTES];
+	xm_envelope_t volume_envelope;
+	xm_envelope_t panning_envelope;
+	xm_waveform_type_t vibrato_type;
+	uint8_t vibrato_sweep;
+	uint8_t vibrato_depth;
+	uint8_t vibrato_rate;
+	uint16_t volume_fadeout;
+	uint64_t latest_trigger;
+	bool muted;
 
-	 xm_sample_t* samples;
- };
- typedef struct xm_instrument_s xm_instrument_t;
+	xm_sample_t* samples;
+};
+typedef struct xm_instrument_s xm_instrument_t;
 
- struct xm_pattern_slot_s {
-	 uint8_t note; /* 1-96, 97 = Key Off note */
-	 uint8_t instrument; /* 1-128 */
-	 uint8_t volume_column;
-	 uint8_t effect_type;
-	 uint8_t effect_param;
- };
- typedef struct xm_pattern_slot_s xm_pattern_slot_t;
+struct xm_pattern_slot_s {
+	uint8_t note; /* 1-96, 97 = Key Off note */
+	uint8_t instrument; /* 1-128 */
+	uint8_t volume_column;
+	uint8_t effect_type;
+	uint8_t effect_param;
+};
+typedef struct xm_pattern_slot_s xm_pattern_slot_t;
 
- struct xm_pattern_s {
-	 uint16_t num_rows;
-	 xm_pattern_slot_t* slots; /* Array of size num_rows * num_channels */
- };
- typedef struct xm_pattern_s xm_pattern_t;
+struct xm_pattern_s {
+	uint16_t num_rows;
+	xm_pattern_slot_t* slots; /* Array of size num_rows * num_channels */
+};
+typedef struct xm_pattern_s xm_pattern_t;
 
- struct xm_module_s {
-	 char name[MODULE_NAME_LENGTH + 1];
-	 char trackername[TRACKER_NAME_LENGTH + 1];
-	 uint16_t length;
-	 uint16_t restart_position;
-	 uint16_t num_channels;
-	 uint16_t num_patterns;
-	 uint16_t num_instruments;
-	 xm_frequency_type_t frequency_type;
-	 uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
+struct xm_module_s {
+#if XM_STRINGS
+	char name[MODULE_NAME_LENGTH + 1];
+	char trackername[TRACKER_NAME_LENGTH + 1];
+#endif
+	uint16_t length;
+	uint16_t restart_position;
+	uint16_t num_channels;
+	uint16_t num_patterns;
+	uint16_t num_instruments;
+	xm_frequency_type_t frequency_type;
+	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 
-	 xm_pattern_t* patterns;
-	 xm_instrument_t* instruments; /* Instrument 1 has index 0,
-									* instrument 2 has index 1, etc. */
- };
- typedef struct xm_module_s xm_module_t;
+	xm_pattern_t* patterns;
+	xm_instrument_t* instruments; /* Instrument 1 has index 0,
+								   * instrument 2 has index 1, etc. */
+};
+typedef struct xm_module_s xm_module_t;
 
- struct xm_channel_context_s {
-	 float note;
-	 float orig_note; /* The original note before effect modifications, as read in the pattern. */
-	 xm_instrument_t* instrument; /* Could be NULL */
-	 xm_sample_t* sample; /* Could be NULL */
-	 xm_pattern_slot_t* current;
+struct xm_channel_context_s {
+	float note;
+	float orig_note; /* The original note before effect modifications, as read in the pattern. */
+	xm_instrument_t* instrument; /* Could be NULL */
+	xm_sample_t* sample; /* Could be NULL */
+	xm_pattern_slot_t* current;
 
-	 float sample_position;
-	 float period;
-	 float frequency;
-	 float step;
-	 bool ping; /* For ping-pong samples: true is -->, false is <-- */
+	float sample_position;
+	float period;
+	float frequency;
+	float step;
+	bool ping; /* For ping-pong samples: true is -->, false is <-- */
 
-	 float volume; /* Ideally between 0 (muted) and 1 (loudest) */
-	 float panning; /* Between 0 (left) and 1 (right); 0.5 is centered */
+	float volume; /* Ideally between 0 (muted) and 1 (loudest) */
+	float panning; /* Between 0 (left) and 1 (right); 0.5 is centered */
 
-	 uint16_t autovibrato_ticks;
+	uint16_t autovibrato_ticks;
 
-	 bool sustained;
-	 float fadeout_volume;
-	 float volume_envelope_volume;
-	 float panning_envelope_panning;
-	 uint16_t volume_envelope_frame_count;
-	 uint16_t panning_envelope_frame_count;
+	bool sustained;
+	float fadeout_volume;
+	float volume_envelope_volume;
+	float panning_envelope_panning;
+	uint16_t volume_envelope_frame_count;
+	uint16_t panning_envelope_frame_count;
 
-	 float autovibrato_note_offset;
+	float autovibrato_note_offset;
 
-	 bool arp_in_progress;
-	 uint8_t arp_note_offset;
-	 uint8_t volume_slide_param;
-	 uint8_t fine_volume_slide_param;
-	 uint8_t global_volume_slide_param;
-	 uint8_t panning_slide_param;
-	 uint8_t portamento_up_param;
-	 uint8_t portamento_down_param;
-	 uint8_t fine_portamento_up_param;
-	 uint8_t fine_portamento_down_param;
-	 uint8_t extra_fine_portamento_up_param;
-	 uint8_t extra_fine_portamento_down_param;
-	 uint8_t tone_portamento_param;
-	 float tone_portamento_target_period;
-	 uint8_t multi_retrig_param;
-	 uint8_t note_delay_param;
-	 uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
-	 uint8_t pattern_loop_count; /* How many loop passes have been done */
-	 bool vibrato_in_progress;
-	 xm_waveform_type_t vibrato_waveform;
-	 bool vibrato_waveform_retrigger; /* True if a new note retriggers the waveform */
-	 uint8_t vibrato_param;
-	 uint16_t vibrato_ticks; /* Position in the waveform */
-	 float vibrato_note_offset;
-	 xm_waveform_type_t tremolo_waveform;
-	 bool tremolo_waveform_retrigger;
-	 uint8_t tremolo_param;
-	 uint8_t tremolo_ticks;
-	 float tremolo_volume;
-	 uint8_t tremor_param;
-	 bool tremor_on;
+	bool arp_in_progress;
+	uint8_t arp_note_offset;
+	uint8_t volume_slide_param;
+	uint8_t fine_volume_slide_param;
+	uint8_t global_volume_slide_param;
+	uint8_t panning_slide_param;
+	uint8_t portamento_up_param;
+	uint8_t portamento_down_param;
+	uint8_t fine_portamento_up_param;
+	uint8_t fine_portamento_down_param;
+	uint8_t extra_fine_portamento_up_param;
+	uint8_t extra_fine_portamento_down_param;
+	uint8_t tone_portamento_param;
+	float tone_portamento_target_period;
+	uint8_t multi_retrig_param;
+	uint8_t note_delay_param;
+	uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
+	uint8_t pattern_loop_count; /* How many loop passes have been done */
+	bool vibrato_in_progress;
+	xm_waveform_type_t vibrato_waveform;
+	bool vibrato_waveform_retrigger; /* True if a new note retriggers the waveform */
+	uint8_t vibrato_param;
+	uint16_t vibrato_ticks; /* Position in the waveform */
+	float vibrato_note_offset;
+	xm_waveform_type_t tremolo_waveform;
+	bool tremolo_waveform_retrigger;
+	uint8_t tremolo_param;
+	uint8_t tremolo_ticks;
+	float tremolo_volume;
+	uint8_t tremor_param;
+	bool tremor_on;
 
-	 uint64_t latest_trigger;
-	 bool muted;
+	uint64_t latest_trigger;
+	bool muted;
 
 #if XM_RAMPING
-	 /* These values are updated at the end of each tick, to save
-	  * a couple of float operations on every generated sample. */
-	 float target_panning;
-	 float target_volume;
+	/* These values are updated at the end of each tick, to save
+	 * a couple of float operations on every generated sample. */
+	float target_panning;
+	float target_volume;
 	 
-	 unsigned long frame_count;
-	 float end_of_previous_sample[XM_SAMPLE_RAMPING_POINTS];
+	unsigned long frame_count;
+	float end_of_previous_sample[XM_SAMPLE_RAMPING_POINTS];
 #endif
 
-	 float actual_panning;
-	 float actual_volume;
- };
- typedef struct xm_channel_context_s xm_channel_context_t;
+	float actual_panning;
+	float actual_volume;
+};
+typedef struct xm_channel_context_s xm_channel_context_t;
 
- struct xm_context_s {
-	 size_t ctx_size; /* Must be first for xm_load_internal() */
-	 xm_module_t module;
-	 uint32_t rate;
+struct xm_context_s {
+	size_t ctx_size; /* Must be first for xm_load_internal() */
+	xm_module_t module;
+	uint32_t rate;
 
-	 uint16_t tempo;
-	 uint16_t bpm;
-	 float global_volume;
-	 float amplification;
+	uint16_t tempo;
+	uint16_t bpm;
+	float global_volume;
+	float amplification;
 
 #if XM_RAMPING
-	 /* How much is a channel final volume allowed to change per
-	  * sample; this is used to avoid abrubt volume changes which
-	  * manifest as "clicks" in the generated sound. */
-	 float volume_ramp;
-	 float panning_ramp; /* Same for panning. */
+	/* How much is a channel final volume allowed to change per
+	 * sample; this is used to avoid abrubt volume changes which
+	 * manifest as "clicks" in the generated sound. */
+	float volume_ramp;
+	float panning_ramp; /* Same for panning. */
 #endif
 
-	 uint8_t current_table_index;
-	 uint8_t current_row;
-	 uint16_t current_tick; /* Can go below 255, with high tempo and a pattern delay */
-	 float remaining_samples_in_tick;
-	 uint64_t generated_samples;
+	uint8_t current_table_index;
+	uint8_t current_row;
+	uint16_t current_tick; /* Can go below 255, with high tempo and a pattern delay */
+	float remaining_samples_in_tick;
+	uint64_t generated_samples;
 
-	 bool position_jump;
-	 bool pattern_break;
-	 uint8_t jump_dest;
-	 uint8_t jump_row;
+	bool position_jump;
+	bool pattern_break;
+	uint8_t jump_dest;
+	uint8_t jump_row;
 
-	 /* Extra ticks to be played before going to the next row -
-	  * Used for EEy effect */
-	 uint16_t extra_ticks;
+	/* Extra ticks to be played before going to the next row -
+	 * Used for EEy effect */
+	uint16_t extra_ticks;
 
-	 uint8_t* row_loop_count; /* Array of size MAX_NUM_ROWS * module_length */
-	 uint8_t loop_count;
-	 uint8_t max_loop_count;
+	uint8_t* row_loop_count; /* Array of size MAX_NUM_ROWS * module_length */
+	uint8_t loop_count;
+	uint8_t max_loop_count;
 
-	 xm_channel_context_t* channels;
+	xm_channel_context_t* channels;
 };
 
 /* ----- Internal API ----- */

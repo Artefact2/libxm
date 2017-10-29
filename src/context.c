@@ -113,6 +113,7 @@ bool xm_mute_instrument(xm_context_t* ctx, uint16_t instr, bool mute) {
 
 
 
+#if XM_STRINGS
 const char* xm_get_module_name(xm_context_t* ctx) {
 	return ctx->module.name;
 }
@@ -120,6 +121,15 @@ const char* xm_get_module_name(xm_context_t* ctx) {
 const char* xm_get_tracker_name(xm_context_t* ctx) {
 	return ctx->module.trackername;
 }
+#else
+const char* xm_get_module_name(xm_context_t* ctx) {
+	return NULL;
+}
+
+const char* xm_get_tracker_name(xm_context_t* ctx) {
+	return NULL;
+}
+#endif
 
 
 

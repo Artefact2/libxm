@@ -13,8 +13,10 @@ ENDFUNCTION()
 OPTION_AND_DEFINE(XM_DEBUG "Enable debug symbols and print debugging messages to stderr" "ON")
 OPTION_AND_DEFINE(XM_DEFENSIVE "Defensively check XM data for errors/inconsistencies" "ON")
 OPTION_AND_DEFINE(XM_BIG_ENDIAN "Use big endian byte order (unfinished)" "OFF")
+
 OPTION_AND_DEFINE(XM_LINEAR_INTERPOLATION "Use linear interpolation (CPU hungry)" "ON")
 OPTION_AND_DEFINE(XM_RAMPING "Enable ramping (smooth volume/panning transitions, CPU hungry)" "ON")
+OPTION_AND_DEFINE(XM_STRINGS "Store module, instrument and sample names in context" "OFF")
 
 OPTION(XM_BUILD_SHARED_LIBS "Build shared library" "ON")
 OPTION(XM_BUILD_EXAMPLES "Build example programs" "ON")

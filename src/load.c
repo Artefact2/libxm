@@ -153,8 +153,10 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 	xm_module_t* mod = &(ctx->module);
 
 	/* Read XM header */
+#if XM_STRINGS
 	READ_MEMCPY(mod->name, offset + 17, MODULE_NAME_LENGTH);
 	READ_MEMCPY(mod->trackername, offset + 38, TRACKER_NAME_LENGTH);
+#endif
 	offset += 60;
 
 	/* Read module header */
@@ -266,7 +268,9 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 		uint32_t sample_header_size = 0;
 		xm_instrument_t* instr = mod->instruments + i;
 
+#if XM_STRINGS
 		READ_MEMCPY(instr->name, offset + 4, INSTRUMENT_NAME_LENGTH);
+#endif
 	    instr->num_samples = READ_U16(offset + 27);
 
 		if(instr->num_samples > 0) {
@@ -349,7 +353,9 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 
 			sample->panning = (float)READ_U8(offset + 15) / (float)0xFF;
 			sample->relative_note = (int8_t)READ_U8(offset + 16);
+#if XM_STRINGS
 			READ_MEMCPY(sample->name, 18, SAMPLE_NAME_LENGTH);
+#endif
 			sample->data8 = (int8_t*)mempool;
 			mempool += sample->length;
 

@@ -163,10 +163,10 @@ int main(int argc, char** argv) {
 		num_channels = xm_get_number_of_channels(ctx);
 		length = xm_get_module_length(ctx);
 
-		printf("==> Playing: %s\n"
-			   "==> Tracker: %s\n",
-			   xm_get_module_name(ctx),
-			   xm_get_tracker_name(ctx));
+		const char* module_name = xm_get_module_name(ctx);
+		const char* tracker_name = xm_get_tracker_name(ctx);
+		if(module_name != NULL) printf("==> Playing: %s\n", module_name);
+		if(tracker_name != NULL) printf("==> Tracker: %s\n", tracker_name);
 
 		CHECK_ALSA_CALL(snd_pcm_prepare(device));
 
