@@ -24,24 +24,24 @@ static const size_t buffer_size = (1 << 8);
 void puts_uint32_be(uint32_t i) {
 	char* c = (char*)(&i);
 
-#if XM_BIG_ENDIAN
-	putchar(c[0]);
-	putchar(c[1]);
-	putchar(c[2]);
-	putchar(c[3]);
-#else
-	putchar(c[3]);
-	putchar(c[2]);
-	putchar(c[1]);
-	putchar(c[0]);
-#endif
+	if(XM_BIG_ENDIAN) {
+		putchar(c[0]);
+		putchar(c[1]);
+		putchar(c[2]);
+		putchar(c[3]);
+	} else {
+		putchar(c[3]);
+		putchar(c[2]);
+		putchar(c[1]);
+		putchar(c[0]);
+	}
 }
 
 /* XXX: refactor me in libxm eventually */
 static void load_internal(xm_context_t** ctxp, unsigned int rate, const char* path) {
 	size_t ctx_size, i, j, k;
 	FILE* in = fopen(path, "rb");
-	
+
 	fread(&ctx_size, sizeof(size_t), 1, in);
 
 	*ctxp = malloc(ctx_size);
@@ -52,7 +52,7 @@ static void load_internal(xm_context_t** ctxp, unsigned int rate, const char* pa
 	(*ctxp)->rate = rate;
 
 	/* Reverse steps of xmconvert.c */
-	
+
 	OFFSET((*ctxp)->module.patterns);
 	OFFSET((*ctxp)->module.instruments);
 	OFFSET((*ctxp)->row_loop_count);
@@ -64,7 +64,7 @@ static void load_internal(xm_context_t** ctxp, unsigned int rate, const char* pa
 
 	for(i = 0; i < (*ctxp)->module.num_instruments; ++i) {
 		OFFSET((*ctxp)->module.instruments[i].samples);
-		
+
 		for(j = 0; j < (*ctxp)->module.instruments[i].num_samples; ++j) {
 			OFFSET((*ctxp)->module.instruments[i].samples[j].data8);
 

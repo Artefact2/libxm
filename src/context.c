@@ -13,19 +13,17 @@ int xm_create_context(xm_context_t** ctxp, const char* moddata, uint32_t rate) {
 }
 
 int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t moddata_length, uint32_t rate) {
-#if XM_DEFENSIVE
-	int ret;
-#endif
 	size_t bytes_needed;
 	char* mempool;
 	xm_context_t* ctx;
 
-#if XM_DEFENSIVE
-	if((ret = xm_check_sanity_preload(moddata, moddata_length))) {
-		DEBUG("xm_check_sanity_preload() returned %i, module is not safe to load", ret);
-		return 1;
+	if(XM_DEFENSIVE) {
+		int ret;
+		if((ret = xm_check_sanity_preload(moddata, moddata_length))) {
+			DEBUG("xm_check_sanity_preload() returned %i, module is not safe to load", ret);
+			return 1;
+		}
 	}
-#endif
 
 	bytes_needed = xm_get_memory_needed_for_context(moddata, moddata_length);
 	mempool = malloc(bytes_needed);
@@ -74,13 +72,14 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 	ctx->row_loop_count = (uint8_t*)mempool;
 	mempool += MAX_NUM_ROWS * sizeof(uint8_t);
 
-#if XM_DEFENSIVE
-	if((ret = xm_check_sanity_postload(ctx))) {
-		DEBUG("xm_check_sanity_postload() returned %i, module is not safe to play", ret);
-		xm_free_context(ctx);
-		return 1;
+	if(XM_DEFENSIVE) {
+		int ret;
+		if((ret = xm_check_sanity_postload(ctx))) {
+			DEBUG("xm_check_sanity_postload() returned %i, module is not safe to play", ret);
+			xm_free_context(ctx);
+			return 1;
+		}
 	}
-#endif
 
 	return 0;
 }

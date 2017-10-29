@@ -15,29 +15,29 @@ static const size_t buffer_size = 48000;
 void puts_uint32_le(uint32_t i, FILE* f) {
 	char* c = (char*)(&i);
 
-#if XM_BIG_ENDIAN
-	putc(c[3], f);
-	putc(c[2], f);
-	putc(c[1], f);
-	putc(c[0], f);
-#else
-	putc(c[0], f);
-	putc(c[1], f);
-	putc(c[2], f);
-	putc(c[3], f);
-#endif
+	if(XM_BIG_ENDIAN) {
+		putc(c[3], f);
+		putc(c[2], f);
+		putc(c[1], f);
+		putc(c[0], f);
+	} else {
+		putc(c[0], f);
+		putc(c[1], f);
+		putc(c[2], f);
+		putc(c[3], f);
+	}
 }
 
 void puts_uint16_le(uint16_t i, FILE* f) {
 	char* c = (char*)(&i);
 
-#if XM_BIG_ENDIAN
-	putc(c[1], f);
-	putc(c[0], f);
-#else
-	putc(c[0], f);
-	putc(c[1], f);
-#endif
+	if(XM_BIG_ENDIAN) {
+		putc(c[1], f);
+		putc(c[0], f);
+	} else {
+		putc(c[0], f);
+		putc(c[1], f);
+	}
 }
 
 int main(int argc, char** argv) {
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
 
 	fputs("RIFF", out);
 	puts_uint32_le(0, out); /* Chunk size. Will be filled later. */
-	
+
 	fputs("WAVE", out);
 
 	fputs("fmt ", out); /* Start format chunk */
@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
 
 	fputs("data", out); /* Start data chunk */
 	puts_uint32_le(0, out); /* Data chunk size. Will be filled later. */
-	
+
 	while(xm_get_loop_count(ctx) == 0) {
 		xm_generate_samples(ctx, buffer, buffer_size / channels);
 		num_samples += buffer_size;

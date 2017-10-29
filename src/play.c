@@ -207,7 +207,7 @@ static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* 3xx called without a note, wait until we get an actual
 	 * target note. */
 	if(ch->tone_portamento_target_period == 0.f) return;
-	
+
 	if(ch->period != ch->tone_portamento_target_period) {
 		XM_SLIDE_TOWARDS(ch->period,
 		                 ch->tone_portamento_target_period,
@@ -679,7 +679,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			 * note, EDx (x ≠ 0) does not. */
 			if(s->note == 0 && s->instrument == 0) {
 				unsigned int flags = XM_TRIGGER_KEEP_VOLUME;
-				
+
 				if(ch->current->effect_param & 0x0F) {
 					ch->note = ch->orig_note;
 					xm_trigger_note(ctx, ch, flags);
@@ -1195,7 +1195,7 @@ static void xm_tick(xm_context_t* ctx) {
 		}
 
 		float panning, volume;
-		
+
 		panning = ch->panning +
 			(ch->panning_envelope_panning - .5f) * (.5f - fabsf(ch->panning - .5f)) * 2.0f;
 
@@ -1378,11 +1378,11 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	*left *= fgvol;
 	*right *= fgvol;
 
-#if XM_DEBUG
-	if(fabs(*left) > 1 || fabs(*right) > 1) {
-		DEBUG("clipping frame: %f %f, this is a bad module or a libxm bug", *left, *right);
+	if(XM_DEBUG) {
+		if(fabs(*left) > 1 || fabs(*right) > 1) {
+			DEBUG("clipping frame: %f %f, this is a bad module or a libxm bug", *left, *right);
+		}
 	}
-#endif
 }
 
 void xm_generate_samples(xm_context_t* ctx, float* output, size_t numsamples) {

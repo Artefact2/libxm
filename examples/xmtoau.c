@@ -18,17 +18,17 @@ static const size_t buffer_size = (1 << 8); /* Use a small buffer to
 void puts_uint32_be(uint32_t i) {
 	char* c = (char*)(&i);
 
-#if XM_BIG_ENDIAN
-	putchar(c[0]);
-	putchar(c[1]);
-	putchar(c[2]);
-	putchar(c[3]);
-#else
-	putchar(c[3]);
-	putchar(c[2]);
-	putchar(c[1]);
-	putchar(c[0]);
-#endif
+	if(XM_BIG_ENDIAN) {
+		putchar(c[0]);
+		putchar(c[1]);
+		putchar(c[2]);
+		putchar(c[3]);
+	} else {
+		putchar(c[3]);
+		putchar(c[2]);
+		putchar(c[1]);
+		putchar(c[0]);
+	}
 }
 
 void usage(char* progname) {
@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
 
 	create_context_from_file(&ctx, rate, argv[argc - 1]);
 	if(ctx == NULL) exit(1);
-	
+
 	xm_set_max_loop_count(ctx, loops);
 
 	if(solochn > 0) {
