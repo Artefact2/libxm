@@ -281,8 +281,6 @@ struct xm_context_s {
 
 /* ----- Internal API ----- */
 
-#if XM_DEFENSIVE
-
 /** Check the module data for errors/inconsistencies.
  *
  * @returns 0 if everything looks OK. Module should be safe to load.
@@ -294,8 +292,6 @@ int xm_check_sanity_preload(const char*, size_t);
  * @returns 0 if everything looks OK.
  */
 int xm_check_sanity_postload(xm_context_t*);
-
-#endif
 
 /** Get the number of bytes needed to store the module data in a
  * dynamically allocated blank context.

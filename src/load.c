@@ -33,8 +33,6 @@ static inline void memcpy_pad(void* dst, size_t dst_len, const void* src, size_t
 	memset(dst_c + copy_bytes, 0, dst_len - copy_bytes);
 }
 
-#if XM_DEFENSIVE
-
 int xm_check_sanity_preload(const char* module, size_t module_length) {
 	if(module_length < 60) {
 		return 4;
@@ -74,11 +72,9 @@ int xm_check_sanity_postload(xm_context_t* ctx) {
 			}
 		}
 	}
-	
+
 	return 0;
 }
-
-#endif
 
 size_t xm_get_memory_needed_for_context(const char* moddata, size_t moddata_length) {
 	size_t memory_needed = 0;
