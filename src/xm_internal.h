@@ -229,7 +229,7 @@ struct xm_channel_context_s {
 	 * a couple of float operations on every generated sample. */
 	float target_panning;
 	float target_volume;
-	 
+
 	unsigned long frame_count;
 	float end_of_previous_sample[XM_SAMPLE_RAMPING_POINTS];
 #endif
@@ -240,7 +240,7 @@ struct xm_channel_context_s {
 typedef struct xm_channel_context_s xm_channel_context_t;
 
 struct xm_context_s {
-	size_t ctx_size; /* Must be first for xm_load_internal() */
+	size_t ctx_size; /* Must be first, see xm_create_context_from_libxmize() */
 	xm_module_t module;
 	uint32_t rate;
 

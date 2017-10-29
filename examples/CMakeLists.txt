@@ -7,9 +7,6 @@ TARGET_LINK_LIBRARIES(xmtoau ${XM_LIBRARIES} xms)
 ADD_EXECUTABLE(xmtowav xmtowav.c)
 TARGET_LINK_LIBRARIES(xmtowav ${XM_LIBRARIES} xms)
 
-ADD_EXECUTABLE(xmconvert xmconvert.c)
-TARGET_LINK_LIBRARIES(xmconvert ${XM_LIBRARIES} xms)
-
 ADD_EXECUTABLE(libxmtoau libxmtoau.c)
 TARGET_LINK_LIBRARIES(libxmtoau ${XM_LIBRARIES} xms)
 

@@ -5,3 +5,6 @@ ENDIF()
 
 ADD_LIBRARY(xms STATIC xm.c context.c load.c play.c)
 INCLUDE_DIRECTORIES(${XM_INCLUDE_DIRS})
+
+ADD_EXECUTABLE(libxmize libxmize.c)
+TARGET_LINK_LIBRARIES(libxmize ${XM_LIBRARIES} xms)

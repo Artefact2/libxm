@@ -8,6 +8,12 @@
 
 #include "xm_internal.h"
 
+#define OFFSET(ptr) do {										\
+		(ptr) = (void*)((intptr_t)(ptr) + (intptr_t)(*ctxp));	\
+	} while(0)
+
+
+
 int xm_create_context(xm_context_t** ctxp, const char* moddata, uint32_t rate) {
 	return xm_create_context_safe(ctxp, moddata, SIZE_MAX, rate);
 }
@@ -82,6 +88,48 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 	}
 
 	return 0;
+}
+
+void xm_create_context_from_libxmize(xm_context_t** ctxp, const char* libxmized, uint32_t rate) {
+	size_t ctx_size, i, j, k;
+
+	/* Assume ctx_size is first member of xm_context structure */
+	ctx_size = *(size_t*)libxmized;
+
+	*ctxp = malloc(ctx_size);
+	memcpy(*ctxp, libxmized, ctx_size);
+	(*ctxp)->rate = rate;
+
+	/* Reverse steps of libxmize.c */
+
+	OFFSET((*ctxp)->module.patterns);
+	OFFSET((*ctxp)->module.instruments);
+	OFFSET((*ctxp)->row_loop_count);
+	OFFSET((*ctxp)->channels);
+
+	for(i = 0; i < (*ctxp)->module.num_patterns; ++i) {
+		OFFSET((*ctxp)->module.patterns[i].slots);
+	}
+
+	for(i = 0; i < (*ctxp)->module.num_instruments; ++i) {
+		OFFSET((*ctxp)->module.instruments[i].samples);
+
+		for(j = 0; j < (*ctxp)->module.instruments[i].num_samples; ++j) {
+			OFFSET((*ctxp)->module.instruments[i].samples[j].data8);
+
+			if((*ctxp)->module.instruments[i].samples[j].length > 1) {
+				if((*ctxp)->module.instruments[i].samples[j].bits == 8) {
+					for(k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) {
+						(*ctxp)->module.instruments[i].samples[j].data8[k] += (*ctxp)->module.instruments[i].samples[j].data8[k-1];
+					}
+				} else {
+					for(k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) {
+						(*ctxp)->module.instruments[i].samples[j].data16[k] += (*ctxp)->module.instruments[i].samples[j].data16[k-1];
+					}
+				}
+			}
+		}
+	}
 }
 
 void xm_free_context(xm_context_t* context) {

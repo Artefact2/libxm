@@ -178,7 +178,7 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 
 	READ_MEMCPY(mod->pattern_table, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
 	offset += header_size;
-	
+
 	/* Read patterns */
 	for(uint16_t i = 0; i < mod->num_patterns; ++i) {
 		uint16_t packed_patterndata_size = READ_U16(offset + 7);
