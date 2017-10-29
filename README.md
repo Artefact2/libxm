@@ -76,6 +76,8 @@ Some example programs are provided.
   that runs in the browser:
   [libxm.js](https://artefact2.github.io/libxm.js/).
 
+* `xmprocdemo`: see [README](./examples/xmprocdemo/README.md)
+
 * `xmtoalsa` is a simple player that uses the ALSA library. It
   produces `xmp`-like output while playing. Use `xmtoalsa --help` (or
   check the source) to see the full usage.
