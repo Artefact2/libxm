@@ -1,3 +1,2 @@
-build*
-examples/xmgl/vs.h
-examples/xmgl/fs.h
+build-debug
+build-prod

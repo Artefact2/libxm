@@ -87,7 +87,7 @@ void usage(char* progname) {
 		  progname, progname);
 }
 
-int jack_process(jack_nframes_t nframes, void* arg) {	
+int jack_process(jack_nframes_t nframes, void* arg) {
 	static float buffer[TIMING_FRAMES * 2];
 	float* lbuf = jack_port_get_buffer(left, nframes);
 	float* rbuf = jack_port_get_buffer(right, nframes);
@@ -96,7 +96,7 @@ int jack_process(jack_nframes_t nframes, void* arg) {
 		memset(lbuf, 0, nframes * sizeof(float));
 		memset(rbuf, 0, nframes * sizeof(float));
 		time_offset += nframes;
-	} else {		
+	} else {
 		size_t tframes;
 		if(nframes >= TIMING_FRAMES) {
 			assert(nframes % TIMING_FRAMES == 0);
@@ -104,10 +104,10 @@ int jack_process(jack_nframes_t nframes, void* arg) {
 		} else {
 			tframes = nframes;
 		}
-		
+
 		for(size_t off = 0; off < nframes; off += tframes) {
 			xm_generate_samples(xmctx, buffer, tframes);
-			
+
 			xm_get_position(xmctx, NULL, NULL, NULL, &(mti.frames[mti.i]));
 			for(size_t k = 1; k <= channels; ++k) {
 				struct channel_timing_info* chn = &(mti.channels[mti.i * channels + k - 1]);
@@ -123,7 +123,7 @@ int jack_process(jack_nframes_t nframes, void* arg) {
 				lbuf[off + i] = buffer[i << 1];
 				rbuf[off + i] = buffer[(i << 1) + 1];
 			}
-		
+
 			mti.i = (mti.i + 1) % NUM_TIMING;
 		}
 	}
@@ -137,14 +137,14 @@ void jack_latency(jack_latency_callback_mode_t mode, void* arg) {
 	jack_latency_range_t range;
 	jack_port_get_latency_range(left, mode, &range);
 	if(jack_latency_comp == range.max) return;
-	
+
 	printf("JACK output latency: %d/%d frames\n", range.min, range.max);
 	jack_latency_comp = range.max;
 }
 
 void keyfun(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	if(action != GLFW_PRESS) return;
-	
+
 	if(key == GLFW_KEY_ESCAPE) {
 		glfwSetWindowShouldClose(window, GL_TRUE);
 	}
@@ -168,27 +168,27 @@ void charfun(GLFWwindow* window, unsigned int codepoint) {
 
 void setup(int argc, char** argv) {
 	size_t filenameidx = 1;
-	
+
 	for(size_t i = 1; i < argc; ++i) {
 		if(!strcmp(argv[i], "--")) {
 			filenameidx = i+1;
 			break;
 		}
-		
+
 		if(!strcmp(argv[i], "--width")) {
 			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
 			width = strtol(argv[i+1], NULL, 0);
 			++i;
 			continue;
 		}
-		
+
 		if(!strcmp(argv[i], "--height")) {
 			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
 			height = strtol(argv[i+1], NULL, 0);
 			++i;
 			continue;
 		}
-		
+
 		if(!strcmp(argv[i], "--interval")) {
 			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
 			interval = strtol(argv[i+1], NULL, 0);
@@ -224,7 +224,7 @@ void setup(int argc, char** argv) {
 		usage(argv[0]);
 		exit(1);
 	}
-	
+
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -242,7 +242,7 @@ void setup(int argc, char** argv) {
 	glGenBuffers(1, &vertexn);
 	glBindBuffer(GL_ARRAY_BUFFER, vertexn);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-	
+
 	glGenBuffers(1, &elementn);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementn);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
@@ -254,12 +254,12 @@ void setup(int argc, char** argv) {
 
 	/* XXX: wtf? */
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementn);
-        
+
 	GLuint vsn, fsn;
 	const char* src;
 	GLint status;
 	progn = glCreateProgram();
-	
+
 	#include "vs.h"
 	src = vs;
 	vsn = glCreateShader(GL_VERTEX_SHADER);
@@ -287,7 +287,7 @@ void setup(int argc, char** argv) {
 		fprintf(stderr, "FS:%s", msg);
 		exit(1);
 	}
-	
+
 	glLinkProgram(progn);
 	glGetProgramiv(progn, GL_LINK_STATUS, &status);
 	if(status != GL_TRUE) {
@@ -318,7 +318,7 @@ void setup(int argc, char** argv) {
 
 	left = jack_port_register(client, "Left", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput | JackPortIsTerminal, 0);
 	right = jack_port_register(client, "Right", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput | JackPortIsTerminal, 0);
-        
+
 	create_context_from_file(&xmctx, rate, argv[filenameidx]);
 	if(xmctx == NULL) exit(1);
 	channels = xm_get_number_of_channels(xmctx);
@@ -335,11 +335,11 @@ void setup(int argc, char** argv) {
 		if(ports != NULL) {
 			if(ports[0] != NULL && ports[1] != NULL) {
 				char ipname[16];
-				
+
 				snprintf(ipname, 16, "%s:Left", jack_get_client_name(client));
 				printf("Autoconnecting %s -> %s\n", ipname, ports[0]);
 				jack_connect(client, "xmgl:Left", ports[0]);
-				
+
 				snprintf(ipname, 16, "%s:Right", jack_get_client_name(client));
 				printf("Autoconnecting %s -> %s\n", ipname, ports[1]);
 				jack_connect(client, "xmgl:Right", ports[1]);
@@ -355,7 +355,7 @@ void setup(int argc, char** argv) {
 void teardown(void) {
 	jack_client_close(client);
 	xm_free_context(xmctx);
-	
+
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
@@ -382,7 +382,7 @@ void render(void) {
 	}
 	chns = &(mti.channels[j * channels]);
 	frames = mti.frames[j];
-	
+
 	for(uint16_t i = 0; i < channels; ++i) {
 		active = chns[i].active;
 		glUniform4f(xmciu,
@@ -412,9 +412,9 @@ void render(void) {
 	gl_framecount = (gl_framecount + 1) % GL_FRAMES_AVG_COUNT;
 }
 
-int main(int argc, char** argv) {	
+int main(int argc, char** argv) {
 	setup(argc, argv);
-	
+
 	while(!glfwWindowShouldClose(window)) {
 		render();
 
