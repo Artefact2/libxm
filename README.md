@@ -1,9 +1,17 @@
 libxm
 =====
 
-A small XM (FastTracker II Extended Module) player library. Designed
-for easy integration in demos and such, and provides timing functions
-for easy sync against specific instruments, samples or channels.
+A small XM (FastTracker II Extended Module) player library. Main
+features:
+
+* Small size in mind; many features can be disabled at compile-time,
+  or are optimized out by the compiler if not used.
+
+* Timing functions for synchronising against specific instruments,
+  samples or channels.
+
+* Samples can be loaded and altered at run-time, making it possible to
+  use libxm with softsynths or other real-time signal processors.
 
 Written in C11 and released under the WTFPL license, version 2.
 
