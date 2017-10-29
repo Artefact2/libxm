@@ -8,6 +8,7 @@
 
 #include "xm_internal.h"
 #include <stdio.h>
+#include <string.h>
 
 #define OFFSET(ptr) do {									\
 		(ptr) = (void*)((intptr_t)(ptr) - (intptr_t)ctx);	\
@@ -18,6 +19,27 @@
 		exit(1);								\
 	} while(0)
 
+/* XXX: implement per-waveform zapping */
+/* XXX: maybe also wipe loop info, finetune, length etc */
+/* XXX: properly replace sample by a 0-length waveform instead of zeroing buffer? harder than it sounds */
+static size_t zero_waveforms(xm_context_t* ctx) {
+	size_t i, j, total_saved_bytes = 0;
+
+	for(i = 0; i < ctx->module.num_instruments; ++i) {
+		xm_instrument_t* inst = &(ctx->module.instruments[i]);
+
+		for(j = 0; j < inst->num_samples; ++j) {
+			xm_sample_t* sample = &(inst->samples[j]);
+
+			size_t saved_bytes = (sample->bits == 8) ? sample->length : sample->length * 2;
+			memset(sample->data8, 0, saved_bytes);
+			total_saved_bytes += saved_bytes;
+		}
+	}
+
+	return total_saved_bytes;
+}
+
 int main(int argc, char** argv) {
 	xm_context_t* ctx;
 	FILE* in;
@@ -25,23 +47,27 @@ int main(int argc, char** argv) {
 	void* xmdata;
 	size_t i, j, k;
 
-	if(argc != 3) FATAL("Usage: %s <in.xm> <out.libxm>\n", argv[0]);
+	if(argc < 3) FATAL("Usage: %s [--zero-all-waveforms] <in.xm> <out.libxm>\n", argv[0]);
 
-	in = fopen(argv[1], "rb");
-	if(in == NULL) FATAL("input file %s not readable (fopen)\n", argv[1]);
-	if(fseek(in, 0, SEEK_END)) FATAL("input file %s not seekable\n", argv[1]);
+	fprintf(stderr, "%s: this format is highly non-portable. Check the README for more information.\n", argv[0]);
+
+	in = fopen(argv[argc - 2], "rb");
+	if(in == NULL) FATAL("input file %s not readable (fopen)\n", argv[argc - 2]);
+	if(fseek(in, 0, SEEK_END)) FATAL("input file %s not seekable\n", argv[argc - 2]);
 	xmdata = malloc(i = ftell(in));
 	if(xmdata == NULL) FATAL("malloc failed to allocate %lu bytes\n", i);
 	rewind(in);
-	if(!fread(xmdata, i, 1, in)) FATAL("input file %s not readable (fread)\n", argv[1]);
+	if(!fread(xmdata, i, 1, in)) FATAL("input file %s not readable (fread)\n", argv[argc - 2]);
 	xm_create_context_safe(&ctx, xmdata, i, 48000);
 	if(ctx == NULL) exit(1);
 	free(xmdata);
 
-	out = fopen(argv[2], "wb");
-	if(out == NULL) FATAL("output file %s not writeable\n", argv[2]);
+	out = fopen(argv[argc - 1], "wb");
+	if(out == NULL) FATAL("output file %s not writeable\n", argv[argc - 1]);
 
-	fprintf(stderr, "%s: this format is highly non-portable. Check the README for more information.\n", argv[0]);
+	if(!strcmp("--zero-all-waveforms", argv[1])) {
+		fprintf(stderr, "%s: zeroing waveforms, saved %lu bytes.\n", argv[0], zero_waveforms(ctx));
+	}
 
 	/* Ugly pointer offsetting ahead */
 
@@ -78,7 +104,7 @@ int main(int argc, char** argv) {
 
 	if(!fwrite(ctx, ctx->ctx_size, 1, out)) FATAL("fwrite() failed writing %lu bytes\n", ctx->ctx_size);
 	fclose(out);
-	fprintf(stderr, "%s: done writing %lu bytes\n", argv[0], ctx->ctx_size);
+	fprintf(stderr, "%s: done writing %lu bytes.\n", argv[0], ctx->ctx_size);
 
 	xm_free_context(ctx);
 	return 0;
