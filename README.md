@@ -23,11 +23,11 @@ loaded, see `libxmize` below) fits in under 7KiB of compressed
 machine code.
 
 ~~~
-pack libxmtoau{,.packed}
+xzcrush libxmtoau
 for x in *.xm; do libxmize $x $x.libxm; done
 rename .xm.libxm .libxm *.xm.libxm
 ls *.{xm,libxm} | xargs -n 1 -P 16 xz -9ekf
-wc -c *.*xm *.*xm.xz libxmtoau.packed
+wc -c *.*xm *.*xm.xz libxmtoau.crushed
 
  6810919 an-dream.libxm
  5585551 an-dream.xm
@@ -38,19 +38,19 @@ wc -c *.*xm *.*xm.xz libxmtoau.packed
   581955 heritage.libxm
   438340 heritage.xm
 
- 2856976 an-dream.libxm.xz
+ 2855496 an-dream.libxm.xz
  2876184 an-dream.xm.xz
-    4168 cerror-expatarimental.libxm.xz
+    4180 cerror-expatarimental.libxm.xz
     4820 cerror-expatarimental.xm.xz
    36060 drozerix_-_crush.libxm.xz
    37276 drozerix_-_crush.xm.xz
-  200968 heritage.libxm.xz
+  201348 heritage.libxm.xz
   201200 heritage.xm.xz
 
-    7029 libxmtoau.packed
+    6833 libxmtoau.crushed
 ~~~
 
-Pack script used: https://github.com/Artefact2/boilerplate-demo/blob/master/src/pack
+Binaries crushed with [`xzcrush`](https://gitlab.com/artefact2/xzcrush).
 
 `libxmize` and the non-portable format
 ======================================
