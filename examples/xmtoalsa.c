@@ -33,6 +33,8 @@ void usage(char* progname) {
 	      "\tp: previous module\n"
 	      "\tn: next module\n"
 	      "\tl: toggle looping\n"
+		  "\t>: jump to next pattern in table\n"
+		  "\t<: jump to previous pattern in table (will enable looping)\n"
 	      "\t0...9A...V: toggle channel mute\n",
 	      progname, progname);
 }
@@ -62,14 +64,14 @@ char get_command(void) {
 int main(int argc, char** argv) {
 	xm_context_t* ctx;
 	snd_pcm_t* device;
-	
+
 	size_t period_size;
 	unsigned int rate;
 	snd_pcm_format_t format;
 	float preamp = 1.f;
 	unsigned long loop = 1;
 	unsigned long izero = 1; /* Index in argv of the first filename */
-	
+
 	bool paused = false, waspaused = false, jump = false, random = false;
 	uint64_t samples, channel_map_until = 0;
 
@@ -82,14 +84,14 @@ int main(int argc, char** argv) {
 			izero = i+1;
 			break;
 		}
-		
+
 		if(!strcmp(argv[i], "--preamp")) {
 			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
 			preamp = strtof(argv[i+1], NULL);
 			++i;
 			continue;
 		}
-		
+
 		if(!strcmp(argv[i], "--loop")) {
 			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
 			loop = strtol(argv[i+1], NULL, 0);
@@ -131,7 +133,7 @@ int main(int argc, char** argv) {
 	}
 
 	init_alsa_device(argc, argv, 1024, 2048, 0, &device, &period_size, &rate, &format);
-	
+
 	float xmbuffer[period_size];
 	float alsabuffer[period_size];
 
@@ -157,7 +159,7 @@ int main(int argc, char** argv) {
 			DEBUG("module file %s failed to load, skipping\n", argv[i]);
 			continue;
 		}
-		
+
 		xm_set_max_loop_count(ctx, loop);
 		num_patterns = xm_get_number_of_patterns(ctx);
 		num_channels = xm_get_number_of_channels(ctx);
@@ -196,6 +198,20 @@ int main(int argc, char** argv) {
 				loop = !loop;
 				xm_set_max_loop_count(ctx, loop);
 				break;
+			case '<':
+				if(pos > 0) {
+					if(loop) {
+						loop = !loop;
+						xm_set_max_loop_count(ctx, loop); /* XXX */
+					}
+					xm_seek(ctx, pos - 1, 0, 0);
+				}
+				break;
+			case '>':
+				if(pos < length) {
+					xm_seek(ctx, pos + 1, 0, 0);
+				}
+				break;
 			default:
 				if(command >= '0' && command <= '9') {
 					uint16_t ch = 1 + (command - '0');
@@ -215,10 +231,10 @@ int main(int argc, char** argv) {
 				usleep(10000);
 				continue;
 			}
-			
+
 			xm_get_position(ctx, &pos, &pat, &row, &samples);
 			xm_get_playing_speed(ctx, &bpm, &tempo);
-			
+
 			printf("\rSpeed[%.2X] BPM[%.2X] Pos[%.2X/%.2X]"
 			       " Pat[%.2X/%.2X] Row[%.2X/%.2X] Loop[%.2X/%.2lX]"
 			       " %.2i:%.2i:%.2i.%.2i ",

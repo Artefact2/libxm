@@ -140,6 +140,15 @@ uint8_t xm_get_loop_count(xm_context_t* context) {
 
 
 
+void xm_seek(xm_context_t* ctx, uint8_t pot, uint8_t row, uint16_t tick) {
+	ctx->current_table_index = pot;
+	ctx->current_row = row;
+	ctx->current_tick = tick;
+	ctx->remaining_samples_in_tick = 0;
+}
+
+
+
 bool xm_mute_channel(xm_context_t* ctx, uint16_t channel, bool mute) {
 	bool old = ctx->channels[channel - 1].muted;
 	ctx->channels[channel - 1].muted = mute;

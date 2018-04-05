@@ -88,6 +88,15 @@ uint8_t xm_get_loop_count(xm_context_t*);
 
 
 
+/** Seek to a specific position in a module.
+ *
+ * WARNING, WITH BIG LETTERS: seeking modules is broken by design,
+ * don't expect miracles.
+ */
+void xm_seek(xm_context_t*, uint8_t pot, uint8_t row, uint16_t tick);
+
+
+
 /** Mute or unmute a channel.
  *
  * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
