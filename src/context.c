@@ -90,18 +90,12 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 	return 0;
 }
 
-void xm_create_context_from_libxmize(xm_context_t** ctxp, const char* libxmized, uint32_t rate) {
-	size_t ctx_size, i, j, k;
+void xm_create_context_from_libxmize(xm_context_t** ctxp, char* libxmized, uint32_t rate) {
+	size_t i, j, k;
 
-	/* Assume ctx_size is first member of xm_context structure */
-	ctx_size = *(size_t*)libxmized;
-
-	*ctxp = malloc(ctx_size);
-	memcpy(*ctxp, libxmized, ctx_size);
-	(*ctxp)->rate = rate;
+	*ctxp = (void*)libxmized;
 
 	/* Reverse steps of libxmize.c */
-
 	OFFSET((*ctxp)->module.patterns);
 	OFFSET((*ctxp)->module.instruments);
 	OFFSET((*ctxp)->row_loop_count);

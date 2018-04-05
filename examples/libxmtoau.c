@@ -6,12 +6,15 @@
  * License, Version 2, as published by Sam Hocevar. See
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
-#include <xm.h>
+#include <assert.h>
 #include <stdio.h>
+#include <sys/mman.h>
+#include <sys/resource.h>
+#include <xm.h>
 
 static const unsigned int channels = 2;
 static const unsigned int rate = 48000;
-static const size_t buffer_size = (1 << 8);
+static const size_t buffer_size = (1 << 12);
 
 static void puts_uint32_be(uint32_t i) {
 	char* c = (char*)(&i);
@@ -29,24 +32,22 @@ static void puts_uint32_be(uint32_t i) {
 	}
 }
 
-static void load_internal(xm_context_t** ctxp, unsigned int rate, const char* path) {
-	size_t ctx_size;
-	void* data;
-	FILE* in = fopen(path, "rb");
-	fread(&ctx_size, sizeof(size_t), 1, in);
-	fseek(in, 0, SEEK_SET);
-	data = malloc(ctx_size);
-	fread(data, ctx_size, 1, in);
-	xm_create_context_from_libxmize(ctxp, data, rate);
-	free(data);
-}
-
 int main(int argc, char** argv) {
-	xm_context_t* ctx;
 	float buffer[buffer_size];
+	xm_context_t* ctx;
+	void* data;
+	size_t datalen;
+	FILE* fp;
 
 	if(argc != 2) return 1;
-	load_internal(&ctx, rate, argv[1]);
+
+	fp = fopen(argv[1], "rb");
+	assert(fp);
+	assert(fread(&datalen, sizeof(size_t), 1, fp));
+	rewind(fp);
+	data = mmap(0, datalen, PROT_READ|PROT_WRITE, MAP_PRIVATE, fileno(fp), 0);
+	assert(data != MAP_FAILED);
+	xm_create_context_from_libxmize(&ctx, data, rate);
 
 	puts_uint32_be(0x2E736E64); /* .snd magic number */
 	puts_uint32_be(28); /* Header size */
@@ -69,6 +70,11 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	xm_free_context(ctx);
+	struct rusage r;
+	assert(!getrusage(RUSAGE_SELF, &r));
+	fprintf(stderr, "%s: libxmized length %lu, ru_maxrss %ld\n", argv[0], datalen, r.ru_maxrss);
+
+	munmap(data, datalen);
+	fclose(fp);
 	return 0;
 }

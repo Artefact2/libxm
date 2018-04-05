@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	fprintf(out, "static const char %s[] = {\n", argv[1]);
+	fprintf(out, "static char %s[] = {\n", argv[1]);
 
 	while((c = fgetc(in)) != EOF) {
 		fprintf(out, "%hhi,", c);
