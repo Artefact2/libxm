@@ -17,6 +17,7 @@ OPTION_AND_DEFINE(XM_BIG_ENDIAN "Use big endian byte order (unfinished)" "OFF")
 OPTION_AND_DEFINE(XM_LINEAR_INTERPOLATION "Use linear interpolation (CPU hungry)" "ON")
 OPTION_AND_DEFINE(XM_RAMPING "Enable ramping (smooth volume/panning transitions, CPU hungry)" "ON")
 OPTION_AND_DEFINE(XM_STRINGS "Store module, instrument and sample names in context" "OFF")
+OPTION_AND_DEFINE(XM_LIBXMIZE_DELTA_SAMPLES "Delta-code samples in libxmize format" "ON")
 
 OPTION(XM_BUILD_SHARED_LIBS "Build shared library" "ON")
 OPTION(XM_BUILD_EXAMPLES "Build example programs" "ON")

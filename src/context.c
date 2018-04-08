@@ -91,7 +91,7 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 }
 
 void xm_create_context_from_libxmize(xm_context_t** ctxp, char* libxmized, uint32_t rate) {
-	size_t i, j, k;
+	size_t i, j;
 
 	*ctxp = (void*)libxmized;
 
@@ -111,14 +111,16 @@ void xm_create_context_from_libxmize(xm_context_t** ctxp, char* libxmized, uint3
 		for(j = 0; j < (*ctxp)->module.instruments[i].num_samples; ++j) {
 			OFFSET((*ctxp)->module.instruments[i].samples[j].data8);
 
-			if((*ctxp)->module.instruments[i].samples[j].length > 1) {
-				if((*ctxp)->module.instruments[i].samples[j].bits == 8) {
-					for(k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) {
-						(*ctxp)->module.instruments[i].samples[j].data8[k] += (*ctxp)->module.instruments[i].samples[j].data8[k-1];
-					}
-				} else {
-					for(k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) {
-						(*ctxp)->module.instruments[i].samples[j].data16[k] += (*ctxp)->module.instruments[i].samples[j].data16[k-1];
+			if(XM_LIBXMIZE_DELTA_SAMPLES) {
+				if((*ctxp)->module.instruments[i].samples[j].length > 1) {
+					if((*ctxp)->module.instruments[i].samples[j].bits == 8) {
+						for(size_t k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) {
+							(*ctxp)->module.instruments[i].samples[j].data8[k] += (*ctxp)->module.instruments[i].samples[j].data8[k-1];
+						}
+					} else {
+						for(size_t k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) {
+							(*ctxp)->module.instruments[i].samples[j].data16[k] += (*ctxp)->module.instruments[i].samples[j].data16[k-1];
+						}
 					}
 				}
 			}

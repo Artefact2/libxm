@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
 	FILE* in;
 	FILE* out;
 	void* xmdata;
-	size_t i, j, k;
+	size_t i, j;
 
 	if(argc < 3) FATAL("Usage: %s [--zero-all-waveforms] <in.xm> <out.libxm>\n", argv[0]);
 
@@ -77,16 +77,18 @@ int main(int argc, char** argv) {
 
 	for(i = 0; i < ctx->module.num_instruments; ++i) {
 		for(j = 0; j < ctx->module.instruments[i].num_samples; ++j) {
-			if(ctx->module.instruments[i].samples[j].length > 1) {
-				/* Half-ass delta encoding of samples, this compresses
-				 * much better */
-				if(ctx->module.instruments[i].samples[j].bits == 8) {
-					for(k = ctx->module.instruments[i].samples[j].length - 1; k > 0; --k) {
-						ctx->module.instruments[i].samples[j].data8[k] -= ctx->module.instruments[i].samples[j].data8[k-1];
-					}
-				} else {
-					for(k = ctx->module.instruments[i].samples[j].length - 1; k > 0; --k) {
-						ctx->module.instruments[i].samples[j].data16[k] -= ctx->module.instruments[i].samples[j].data16[k-1];
+			if(XM_LIBXMIZE_DELTA_SAMPLES) {
+				if(ctx->module.instruments[i].samples[j].length > 1) {
+					/* Half-ass delta encoding of samples, this compresses
+					 * much better */
+					if(ctx->module.instruments[i].samples[j].bits == 8) {
+						for(size_t k = ctx->module.instruments[i].samples[j].length - 1; k > 0; --k) {
+							ctx->module.instruments[i].samples[j].data8[k] -= ctx->module.instruments[i].samples[j].data8[k-1];
+						}
+					} else {
+						for(size_t k = ctx->module.instruments[i].samples[j].length - 1; k > 0; --k) {
+							ctx->module.instruments[i].samples[j].data16[k] -= ctx->module.instruments[i].samples[j].data16[k-1];
+						}
 					}
 				}
 			}
