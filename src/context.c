@@ -251,7 +251,7 @@ float xm_get_frequency_of_channel(xm_context_t* ctx, uint16_t chn) {
 }
 
 float xm_get_volume_of_channel(xm_context_t* ctx, uint16_t chn) {
-	return ctx->channels[chn - 1].actual_volume;
+	return ctx->channels[chn - 1].actual_volume * ctx->global_volume;
 }
 
 float xm_get_panning_of_channel(xm_context_t* ctx, uint16_t chn) {
