@@ -23,6 +23,44 @@
 #define TIMING_FRAMES 256
 #define GL_FRAMES_AVG_COUNT 60
 
+#include "hlines.vs.h"
+#include "hlines.fs.h"
+#include "triangles.vs.h"
+#include "triangles.fs.h"
+
+#define CREATE_SHADER(RET, TYPE, SRC) do {					\
+		GLint status;										\
+		const char* src = SRC;								\
+		(RET) = glCreateShader(TYPE);						\
+		glShaderSource((RET), 1, &src, NULL);				\
+		glCompileShader(RET);								\
+		glGetShaderiv((RET), GL_COMPILE_STATUS, &status);	\
+		if(status != GL_TRUE) {								\
+			char msg[1024];									\
+			glGetShaderInfoLog((RET), 1024, NULL, msg);		\
+			fprintf(stderr, "%d:%s", TYPE, msg);			\
+			exit(2);										\
+		}													\
+	} while(0)
+
+#define CREATE_PROGRAM(RET, NAME) do {								\
+		GLuint vsn, fsn;											\
+		GLint status;												\
+		CREATE_SHADER(vsn, GL_VERTEX_SHADER, NAME ## _vs);			\
+		CREATE_SHADER(fsn, GL_FRAGMENT_SHADER, NAME ## _fs);		\
+		(RET) = glCreateProgram();									\
+		glAttachShader((RET), vsn);									\
+		glAttachShader((RET), fsn);									\
+		glLinkProgram(RET);											\
+		glGetProgramiv((RET), GL_LINK_STATUS, &status);				\
+		if(status != GL_TRUE) {										\
+			char msg[1024];											\
+			glGetProgramInfoLog((RET), 1024, NULL, msg);			\
+			fprintf(stderr, "prog:%s\n", msg);						\
+			exit(3);												\
+		}															\
+	} while(0)
+
 static GLFWwindow* window;
 static int interval = 1, width = 1024, height = 1024;
 static bool fullscreen = false;
@@ -42,7 +80,7 @@ static uint8_t loop = 1;
 
 static uint16_t channels, instruments;
 
-static GLuint vertexn, elementn, progn, varrayn, xmdatau, xmciu;
+static GLuint vertexn, elementn, programs[2], curprog = 0, varrayn, xmgu, xmdatau, xmciu;
 const GLfloat vertices[] = {
 	-1.f, -1.f,
 	1.f, -1.f,
@@ -82,8 +120,8 @@ static uint64_t gl_latency_comp = 0;
 void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s\n"
 		  "\t\tShow this message.\n"
-	      "\t%s [--fullscreen] [--width 1024] [--height 1024] [--interval 1] [--no-autoconnect] [--paused] [--loop] [--] <filename>\n"
-		  "\t\tPlay this module.\n\nKey bindings:\n\t<ESC>/q quit\n\t<Space> play/pause\n\tL toggle looping\n",
+	      "\t%s [--fullscreen] [--width 1024] [--height 1024] [--interval 1] [--no-autoconnect] [--paused] [--loop] [--program 0] [--] <filename>\n"
+		  "\t\tPlay this module.\n\nKey bindings:\n\t<ESC>/q quit\n\t<Space> play/pause\n\tL toggle looping\n\t</> change programs\n",
 		  progname, progname);
 }
 
@@ -142,6 +180,13 @@ void jack_latency(jack_latency_callback_mode_t mode, void* arg) {
 	jack_latency_comp = range.max;
 }
 
+void switch_program(void) {
+	xmgu = glGetUniformLocation(programs[curprog], "xmg");
+	xmdatau = glGetUniformLocation(programs[curprog], "xmdata");
+	xmciu = glGetUniformLocation(programs[curprog], "xmci");
+	glUseProgram(programs[curprog]);
+}
+
 void keyfun(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	if(action != GLFW_PRESS) return;
 
@@ -163,6 +208,12 @@ void charfun(GLFWwindow* window, unsigned int codepoint) {
 			printf("Looping: OFF\n");
 			loop = xm_get_loop_count(xmctx) + 1;
 		}
+	} else if(codepoint == '<') {
+		curprog = (sizeof(programs) / sizeof(programs[0]) + curprog - 1) % (sizeof(programs) / sizeof(programs[0]));
+		switch_program();
+	} else if(codepoint == '>') {
+		curprog = (curprog + 1) % (sizeof(programs) / sizeof(programs[0]));
+		switch_program();
 	}
 }
 
@@ -177,21 +228,21 @@ void setup(int argc, char** argv) {
 
 		if(!strcmp(argv[i], "--width")) {
 			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
-			width = strtol(argv[i+1], NULL, 0);
+			width = strtoul(argv[i+1], NULL, 0);
 			++i;
 			continue;
 		}
 
 		if(!strcmp(argv[i], "--height")) {
 			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
-			height = strtol(argv[i+1], NULL, 0);
+			height = strtoul(argv[i+1], NULL, 0);
 			++i;
 			continue;
 		}
 
 		if(!strcmp(argv[i], "--interval")) {
 			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
-			interval = strtol(argv[i+1], NULL, 0);
+			interval = strtoul(argv[i+1], NULL, 0);
 			++i;
 			continue;
 		}
@@ -213,6 +264,14 @@ void setup(int argc, char** argv) {
 
 		if(!strcmp(argv[i], "--loop")) {
 			loop = 0;
+			continue;
+		}
+
+		if(!strcmp(argv[i], "--program")) {
+			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
+			curprog = strtoul(argv[i+1], NULL, 0);
+			curprog %= sizeof(programs) / sizeof(programs[0]);
+			++i;
 			continue;
 		}
 
@@ -255,51 +314,9 @@ void setup(int argc, char** argv) {
 	/* XXX: wtf? */
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementn);
 
-	GLuint vsn, fsn;
-	const char* src;
-	GLint status;
-	progn = glCreateProgram();
-
-	#include "vs.h"
-	src = vs;
-	vsn = glCreateShader(GL_VERTEX_SHADER);
-	glAttachShader(progn, vsn);
-	glShaderSource(vsn, 1, &src, NULL);
-	glCompileShader(vsn);
-	glGetShaderiv(vsn, GL_COMPILE_STATUS, &status);
-	if(status != GL_TRUE) {
-		char msg[1024];
-		glGetShaderInfoLog(vsn, 1024, NULL, msg);
-		fprintf(stderr, "VS:%s", msg);
-		exit(1);
-	}
-
-	#include "fs.h"
-	src = fs;
-	fsn = glCreateShader(GL_FRAGMENT_SHADER);
-	glAttachShader(progn, fsn);
-	glShaderSource(fsn, 1, &src, NULL);
-	glCompileShader(fsn);
-	glGetShaderiv(fsn, GL_COMPILE_STATUS, &status);
-	if(status != GL_TRUE) {
-		char msg[1024];
-		glGetShaderInfoLog(fsn, 1024, NULL, msg);
-		fprintf(stderr, "FS:%s", msg);
-		exit(1);
-	}
-
-	glLinkProgram(progn);
-	glGetProgramiv(progn, GL_LINK_STATUS, &status);
-	if(status != GL_TRUE) {
-		char msg[1024];
-		glGetProgramInfoLog(progn, 1024, NULL, msg);
-		fprintf(stderr, "PROG:%s", msg);
-		exit(1);
-	}
-
-	xmdatau = glGetUniformLocation(progn, "xmdata");
-	xmciu = glGetUniformLocation(progn, "xmci");
-	glUseProgram(progn);
+	CREATE_PROGRAM(programs[0], hlines);
+	CREATE_PROGRAM(programs[1], triangles);
+	switch_program();
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
@@ -383,6 +400,8 @@ void render(void) {
 	chns = &(mti.channels[j * channels]);
 	frames = mti.frames[j];
 
+	glUniform4f(xmgu, (float)frames / (float)rate, (float)width / (float)height, 0.f, 0.f);
+
 	for(uint16_t i = 0; i < channels; ++i) {
 		active = chns[i].active;
 		glUniform4f(xmciu,
@@ -395,7 +414,7 @@ void render(void) {
 		            active ? log2f(chns[i].frequency) : 0.f,
 		            active ? chns[i].volume : 0.f,
 		            (float)(frames - chns[i].latest_trigger) / (float)rate,
-		            0.f
+		            active ? chns[i].panning : .5f
 			);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0);
 	}

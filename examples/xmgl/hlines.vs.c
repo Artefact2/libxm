@@ -2,6 +2,7 @@
 
 in vec2 position;
 out vec2 vposition;
+uniform vec4 xmg;
 uniform vec4 xmci;
 uniform vec4 xmdata;
 
