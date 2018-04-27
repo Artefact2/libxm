@@ -84,7 +84,8 @@ Some example programs are provided.
 
 * `xmgl` is a music visualiser that uses OpenGL and JACK for very
   precise audio synchronisation. See a demo here:
-  <https://www.youtube.com/watch?v=zZkhl6XBUVM> or something similar
+  <https://www.youtube.com/watch?v=zZkhl6XBUVM> and
+  <https://www.youtube.com/watch?v=2zBJ5aeOMeE> or something similar
   that runs in the browser:
   [libxm.js](https://artefact2.github.io/libxm.js/).
 
