@@ -76,7 +76,7 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 	}
 
 	ctx->row_loop_count = (uint8_t*)mempool;
-	mempool += MAX_NUM_ROWS * sizeof(uint8_t);
+	mempool += ctx->module.length * MAX_NUM_ROWS * sizeof(uint8_t);
 
 	if(XM_DEFENSIVE) {
 		int ret;
