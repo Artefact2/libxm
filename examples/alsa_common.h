@@ -69,7 +69,7 @@ void init_alsa_device(int argc, char** argv,
 		if(!strcmp(argv[i], "--")) {
 			break;
 		}
-		
+
 		if(!strcmp(argv[i], "--device")) {
 			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
 			devicename = argv[i+1];
@@ -127,25 +127,25 @@ void init_alsa_device(int argc, char** argv,
 	CHECK_ALSA_CALL(snd_pcm_hw_params_malloc((snd_pcm_hw_params_t**)(&params)));
 	CHECK_ALSA_CALL(snd_pcm_hw_params_any(device, params));
 	CHECK_ALSA_CALL(snd_pcm_hw_params_set_access(device, params, SND_PCM_ACCESS_RW_INTERLEAVED));
-	
+
 	if(snd_pcm_hw_params_set_format(device, params, format) < 0
 	   && snd_pcm_hw_params_set_format(device, params, format = SND_PCM_FORMAT_FLOAT) < 0
 	   && snd_pcm_hw_params_set_format(device, params, format = SND_PCM_FORMAT_S32) < 0) {
 		CHECK_ALSA_CALL(snd_pcm_hw_params_set_format(device, params, format = SND_PCM_FORMAT_S16));
 	}
-	
+
 	if(snd_pcm_hw_params_set_rate(device, params, rate, 0) < 0
 	   && snd_pcm_hw_params_set_rate(device, params, rate = 48000, 0) < 0) {
 		CHECK_ALSA_CALL(snd_pcm_hw_params_set_rate(device, params, rate = 44100, 0));
 	}
-	
+
 	CHECK_ALSA_CALL(snd_pcm_hw_params_set_channels(device, params, channels));
 
 	CHECK_ALSA_CALL(snd_pcm_hw_params_set_buffer_size_near(device, params, &buffer_size));
 	CHECK_ALSA_CALL(snd_pcm_hw_params_set_period_size_near(device, params, &period_size, 0));
 	CHECK_ALSA_CALL(snd_pcm_hw_params(device, params));
 	snd_pcm_hw_params_free(params);
-	
+
 	CHECK_ALSA_CALL(snd_pcm_sw_params_malloc((snd_pcm_sw_params_t**)(&params)));
 	CHECK_ALSA_CALL(snd_pcm_sw_params_current(device, params));
 	CHECK_ALSA_CALL(snd_pcm_sw_params_set_start_threshold(device, params, buffer_size - period_size));
@@ -172,22 +172,24 @@ void init_alsa_device(int argc, char** argv,
 void play_floatbuffer(snd_pcm_t* device, snd_pcm_format_t format, size_t period_size, float preamp,
                    float* buffer, void* alsabuffer) {
 	if(format == SND_PCM_FORMAT_FLOAT && preamp == 1.f) {
-		CHECK_ALSA_CALL(snd_pcm_writei(device, buffer, period_size >> 1));
+		CHECK_ALSA_CALL(snd_pcm_writei(device, buffer, period_size));
 	} else {
+		const unsigned int channels = 2;
+
 		if(format == SND_PCM_FORMAT_S16) {
-			for(size_t i = 0; i < period_size; ++i) {
+			for(size_t i = 0; i < period_size * channels; ++i) {
 				((int16_t*)alsabuffer)[i] = (int16_t)(CLAMP((double)buffer[i] * preamp) * 32767.);
 			}
 		} else if(format == SND_PCM_FORMAT_S32) {
-			for(size_t i = 0; i < period_size; ++i) {
+			for(size_t i = 0; i < period_size * channels; ++i) {
 				((int32_t*)alsabuffer)[i] = (int32_t)(CLAMP((double)buffer[i] * preamp) * 2147483647.);
 			}
-		} else if(format == SND_PCM_FORMAT_FLOAT) {					
-			for(size_t i = 0; i < period_size; ++i) {
+		} else if(format == SND_PCM_FORMAT_FLOAT) {
+			for(size_t i = 0; i < period_size * channels; ++i) {
 				((float*)alsabuffer)[i] = buffer[i] * preamp;
 			}
 		}
-				
-		CHECK_ALSA_CALL(snd_pcm_writei(device, alsabuffer, period_size >> 1));
+
+		CHECK_ALSA_CALL(snd_pcm_writei(device, alsabuffer, period_size));
 	}
 }

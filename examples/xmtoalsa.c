@@ -65,6 +65,7 @@ int main(int argc, char** argv) {
 	xm_context_t* ctx;
 	snd_pcm_t* device;
 
+	const unsigned int channels = 2;
 	size_t period_size;
 	unsigned int rate;
 	snd_pcm_format_t format;
@@ -132,10 +133,10 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	init_alsa_device(argc, argv, 1024, 2048, 0, &device, &period_size, &rate, &format);
+	init_alsa_device(argc, argv, 128, 1024, 0, &device, &period_size, &rate, &format);
 
-	float xmbuffer[period_size];
-	float alsabuffer[period_size];
+	float xmbuffer[period_size * channels];
+	float alsabuffer[period_size * channels];
 
 	tcgetattr(0, &previousflags);
 	atexit(restoreterm);
@@ -248,7 +249,7 @@ int main(int argc, char** argv) {
 			       (unsigned int)((float)(samples % (60 * rate)) / rate),
 			       (unsigned int)(100 * (float)(samples % rate) / rate)
 				);
-			xm_generate_samples(ctx, xmbuffer, period_size >> 1);
+			xm_generate_samples(ctx, xmbuffer, period_size);
 			play_floatbuffer(device, format, period_size, preamp, xmbuffer, alsabuffer);
 
 			if(waspaused) {
