@@ -951,7 +951,7 @@ static void xm_envelopes(xm_channel_context_t* ch) {
 	if(ch->instrument != NULL) {
 		if(ch->instrument->volume_envelope.enabled) {
 			if(!ch->sustained) {
-				ch->fadeout_volume -= (float)ch->instrument->volume_fadeout / 65536.f;
+				ch->fadeout_volume -= (float)ch->instrument->volume_fadeout / 32768.f;
 				XM_CLAMP_DOWN(ch->fadeout_volume);
 			}
 
