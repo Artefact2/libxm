@@ -410,6 +410,10 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 		if(HAS_TONE_PORTAMENTO(ch->current) && ch->instrument != NULL && ch->sample != NULL) {
 			/* Tone portamento in effect, unclear stuff happens */
 			xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_PERIOD | XM_TRIGGER_KEEP_SAMPLE_POSITION);
+		} else if(s->note == 0 && ch->sample != NULL) {
+			/* Ghost instrument, trigger note */
+			/* Sample position is kept, but envelopes are reset */
+			xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_SAMPLE_POSITION);
 		} else if(s->instrument > ctx->module.num_instruments) {
 			/* Invalid instrument, Cut current note */
 			xm_cut_note(ch);
@@ -417,11 +421,6 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			ch->sample = NULL;
 		} else {
 			ch->instrument = ctx->module.instruments + (s->instrument - 1);
-			if(s->note == 0 && ch->sample != NULL) {
-				/* Ghost instrument, trigger note */
-				/* Sample position is kept, but envelopes are reset */
-				xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_SAMPLE_POSITION);
-			}
 		}
 	}
 
