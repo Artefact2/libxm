@@ -57,7 +57,6 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 
 #if XM_RAMPING
 	ctx->volume_ramp = (1.f / 128.f);
-	ctx->panning_ramp = (1.f / 128.f);
 #endif
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
@@ -71,8 +70,8 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 
 		ch->volume = ch->volume_envelope_volume = ch->fadeout_volume = 1.0f;
 		ch->panning = ch->panning_envelope_panning = .5f;
-		ch->actual_volume = .0f;
-		ch->actual_panning = .5f;
+		ch->actual_volume[0] = .0f;
+		ch->actual_volume[1] = .0f;
 	}
 
 	ctx->row_loop_count = (uint8_t*)mempool;
@@ -251,11 +250,11 @@ float xm_get_frequency_of_channel(xm_context_t* ctx, uint16_t chn) {
 }
 
 float xm_get_volume_of_channel(xm_context_t* ctx, uint16_t chn) {
-	return ctx->channels[chn - 1].actual_volume * ctx->global_volume;
+	return ctx->channels[chn - 1].volume * ctx->global_volume;
 }
 
 float xm_get_panning_of_channel(xm_context_t* ctx, uint16_t chn) {
-	return ctx->channels[chn - 1].actual_panning;
+	return ctx->channels[chn - 1].panning;
 }
 
 uint16_t xm_get_instrument_of_channel(xm_context_t* ctx, uint16_t chn) {

@@ -1207,11 +1207,11 @@ static void xm_tick(xm_context_t* ctx) {
 		}
 
 #if XM_RAMPING
-		ch->target_panning = panning;
-		ch->target_volume = volume;
+		ch->target_volume[0] = volume * sqrt(1.f - panning);
+		ch->target_volume[1] = volume * sqrt(panning);
 #else
-		ch->actual_panning = panning;
-		ch->actual_volume = volume;
+		ch->actual_volume[0] = volume * sqrt(1.f - panning);
+		ch->actual_volume[1] = volume * sqrt(panning);
 #endif
 	}
 
@@ -1362,14 +1362,14 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 		const float fval = xm_next_of_sample(ch);
 
 		if(!ch->muted && !ch->instrument->muted) {
-			*left += fval * ch->actual_volume * sqrt(1.f - ch->actual_panning);
-			*right += fval * ch->actual_volume * sqrt(ch->actual_panning);
+			*left += fval * ch->actual_volume[0];
+			*right += fval * ch->actual_volume[1];
 		}
 
 #if XM_RAMPING
 		ch->frame_count++;
-		XM_SLIDE_TOWARDS(ch->actual_volume, ch->target_volume, ctx->volume_ramp);
-		XM_SLIDE_TOWARDS(ch->actual_panning, ch->target_panning, ctx->panning_ramp);
+		XM_SLIDE_TOWARDS(ch->actual_volume[0], ch->target_volume[0], ctx->volume_ramp);
+		XM_SLIDE_TOWARDS(ch->actual_volume[1], ch->target_volume[1], ctx->volume_ramp);
 #endif
 	}
 

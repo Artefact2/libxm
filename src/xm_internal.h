@@ -227,15 +227,13 @@ struct xm_channel_context_s {
 #if XM_RAMPING
 	/* These values are updated at the end of each tick, to save
 	 * a couple of float operations on every generated sample. */
-	float target_panning;
-	float target_volume;
+	float target_volume[2];
 
 	unsigned long frame_count;
 	float end_of_previous_sample[XM_SAMPLE_RAMPING_POINTS];
 #endif
 
-	float actual_panning;
-	float actual_volume;
+	float actual_volume[2];
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
 
@@ -254,7 +252,6 @@ struct xm_context_s {
 	 * sample; this is used to avoid abrubt volume changes which
 	 * manifest as "clicks" in the generated sound. */
 	float volume_ramp;
-	float panning_ramp; /* Same for panning. */
 #endif
 
 	uint8_t current_table_index;
