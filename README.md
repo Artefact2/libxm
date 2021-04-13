@@ -216,6 +216,7 @@ they are supposed to test) is in the table below.
      Test                      |     Status     |     Tested against     | Extras
 -------------------------------+----------------+------------------------+------------------------------------------------
 amiga.xm                       | FAIL           | MilkyTracker, xmp      | Should sound identical.
+fadeout-speed.xm               | PASS           | MilkyTracker           | Should sound identical.
 finetune.xm                    | PASS           | MilkyTracker           | Left and right channels should sound identical.
 note-delay-ghost.xm            | PASS           | MilkyTracker, FT2      | Should sound identical.
 note-delay-retrig.xm           | PASS           | MilkyTracker           | Should sound identical.
