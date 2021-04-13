@@ -221,6 +221,7 @@ finetune.xm                    | PASS           | MilkyTracker           | Left 
 ghosts.xm                      | FAIL           | MilkyTracker           | Left and right channels should sound identical.
 note-delay-ghost.xm            | PASS           | MilkyTracker, FT2      | Should sound identical.
 note-delay-retrig.xm           | PASS           | MilkyTracker           | Should sound identical.
+panning-law.xm                 | PASS           | MilkyTracker, FT2clone | Should sound identical.
 pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
 ramping.xm                     | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
 ramping2.xm                    | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
