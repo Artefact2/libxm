@@ -218,6 +218,7 @@ they are supposed to test) is in the table below.
 amiga.xm                       | FAIL           | MilkyTracker, xmp      | Should sound identical.
 fadeout-speed.xm               | PASS           | MilkyTracker           | Should sound identical.
 finetune.xm                    | PASS           | MilkyTracker           | Left and right channels should sound identical.
+ghosts.xm                      | FAIL           | MilkyTracker           | Left and right channels should sound identical.
 note-delay-ghost.xm            | PASS           | MilkyTracker, FT2      | Should sound identical.
 note-delay-retrig.xm           | PASS           | MilkyTracker           | Should sound identical.
 pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
@@ -244,6 +245,10 @@ Thanks to:
 
 * All the MilkyTracker contributors, for the [thorough
   documentation](http://www.milkytracker.org/docs/MilkyTracker.html#effects)
-  of effects.
+  of effects;
 
-* All the people that helped on `#milkytracker` IRC.
+* All the people that helped on `#milkytracker` IRC;
+
+* All the
+  [libxm](https://github.com/Artefact2/libxm/graphs/contributors)
+  contributors.
