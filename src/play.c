@@ -1362,8 +1362,8 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 		const float fval = xm_next_of_sample(ch);
 
 		if(!ch->muted && !ch->instrument->muted) {
-			*left += fval * ch->actual_volume * (1.f - ch->actual_panning);
-			*right += fval * ch->actual_volume * ch->actual_panning;
+			*left += fval * ch->actual_volume * sqrt(1.f - ch->actual_panning);
+			*right += fval * ch->actual_volume * sqrt(ch->actual_panning);
 		}
 
 #if XM_RAMPING
