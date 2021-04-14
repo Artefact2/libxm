@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
 	unsigned long loop = 1;
 	unsigned long izero = 1; /* Index in argv of the first filename */
 
-	bool paused = false, waspaused = false, jump = false, random = false;
+	bool paused = false, hwpaused = false, waspaused = false, jump = false, random = false;
 	uint64_t samples, channel_map_until = 0;
 
 	if(argc == 1 || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
@@ -176,13 +176,18 @@ int main(int argc, char** argv) {
 			case ' ':
 				paused = !paused;
 				if(paused) {
-					snd_pcm_pause(device, 1);
+					if(snd_pcm_pause(device, 1) < 0) {
+						/* No hardware pause */
+						CHECK_ALSA_CALL(snd_pcm_drain(device));
+						hwpaused = false;
+					}
 					fflush(stdout);
 				} else {
 					waspaused = true;
 				}
 				break;
 			case 'q':
+				putchar('\n');
 				exit(0);
 				break;
 			case 'p':
@@ -248,13 +253,21 @@ int main(int argc, char** argv) {
 			       (unsigned int)(100 * (float)(samples % rate) / rate)
 				);
 			xm_generate_samples(ctx, xmbuffer, period_size);
-			play_floatbuffer(device, format, period_size, preamp, xmbuffer, alsabuffer);
 
 			if(waspaused) {
 				waspaused = false;
-				snd_pcm_pause(device, 0);
+				if(hwpaused) {
+					CHECK_ALSA_CALL(snd_pcm_pause(device, 0));
+					hwpaused = false;
+				} else {
+					snd_pcm_recover(device, 0, 0);
+					if(snd_pcm_resume(device) < 0) {
+						CHECK_ALSA_CALL(snd_pcm_prepare(device));
+					}
+				}
 			}
 
+			play_floatbuffer(device, format, period_size, preamp, xmbuffer, alsabuffer);
 			fflush(stdout);
 		}
 
