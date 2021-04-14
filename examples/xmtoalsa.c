@@ -72,7 +72,8 @@ int main(int argc, char** argv) {
 	unsigned long izero = 1; /* Index in argv of the first filename */
 
 	bool paused = false, hwpaused = false, waspaused = false, jump = false, random = false;
-	uint64_t samples, channel_map_until = 0;
+	uint64_t samples = 0, status_line_until = 0;
+	char status_line[70];
 
 	if(argc == 1 || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
 		usage(argv[0]);
@@ -181,9 +182,11 @@ int main(int argc, char** argv) {
 						CHECK_ALSA_CALL(snd_pcm_drain(device));
 						hwpaused = false;
 					}
-					fflush(stdout);
+					snprintf(status_line, sizeof(status_line), "-- PAUSED --");
+					status_line_until = -1ull;
 				} else {
 					waspaused = true;
+					status_line_until = 0;
 				}
 				break;
 			case 'q':
@@ -221,37 +224,56 @@ int main(int argc, char** argv) {
 					uint16_t ch = 1 + (command - '0');
 					if(ch > num_channels) break;
 					xm_mute_channel(ctx, ch, !xm_mute_channel(ctx, ch, true));
-					channel_map_until = samples + rate;
 				} else if(command >= 'A' && command <= 'V') {
 					uint16_t ch = 11 + (command - 'A');
 					if(ch > num_channels) break;
 					xm_mute_channel(ctx, ch, !xm_mute_channel(ctx, ch, true));
-					channel_map_until = samples + rate;
+				} else {
+					break;
 				}
+
+				snprintf(status_line, sizeof(status_line), "Channels: ");
+				for(uint16_t ch = 1; ch <= num_channels; ++ch) {
+					bool was_muted = xm_mute_channel(ctx, ch, true);
+					xm_mute_channel(ctx, ch, was_muted);
+					if(was_muted) {
+						status_line[10 + ch - 1] = '.';
+						continue;
+					}
+					status_line[10 + ch - 1] = "0123456789ABCDEFGHIJKLMNOPQRSTUV"[ch - 1];
+				}
+				status_line[10 + num_channels] = '\0';
+				status_line_until = samples + rate;
 				break;
 			}
+
+			xm_get_position(ctx, &pos, &pat, &row, &samples);
+			xm_get_playing_speed(ctx, &bpm, &tempo);
+
+			if(status_line_until < samples) {
+				printf("\rSpd[%.2X/%.2X] Pos[%.2X/%.2X]"
+					   " Pat[%.2X/%.2X] Row[%.2X/%.2X] Loop[%.2X/%.2lX]"
+					   " %.2i:%.2i:%.2i.%.2i\r",
+					   tempo, bpm,
+					   pos, length,
+					   pat, num_patterns,
+					   row, xm_get_number_of_rows(ctx, pat),
+					   xm_get_loop_count(ctx), loop,
+					   (unsigned int)((float)samples / (3600 * rate)),
+					   (unsigned int)((float)(samples % (3600 * rate) / (60 * rate))),
+					   (unsigned int)((float)(samples % (60 * rate)) / rate),
+					   (unsigned int)(100 * (float)(samples % rate) / rate)
+					);
+			} else {
+				printf("\r%-*s\r", (int)sizeof(status_line), status_line);
+			}
+			fflush(stdout);
 
 			if(paused) {
 				usleep(10000);
 				continue;
 			}
 
-			xm_get_position(ctx, &pos, &pat, &row, &samples);
-			xm_get_playing_speed(ctx, &bpm, &tempo);
-
-			printf("\rSpeed[%.2X] BPM[%.2X] Pos[%.2X/%.2X]"
-			       " Pat[%.2X/%.2X] Row[%.2X/%.2X] Loop[%.2X/%.2lX]"
-			       " %.2i:%.2i:%.2i.%.2i ",
-			       tempo, bpm,
-			       pos, length,
-			       pat, num_patterns,
-			       row, xm_get_number_of_rows(ctx, pat),
-			       xm_get_loop_count(ctx), loop,
-			       (unsigned int)((float)samples / (3600 * rate)),
-			       (unsigned int)((float)(samples % (3600 * rate) / (60 * rate))),
-			       (unsigned int)((float)(samples % (60 * rate)) / rate),
-			       (unsigned int)(100 * (float)(samples % rate) / rate)
-				);
 			xm_generate_samples(ctx, xmbuffer, period_size);
 
 			if(waspaused) {
@@ -268,7 +290,6 @@ int main(int argc, char** argv) {
 			}
 
 			play_floatbuffer(device, format, period_size, preamp, xmbuffer, alsabuffer);
-			fflush(stdout);
 		}
 
 		printf("\n");
