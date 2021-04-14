@@ -22,7 +22,7 @@
 
 static struct termios customflags, previousflags;
 
-void usage(char* progname) {
+static void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s --help\n"
 	      "\t\tShow this message.\n"
 	      "\t%s [--loop N] [--random] [--preamp 1.0] [--device default] [--buffer-size 4096] [--period-size 2048] [--rate 48000] [--format float|s16|s32] [--] <filenames…>\n"
@@ -39,20 +39,18 @@ void usage(char* progname) {
 	      progname, progname);
 }
 
-void restoreterm(void) {
+static void restoreterm(void) {
 	tcsetattr(0, TCSANOW, &previousflags);
 }
 
-char get_command(void) {
+static char get_command(void) {
 	static fd_set f;
 	static struct timeval t;
 
-	if(t.tv_usec == 0) {
-		t.tv_sec = 0;
-		t.tv_usec = 1;
-		FD_ZERO(&f);
-		FD_SET(0, &f);
-	}
+	FD_ZERO(&f);
+	FD_SET(fileno(stdin), &f);
+	t.tv_sec = 0;
+	t.tv_usec = 0;
 
 	if(select(1, &f, NULL, NULL, &t) > 0) {
 		return getchar();
