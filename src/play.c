@@ -586,6 +586,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 		if(s->effect_param < ctx->module.length) {
 			ctx->position_jump = true;
 			ctx->jump_dest = s->effect_param;
+			ctx->jump_row = 0;
 		}
 		break;
 
