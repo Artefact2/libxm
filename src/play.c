@@ -1110,7 +1110,7 @@ static void xm_tick(xm_context_t* ctx) {
 			case 0x9: /* E9y: Retrigger note */
 				if(ctx->current_tick != 0 && ch->current->effect_param & 0x0F) {
 					if(!(ctx->current_tick % (ch->current->effect_param & 0x0F))) {
-						xm_trigger_note(ctx, ch, 0);
+						xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_VOLUME);
 						xm_envelopes(ch);
 					}
 				}
