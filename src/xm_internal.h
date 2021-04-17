@@ -30,6 +30,7 @@ extern int __fail[-1];
 /* ----- XM constants ----- */
 
 #define SAMPLE_NAME_LENGTH 22
+#define INSTRUMENT_HEADER_LENGTH 263
 #define INSTRUMENT_NAME_LENGTH 22
 #define MODULE_NAME_LENGTH 20
 #define TRACKER_NAME_LENGTH 20

@@ -9,16 +9,21 @@
 
 #include "xm_internal.h"
 
-/* .xm files are little-endian. (XXX: Are they really?) */
+/* .xm files are little-endian. */
 
 /* Bounded reader macros.
  * If we attempt to read the buffer out-of-bounds, pretend that the buffer is
  * infinitely padded with zeroes.
  */
-#define READ_U8(offset) (((offset) < moddata_length) ? (*(uint8_t*)(moddata + (offset))) : 0)
-#define READ_U16(offset) ((uint16_t)READ_U8(offset) | ((uint16_t)READ_U8((offset) + 1) << 8))
-#define READ_U32(offset) ((uint32_t)READ_U16(offset) | ((uint32_t)READ_U16((offset) + 2) << 16))
-#define READ_MEMCPY(ptr, offset, length) memcpy_pad(ptr, length, moddata, moddata_length, offset)
+#define READ_U8_BOUND(offset, bound) (((offset) < bound) ? (*(uint8_t*)(moddata + (offset))) : 0)
+#define READ_U16_BOUND(offset, bound) ((uint16_t)READ_U8(offset) | ((uint16_t)READ_U8((offset) + 1) << 8))
+#define READ_U32_BOUND(offset, bound) ((uint32_t)READ_U16(offset) | ((uint32_t)READ_U16((offset) + 2) << 16))
+#define READ_MEMCPY_BOUND(ptr, offset, length, bound) memcpy_pad(ptr, length, moddata, bound, offset)
+
+#define READ_U8(offset) READ_U8_BOUND(offset, moddata_length)
+#define READ_U16(offset) READ_U16_BOUND(offset, moddata_length)
+#define READ_U32(offset) READ_U32_BOUND(offset, moddata_length)
+#define READ_MEMCPY(ptr, offset, length) READ_MEMCPY_BOUND(ptr, offset, length, moddata_length)
 
 static inline void memcpy_pad(void* dst, size_t dst_len, const void* src, size_t src_len, size_t offset) {
 	uint8_t* dst_c = dst;
@@ -264,57 +269,72 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 		uint32_t sample_header_size = 0;
 		xm_instrument_t* instr = mod->instruments + i;
 
+		/* Original FT2 would load instruments with a direct read into the
+		   instrument data structure that was previously zeroed. This means
+		   that if the declared length was less than INSTRUMENT_HEADER_LENGTH,
+		   all excess data would be zeroed. This is used by the XM compressor
+		   BoobieSqueezer. To implement this, bound all reads to the header size. */
+		uint32_t ins_header_size = READ_U32(offset);
+		if (ins_header_size == 0 || ins_header_size > INSTRUMENT_HEADER_LENGTH)
+			ins_header_size = INSTRUMENT_HEADER_LENGTH;
+	
 #if XM_STRINGS
-		READ_MEMCPY(instr->name, offset + 4, INSTRUMENT_NAME_LENGTH);
+		READ_MEMCPY_BOUND(instr->name, offset + 4, INSTRUMENT_NAME_LENGTH, offset + ins_header_size);
+		instr->name[INSTRUMENT_NAME_LENGTH] = 0;
 #endif
-	    instr->num_samples = READ_U16(offset + 27);
+	    instr->num_samples = READ_U16_BOUND(offset + 27, offset + ins_header_size);
 
 		if(instr->num_samples > 0) {
 			/* Read extra header properties */
-			sample_header_size = READ_U32(offset + 29);
-			READ_MEMCPY(instr->sample_of_notes, offset + 33, NUM_NOTES);
+			sample_header_size = READ_U32_BOUND(offset + 29, offset + ins_header_size);
+			READ_MEMCPY_BOUND(instr->sample_of_notes, offset + 33, NUM_NOTES, offset + ins_header_size);
 
-			instr->volume_envelope.num_points = READ_U8(offset + 225);
-			instr->panning_envelope.num_points = READ_U8(offset + 226);
+			instr->volume_envelope.num_points = READ_U8_BOUND(offset + 225, offset + ins_header_size);
+			if (instr->volume_envelope.num_points > NUM_ENVELOPE_POINTS)
+				instr->volume_envelope.num_points = NUM_ENVELOPE_POINTS;
+
+			instr->panning_envelope.num_points = READ_U8_BOUND(offset + 226, offset + ins_header_size);
+			if (instr->panning_envelope.num_points > NUM_ENVELOPE_POINTS)
+				instr->panning_envelope.num_points = NUM_ENVELOPE_POINTS;
 
 			for(uint8_t j = 0; j < instr->volume_envelope.num_points; ++j) {
-				instr->volume_envelope.points[j].frame = READ_U16(offset + 129 + 4 * j);
-				instr->volume_envelope.points[j].value = READ_U16(offset + 129 + 4 * j + 2);
+				instr->volume_envelope.points[j].frame = READ_U16_BOUND(offset + 129 + 4 * j, offset + ins_header_size);
+				instr->volume_envelope.points[j].value = READ_U16_BOUND(offset + 129 + 4 * j + 2, offset + ins_header_size);
 			}
 
 			for(uint8_t j = 0; j < instr->panning_envelope.num_points; ++j) {
-				instr->panning_envelope.points[j].frame = READ_U16(offset + 177 + 4 * j);
-				instr->panning_envelope.points[j].value = READ_U16(offset + 177 + 4 * j + 2);
+				instr->panning_envelope.points[j].frame = READ_U16_BOUND(offset + 177 + 4 * j, offset + ins_header_size);
+				instr->panning_envelope.points[j].value = READ_U16_BOUND(offset + 177 + 4 * j + 2, offset + ins_header_size);
 			}
 
-			instr->volume_envelope.sustain_point = READ_U8(offset + 227);
-			instr->volume_envelope.loop_start_point = READ_U8(offset + 228);
-			instr->volume_envelope.loop_end_point = READ_U8(offset + 229);
+			instr->volume_envelope.sustain_point = READ_U8_BOUND(offset + 227, offset + ins_header_size);
+			instr->volume_envelope.loop_start_point = READ_U8_BOUND(offset + 228, offset + ins_header_size);
+			instr->volume_envelope.loop_end_point = READ_U8_BOUND(offset + 229, offset + ins_header_size);
 
-			instr->panning_envelope.sustain_point = READ_U8(offset + 230);
-			instr->panning_envelope.loop_start_point = READ_U8(offset + 231);
-			instr->panning_envelope.loop_end_point = READ_U8(offset + 232);
+			instr->panning_envelope.sustain_point = READ_U8_BOUND(offset + 230, offset + ins_header_size);
+			instr->panning_envelope.loop_start_point = READ_U8_BOUND(offset + 231, offset + ins_header_size);
+			instr->panning_envelope.loop_end_point = READ_U8_BOUND(offset + 232, offset + ins_header_size);
 
-			uint8_t flags = READ_U8(offset + 233);
+			uint8_t flags = READ_U8_BOUND(offset + 233, offset + ins_header_size);
 			instr->volume_envelope.enabled = flags & (1 << 0);
 			instr->volume_envelope.sustain_enabled = flags & (1 << 1);
 			instr->volume_envelope.loop_enabled = flags & (1 << 2);
 
-			flags = READ_U8(offset + 234);
+			flags = READ_U8_BOUND(offset + 234, offset + ins_header_size);
 			instr->panning_envelope.enabled = flags & (1 << 0);
 			instr->panning_envelope.sustain_enabled = flags & (1 << 1);
 			instr->panning_envelope.loop_enabled = flags & (1 << 2);
 
-			instr->vibrato_type = READ_U8(offset + 235);
+			instr->vibrato_type = READ_U8_BOUND(offset + 235, offset + ins_header_size);
 			if(instr->vibrato_type == 2) {
 				instr->vibrato_type = 1;
 			} else if(instr->vibrato_type == 1) {
 				instr->vibrato_type = 2;
 			}
-			instr->vibrato_sweep = READ_U8(offset + 236);
-			instr->vibrato_depth = READ_U8(offset + 237);
-			instr->vibrato_rate = READ_U8(offset + 238);
-			instr->volume_fadeout = READ_U16(offset + 239);
+			instr->vibrato_sweep = READ_U8_BOUND(offset + 236, offset + ins_header_size);
+			instr->vibrato_depth = READ_U8_BOUND(offset + 237, offset + ins_header_size);
+			instr->vibrato_rate = READ_U8_BOUND(offset + 238, offset + ins_header_size);
+			instr->volume_fadeout = READ_U16_BOUND(offset + 239, offset + ins_header_size);
 
 			instr->samples = (xm_sample_t*)mempool;
 			mempool += instr->num_samples * sizeof(xm_sample_t);
@@ -323,7 +343,7 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 		}
 
 		/* Instrument header size */
-		offset += READ_U32(offset);
+		offset += ins_header_size;
 
 		for(uint16_t j = 0; j < instr->num_samples; ++j) {
 			/* Read sample header */
