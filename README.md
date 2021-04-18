@@ -226,6 +226,7 @@ pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Shoul
 pos_jump.xm                    | PASS           | Milkytracker, OpenMPT  | Only one beep should be heard.
 ramping.xm                     | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
 ramping2.xm                    | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
+retrig-vol-fade.xm             | PASS           | MT, FT2clone, OpenMPT  | Should sound identical.
 tone-portamento.xm             | PASS           | MilkyTracker           | Should sound identical.
 tremolo.xm                     | PASS           | MilkyTracker           | Should sound identical.
 tremor.xm                      | PASS           | MilkyTracker           | Should sound identical.
