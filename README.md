@@ -82,12 +82,12 @@ Examples
 
 Some example programs are provided.
 
-* `xmgl` is a music visualiser that uses OpenGL and JACK for very
-  precise audio synchronisation. See a demo here:
-  <https://www.youtube.com/watch?v=zZkhl6XBUVM> and
-  <https://www.youtube.com/watch?v=2zBJ5aeOMeE> or something similar
-  that runs in the browser:
-  [libxm.js](https://artefact2.github.io/libxm.js/).
+* [libxm.js](https://artefact2.github.io/libxm.js/) is a very simple
+  XM player/visualiser that runs in a browser (emscripten port).
+
+* `xmgl` is a simple music visualiser that uses OpenGL and JACK for
+  very precise audio synchronisation. See a demo here:
+  <https://www.youtube.com/watch?v=SR-fSa7J698>
 
 * `xmprocdemo`: see [README](./examples/xmprocdemo/README.md)
 
