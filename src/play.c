@@ -51,6 +51,7 @@ static void xm_sample(xm_context_t*, float*, float*);
 #define XM_TRIGGER_KEEP_VOLUME (1 << 0)
 #define XM_TRIGGER_KEEP_PERIOD (1 << 1)
 #define XM_TRIGGER_KEEP_SAMPLE_POSITION (1 << 2)
+#define XM_TRIGGER_KEEP_ENVELOPE (1 << 3)
 
 static const uint16_t amiga_frequencies[] = {
 	1712, 1616, 1525, 1440, /* C-2, C#2, D-2, D#2 */
@@ -798,10 +799,12 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 		ch->panning = ch->sample->panning;
 	}
 
-	ch->sustained = true;
-	ch->fadeout_volume = ch->volume_envelope_volume = 1.0f;
-	ch->panning_envelope_panning = .5f;
-	ch->volume_envelope_frame_count = ch->panning_envelope_frame_count = 0;
+	if(!(flags & XM_TRIGGER_KEEP_ENVELOPE)) {
+		ch->sustained = true;
+		ch->fadeout_volume = ch->volume_envelope_volume = 1.0f;
+		ch->panning_envelope_panning = .5f;
+		ch->volume_envelope_frame_count = ch->panning_envelope_frame_count = 0;
+	}
 	ch->vibrato_note_offset = 0.f;
 	ch->tremolo_volume = 0.f;
 	ch->tremor_on = false;
@@ -1172,11 +1175,16 @@ static void xm_tick(xm_context_t* ctx) {
 			if(ctx->current_tick == 0) break;
 			if(((ch->multi_retrig_param) & 0x0F) == 0) break;
 			if((ctx->current_tick % (ch->multi_retrig_param & 0x0F)) == 0) {
-				float v = ch->volume * multi_retrig_multiply[ch->multi_retrig_param >> 4]
-					+ multi_retrig_add[ch->multi_retrig_param >> 4];
-				XM_CLAMP(v);
-				xm_trigger_note(ctx, ch, 0);
-				ch->volume = v;
+				xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_VOLUME | XM_TRIGGER_KEEP_ENVELOPE);
+
+				/* Rxy doesn't affect volume if there's a command in the volume 
+				   column, or if the instrument has a volume envelope. */
+				if (!ch->current->volume_column && !ch->instrument->volume_envelope.enabled){
+					float v = ch->volume * multi_retrig_multiply[ch->multi_retrig_param >> 4]
+						+ multi_retrig_add[ch->multi_retrig_param >> 4] / (float)0x40;
+					XM_CLAMP(v);
+					ch->volume = v;					
+				}
 			}
 			break;
 
