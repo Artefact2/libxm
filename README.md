@@ -219,6 +219,7 @@ amiga.xm                       | FAIL           | MilkyTracker, xmp      | Shoul
 fadeout-speed.xm               | PASS           | MilkyTracker           | Should sound identical.
 finetune.xm                    | PASS           | MilkyTracker           | Left and right channels should sound identical.
 ghosts.xm                      | FAIL           | MilkyTracker           | Left and right channels should sound identical.
+multiretrig-volume.xm          | PASS           | FT2, OpenMPT           | Should sound identical.
 note-delay-ghost.xm            | PASS           | MilkyTracker, FT2      | Should sound identical.
 note-delay-retrig.xm           | PASS           | MilkyTracker           | Should sound identical.
 panning-law.xm                 | PASS           | MilkyTracker, FT2clone | Should sound identical.
