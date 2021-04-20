@@ -118,18 +118,16 @@ size_t xm_get_memory_needed_for_context(const char* moddata, size_t moddata_leng
 	/* Read instrument headers */
 	for(uint16_t i = 0; i < num_instruments; ++i) {
 		uint16_t num_samples;
-		uint32_t sample_header_size = 0;
 		uint32_t sample_size_aggregate = 0;
 
 		num_samples = READ_U16(offset + 27);
 		memory_needed += num_samples * sizeof(xm_sample_t);
 
-		if(num_samples > 0) {
-			sample_header_size = READ_U32(offset + 29);
-		}
-
 		/* Instrument header size */
-		offset += READ_U32(offset);
+		uint32_t ins_header_size = READ_U32(offset);
+		if (ins_header_size == 0 || ins_header_size > INSTRUMENT_HEADER_LENGTH)
+			ins_header_size = INSTRUMENT_HEADER_LENGTH;
+		offset += ins_header_size;
 
 		for(uint16_t j = 0; j < num_samples; ++j) {
 			uint32_t sample_size;
@@ -137,7 +135,7 @@ size_t xm_get_memory_needed_for_context(const char* moddata, size_t moddata_leng
 			sample_size = READ_U32(offset);
 			sample_size_aggregate += sample_size;
 			memory_needed += sample_size;
-			offset += sample_header_size;
+			offset += 40;
 		}
 
 		offset += sample_size_aggregate;
@@ -266,7 +264,6 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 
 	/* Read instruments */
 	for(uint16_t i = 0; i < ctx->module.num_instruments; ++i) {
-		uint32_t sample_header_size = 0;
 		xm_instrument_t* instr = mod->instruments + i;
 
 		/* Original FT2 would load instruments with a direct read into the
@@ -286,7 +283,6 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 
 		if(instr->num_samples > 0) {
 			/* Read extra header properties */
-			sample_header_size = READ_U32_BOUND(offset + 29, offset + ins_header_size);
 			READ_MEMCPY_BOUND(instr->sample_of_notes, offset + 33, NUM_NOTES, offset + ins_header_size);
 
 			instr->volume_envelope.num_points = READ_U8_BOUND(offset + 225, offset + ins_header_size);
@@ -382,7 +378,10 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 				sample->length >>= 1;
 			}
 
-			offset += sample_header_size;
+			/* Notice that, even if there's a "sample header size" in the
+			   instrument header, that value seems ignored, and might even
+			   be wrong in some corrupted modules. */
+			offset += 40;
 		}
 
 		for(uint16_t j = 0; j < instr->num_samples; ++j) {
