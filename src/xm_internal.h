@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <math.h>
 #include <string.h>
+#include <inttypes.h>
 
 #if XM_DEBUG
 #include <stdio.h>

@@ -386,7 +386,7 @@ static float xm_frequency(xm_context_t* ctx, float period, float note_offset) {
 		}
 
 		if(XM_DEBUG && (p1 < period || p2 > period)) {
-			DEBUG("%li <= %f <= %li should hold but doesn't, this is a bug", p2, period, p1);
+			DEBUG("%" PRId32 " <= %f <= %" PRId32 " should hold but doesn't, this is a bug", p2, period, p1);
 		}
 
 		note = 12.f * (octave + 2) + a + XM_INVERSE_LERP(p1, p2, period);
@@ -1180,13 +1180,13 @@ static void xm_tick(xm_context_t* ctx) {
 			if((ctx->current_tick % (ch->multi_retrig_param & 0x0F)) == 0) {
 				xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_VOLUME | XM_TRIGGER_KEEP_ENVELOPE);
 
-				/* Rxy doesn't affect volume if there's a command in the volume 
+				/* Rxy doesn't affect volume if there's a command in the volume
 				   column, or if the instrument has a volume envelope. */
 				if (!ch->current->volume_column && !ch->instrument->volume_envelope.enabled){
 					float v = ch->volume * multi_retrig_multiply[ch->multi_retrig_param >> 4]
 						+ multi_retrig_add[ch->multi_retrig_param >> 4] / (float)0x40;
 					XM_CLAMP(v);
-					ch->volume = v;					
+					ch->volume = v;
 				}
 			}
 			break;
