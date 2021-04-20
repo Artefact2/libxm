@@ -155,7 +155,13 @@ static float xm_waveform(xm_waveform_type_t waveform, uint8_t step) {
 }
 
 static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
-	if(ch->instrument == NULL || ch->instrument->vibrato_depth == 0) return;
+	if(ch->instrument == NULL || ch->instrument->vibrato_depth == 0){
+		if (ch->autovibrato_note_offset){
+			ch->autovibrato_note_offset = 0.f;
+			xm_update_frequency(ctx, ch);
+		}
+		return;
+	}
 	xm_instrument_t* instr = ch->instrument;
 	float sweep = 1.f;
 
