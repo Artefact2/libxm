@@ -135,7 +135,7 @@ size_t xm_get_memory_needed_for_context(const char* moddata, size_t moddata_leng
 			sample_size = READ_U32(offset);
 			sample_size_aggregate += sample_size;
 			memory_needed += sample_size;
-			offset += 40;
+			offset += 40; /* See comment in xm_load_module() */
 		}
 
 		offset += sample_size_aggregate;
@@ -274,7 +274,7 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 		uint32_t ins_header_size = READ_U32(offset);
 		if (ins_header_size == 0 || ins_header_size > INSTRUMENT_HEADER_LENGTH)
 			ins_header_size = INSTRUMENT_HEADER_LENGTH;
-	
+
 #if XM_STRINGS
 		READ_MEMCPY_BOUND(instr->name, offset + 4, INSTRUMENT_NAME_LENGTH, offset + ins_header_size);
 		instr->name[INSTRUMENT_NAME_LENGTH] = 0;
