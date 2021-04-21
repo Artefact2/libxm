@@ -13,7 +13,7 @@
 
 static float xm_waveform(xm_waveform_type_t, uint8_t);
 static void xm_autovibrato(xm_context_t*, xm_channel_context_t*);
-static void xm_vibrato(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t);
+static void xm_vibrato(xm_context_t*, xm_channel_context_t*, uint8_t);
 static void xm_tremolo(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t);
 static void xm_arpeggio(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t);
 static void xm_tone_portamento(xm_context_t*, xm_channel_context_t*);
@@ -176,11 +176,11 @@ static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
 	xm_update_frequency(ctx, ch);
 }
 
-static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, uint16_t pos) {
-	unsigned int step = pos * (param >> 4);
+static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param) {
+	ch->vibrato_ticks += (param >> 4);
 	ch->vibrato_note_offset =
-		* xm_waveform(ch->vibrato_waveform, step)
 		-2.f
+		* xm_waveform(ch->vibrato_waveform, ch->vibrato_ticks)
 		* (float)(param & 0x0F) / (float)0xF;
 	xm_update_frequency(ctx, ch);
 }
@@ -1018,7 +1018,7 @@ static void xm_tick(xm_context_t* ctx) {
 		case 0xB: /* Vibrato */
 			if(ctx->current_tick == 0) break;
 			ch->vibrato_in_progress = false;
-			xm_vibrato(ctx, ch, ch->vibrato_param, ch->vibrato_ticks++);
+			xm_vibrato(ctx, ch, ch->vibrato_param);
 			break;
 
 		case 0xD: /* Panning slide left */
@@ -1089,7 +1089,7 @@ static void xm_tick(xm_context_t* ctx) {
 		case 4: /* 4xy: Vibrato */
 			if(ctx->current_tick == 0) break;
 			ch->vibrato_in_progress = true;
-			xm_vibrato(ctx, ch, ch->vibrato_param, ch->vibrato_ticks++);
+			xm_vibrato(ctx, ch, ch->vibrato_param);
 			break;
 
 		case 5: /* 5xy: Tone portamento + Volume slide */
@@ -1101,7 +1101,7 @@ static void xm_tick(xm_context_t* ctx) {
 		case 6: /* 6xy: Vibrato + Volume slide */
 			if(ctx->current_tick == 0) break;
 			ch->vibrato_in_progress = true;
-			xm_vibrato(ctx, ch, ch->vibrato_param, ch->vibrato_ticks++);
+			xm_vibrato(ctx, ch, ch->vibrato_param);
 			xm_volume_slide(ch, ch->volume_slide_param);
 			break;
 
