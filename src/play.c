@@ -30,7 +30,7 @@ static float xm_linear_frequency(float);
 static float xm_amiga_period(float);
 static float xm_amiga_frequency(float);
 static float xm_period(xm_context_t*, float);
-static float xm_frequency(xm_context_t*, float, float);
+static float xm_frequency(xm_context_t*, float, float, float);
 static void xm_update_frequency(xm_context_t*, xm_channel_context_t*);
 
 static void xm_handle_note_and_instrument(xm_context_t*, xm_channel_context_t*, xm_pattern_slot_t*);
@@ -179,8 +179,8 @@ static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
 static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, uint16_t pos) {
 	unsigned int step = pos * (param >> 4);
 	ch->vibrato_note_offset =
-		2.f
 		* xm_waveform(ch->vibrato_waveform, step)
+		-2.f
 		* (float)(param & 0x0F) / (float)0xF;
 	xm_update_frequency(ctx, ch);
 }
@@ -343,7 +343,7 @@ static float xm_period(xm_context_t* ctx, float note) {
 	return .0f;
 }
 
-static float xm_frequency(xm_context_t* ctx, float period, float note_offset) {
+static float xm_frequency(xm_context_t* ctx, float period, float note_offset, float period_offset) {
 	uint8_t a;
 	int8_t octave;
 	float note;
@@ -352,12 +352,12 @@ static float xm_frequency(xm_context_t* ctx, float period, float note_offset) {
 	switch(ctx->module.frequency_type) {
 
 	case XM_LINEAR_FREQUENCIES:
-		return xm_linear_frequency(period - 64.f * note_offset);
+		return xm_linear_frequency(period - 64.f * note_offset - 16.f * period_offset);
 
 	case XM_AMIGA_FREQUENCIES:
 		if(note_offset == 0) {
 			/* A chance to escape from insanity */
-			return xm_amiga_frequency(period);
+			return xm_amiga_frequency(period + 16.f * period_offset);
 		}
 
 		/* FIXME: this is very crappy at best */
@@ -397,7 +397,7 @@ static float xm_frequency(xm_context_t* ctx, float period, float note_offset) {
 
 		note = 12.f * (octave + 2) + a + XM_INVERSE_LERP(p1, p2, period);
 
-		return xm_amiga_frequency(xm_amiga_period(note + note_offset));
+		return xm_amiga_frequency(xm_amiga_period(note + note_offset) + 16.f * period_offset);
 
 	}
 
@@ -407,9 +407,8 @@ static float xm_frequency(xm_context_t* ctx, float period, float note_offset) {
 static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->frequency = xm_frequency(
 		ctx, ch->period,
-		(ch->arp_note_offset > 0 ? ch->arp_note_offset : (
-			ch->vibrato_note_offset + ch->autovibrato_note_offset
-		))
+		ch->arp_note_offset,
+		ch->vibrato_note_offset + ch->autovibrato_note_offset
 	);
 	ch->step = ch->frequency / ctx->rate;
 }
