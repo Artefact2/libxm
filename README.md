@@ -233,6 +233,8 @@ tone-portamento.xm             | PASS           | MilkyTracker           | Shoul
 tremolo.xm                     | PASS           | MilkyTracker           | Should sound identical.
 tremor.xm                      | PASS           | MilkyTracker           | Should sound identical.
 vibrato.xm                     | PASS           | MilkyTracker           | Should sound identical.
+vibrato-slow.xm                | PASS           | OpenMPT                | Should sound identical.
+vibrato-octave.xm              | PASS           | FT2clone, OpenMPT      | Should sound identical.
 ~~~
 
 Thanks
