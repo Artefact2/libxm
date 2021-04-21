@@ -111,7 +111,7 @@ static const float multi_retrig_multiply[] = {
 #define HAS_ARPEGGIO(s) ((s)->effect_type == 0 \
 						  && (s)->effect_param != 0)
 #define HAS_VIBRATO(s) ((s)->effect_type == 4 \
-						 || (s)->effect_param == 6 \
+						 || (s)->effect_type == 6 \
 						 || ((s)->volume_column >> 4) == 0xB)
 #define NOTE_IS_VALID(n) ((n) > 0 && (n) < 97)
 
