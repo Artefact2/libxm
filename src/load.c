@@ -352,8 +352,15 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 			sample->volume = (float)READ_U8(offset + 12) / (float)0x40;
 			sample->finetune = (int8_t)READ_U8(offset + 13);
 
+			/* Fix invalid loop definitions */
+			if (sample->loop_start > sample->length)
+				sample->loop_start = sample->length;
+			if (sample->loop_end > sample->length)
+				sample->loop_end = sample->length;
+			sample->loop_length = sample->loop_end - sample->loop_start;
+
 			uint8_t flags = READ_U8(offset + 14);
-			if((flags & 3) == 0) {
+			if((flags & 3) == 0 || sample->loop_length == 0) {
 				sample->loop_type = XM_NO_LOOP;
 			} else if((flags & 3) == 1) {
 				sample->loop_type = XM_FORWARD_LOOP;
