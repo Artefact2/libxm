@@ -216,6 +216,7 @@ they are supposed to test) is in the table below.
      Test                      |     Status     |     Tested against     | Extras
 -------------------------------+----------------+------------------------+------------------------------------------------
 amiga.xm                       | FAIL           | MilkyTracker, xmp      | Should sound identical.
+arp-slow.xm                    | FAIL           | MilkyTracker, OpenMPT  | Should sound identical.
 autovibrato-turnoff.xm         | PASS           | MilkyTracker           | Same pitches should be heard twice in a row.
 fadeout-speed.xm               | PASS           | MilkyTracker           | Should sound identical.
 finetune.xm                    | PASS           | MilkyTracker           | Left and right channels should sound identical.
