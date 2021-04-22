@@ -154,7 +154,7 @@ DONE    |13|  D  |      | Pattern break
 DONE    |14|  E1 |  (*) | Fine porta up
 DONE    |--|  E2 |  (*) | Fine porta down
         |--|  E3 |      | Set gliss control
-UNTESTED|--|  E4 |      | Set vibrato control
+DONE    |--|  E4 |      | Set vibrato control
 DONE    |--|  E5 |      | Set finetune
 DONE    |--|  E6 |      | Set loop begin/loop
 UNTESTED|--|  E7 |      | Set tremolo control
