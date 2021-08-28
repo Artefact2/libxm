@@ -25,6 +25,8 @@
 #define READ_U32(offset) READ_U32_BOUND(offset, moddata_length)
 #define READ_MEMCPY(ptr, offset, length) READ_MEMCPY_BOUND(ptr, offset, length, moddata_length)
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
 static inline void memcpy_pad(void* dst, size_t dst_len, const void* src, size_t src_len, size_t offset) {
 	uint8_t* dst_c = dst;
 	const uint8_t* src_c = src;
@@ -311,6 +313,20 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 			instr->panning_envelope.loop_start_point = READ_U8_BOUND(offset + 231, offset + ins_header_size);
 			instr->panning_envelope.loop_end_point = READ_U8_BOUND(offset + 232, offset + ins_header_size);
 
+			// Fix broken modules with loop points outside of defined points
+			if (instr->volume_envelope.num_points > 0) {
+				instr->volume_envelope.loop_start_point =
+					MIN(instr->volume_envelope.loop_start_point, instr->volume_envelope.num_points-1);
+				instr->volume_envelope.loop_end_point =
+					MIN(instr->volume_envelope.loop_end_point,   instr->volume_envelope.num_points-1);
+			}
+			if (instr->panning_envelope.num_points > 0) {
+				instr->panning_envelope.loop_start_point =
+					MIN(instr->panning_envelope.loop_start_point, instr->panning_envelope.num_points-1);
+				instr->panning_envelope.loop_end_point =
+					MIN(instr->panning_envelope.loop_end_point,   instr->panning_envelope.num_points-1);
+			}
+
 			uint8_t flags = READ_U8_BOUND(offset + 233, offset + ins_header_size);
 			instr->volume_envelope.enabled = flags & (1 << 0);
 			instr->volume_envelope.sustain_enabled = flags & (1 << 1);
@@ -373,7 +389,8 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 			sample->panning = (float)READ_U8(offset + 15) / (float)0xFF;
 			sample->relative_note = (int8_t)READ_U8(offset + 16);
 #if XM_STRINGS
-			READ_MEMCPY(sample->name, 18, SAMPLE_NAME_LENGTH);
+			READ_MEMCPY(sample->name, offset + 18, SAMPLE_NAME_LENGTH);
+			sample->name[SAMPLE_NAME_LENGTH] = 0;
 #endif
 			sample->data8 = (int8_t*)mempool;
 			mempool += sample->length;
