@@ -93,8 +93,6 @@ size_t xm_get_memory_needed_for_context(const char* moddata, size_t moddata_leng
 	/* Read the module header */
 
 	num_channels = READ_U16(offset + 8);
-	num_channels = READ_U16(offset + 8);
-
 	num_patterns = READ_U16(offset + 10);
 	memory_needed += num_patterns * sizeof(xm_pattern_t);
 
