@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
 
 	for(unsigned long i = izero; i < argc; ++i) {
 		uint16_t num_patterns, num_channels, length, bpm, tempo;
-		uint8_t pos, pat, row;
+		uint8_t pos = 0, pat, row;
 		char command;
 
 		jump = false;
