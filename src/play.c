@@ -858,6 +858,8 @@ static void xm_key_off(xm_channel_context_t* ch) {
 }
 
 static void xm_row(xm_context_t* ctx) {
+	static xm_pattern_slot_t empty_slot = {0};
+
 	if(ctx->position_jump) {
 		ctx->current_table_index = ctx->jump_dest;
 		ctx->current_row = ctx->jump_row;
@@ -873,12 +875,13 @@ static void xm_row(xm_context_t* ctx) {
 		xm_post_pattern_change(ctx);
 	}
 
-	xm_pattern_t* cur = ctx->module.patterns + ctx->module.pattern_table[ctx->current_table_index];
+	uint8_t pat_idx = ctx->module.pattern_table[ctx->current_table_index];
+	xm_pattern_t* cur = (pat_idx < ctx->module.num_patterns ? ctx->module.patterns + pat_idx : NULL);
 	bool in_a_loop = false;
 
 	/* Read notes… */
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
-		xm_pattern_slot_t* s = cur->slots + ctx->current_row * ctx->module.num_channels + i;
+		xm_pattern_slot_t* s = (cur ? cur->slots + ctx->current_row * ctx->module.num_channels + i : &empty_slot);
 		xm_channel_context_t* ch = ctx->channels + i;
 
 		ch->current = s;
@@ -904,7 +907,7 @@ static void xm_row(xm_context_t* ctx) {
 						 * is still necessary to go the next
 						 * pattern. */
 	if(!ctx->position_jump && !ctx->pattern_break &&
-	   (ctx->current_row >= cur->num_rows || ctx->current_row == 0)) {
+	   (ctx->current_row >= (cur ? cur->num_rows : 64) || ctx->current_row == 0)) {
 		ctx->current_table_index++;
 		ctx->current_row = ctx->jump_row; /* This will be 0 most of
 										   * the time, except when E60
