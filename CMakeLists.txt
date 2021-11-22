@@ -22,6 +22,8 @@ OPTION_AND_DEFINE(XM_LIBXMIZE_DELTA_SAMPLES "Delta-code samples in libxmize form
 OPTION(XM_BUILD_SHARED_LIBS "Build shared library" "ON")
 OPTION(XM_BUILD_EXAMPLES "Build example programs" "ON")
 OPTION(XM_DEMO_MODE "Optimize for size (then link statically against libxms and strip dead code)" "OFF")
+set(XM_RESTRICT "restrict" CACHE STRING "Optionally redefine the restrict keyword (workaround for compilers that don't support it)")
+ADD_DEFINITIONS(-DXM_RESTRICT=${XM_RESTRICT})
 
 ADD_DEFINITIONS("-Wall -pedantic --std=c11")
 
