@@ -197,7 +197,11 @@ uint16_t xm_get_number_of_patterns(xm_context_t* ctx) {
 }
 
 uint16_t xm_get_number_of_rows(xm_context_t* ctx, uint16_t pattern) {
-	return ctx->module.patterns[pattern].num_rows;
+	if (pattern < ctx->module.num_patterns)
+		return ctx->module.patterns[pattern].num_rows;
+	else
+		// Undefined patterns can actually be played (!) and are made of 64 rows.
+		return 64;
 }
 
 uint16_t xm_get_number_of_instruments(xm_context_t* ctx) {
