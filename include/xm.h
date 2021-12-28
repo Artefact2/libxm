@@ -15,6 +15,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct xm_context_s;
 typedef struct xm_context_s xm_context_t;
 
@@ -259,5 +263,9 @@ float xm_get_volume_of_channel(xm_context_t*, uint16_t);
  * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
  */
 float xm_get_panning_of_channel(xm_context_t*, uint16_t);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
