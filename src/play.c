@@ -353,7 +353,7 @@ static float xm_frequency(xm_context_t* ctx, float period, float note_offset, fl
 	switch(ctx->module.frequency_type) {
 
 	case XM_LINEAR_FREQUENCIES:
-		return xm_linear_frequency(period - 64.f * note_offset - 16.f * period_offset);
+		return xm_linear_frequency(period - 16.f * period_offset) - 64.f * note_offset;
 
 	case XM_AMIGA_FREQUENCIES:
 		if(note_offset == 0) {
