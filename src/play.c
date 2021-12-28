@@ -1227,11 +1227,11 @@ static void xm_tick(xm_context_t* ctx) {
 #if XM_RAMPING
 		/* See https://modarchive.org/forums/index.php?topic=3517.0
 		 * and https://github.com/Artefact2/libxm/pull/16 */
-		ch->target_volume[0] = volume * sqrt(1.f - panning);
-		ch->target_volume[1] = volume * sqrt(panning);
+		ch->target_volume[0] = volume * sqrtf(1.f - panning);
+		ch->target_volume[1] = volume * sqrtf(panning);
 #else
-		ch->actual_volume[0] = volume * sqrt(1.f - panning);
-		ch->actual_volume[1] = volume * sqrt(panning);
+		ch->actual_volume[0] = volume * sqrtf(1.f - panning);
+		ch->actual_volume[1] = volume * sqrtf(panning);
 #endif
 	}
 
