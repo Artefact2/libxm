@@ -63,23 +63,6 @@ int xm_check_sanity_preload(const char* module, size_t module_length) {
 
 int xm_check_sanity_postload(xm_context_t* ctx) {
 	/* @todo: plenty of stuff to do here… */
-
-	/* Check the POT */
-	for(uint8_t i = 0; i < ctx->module.length; ++i) {
-		if(ctx->module.pattern_table[i] >= ctx->module.num_patterns) {
-			if(i+1 == ctx->module.length && ctx->module.length > 1) {
-				/* Cheap fix */
-				--ctx->module.length;
-				DEBUG("trimming invalid POT at pos %X", i);
-			} else {
-				DEBUG("module has invalid POT, pos %X references nonexistent pattern %X",
-				      i,
-				      ctx->module.pattern_table[i]);
-				return 1;
-			}
-		}
-	}
-
 	return 0;
 }
 
