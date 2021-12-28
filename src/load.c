@@ -15,9 +15,9 @@
  * If we attempt to read the buffer out-of-bounds, pretend that the buffer is
  * infinitely padded with zeroes.
  */
-#define READ_U8_BOUND(offset, bound) (((offset) < bound) ? (*(uint8_t*)(moddata + (offset))) : 0)
-#define READ_U16_BOUND(offset, bound) ((uint16_t)READ_U8(offset) | ((uint16_t)READ_U8((offset) + 1) << 8))
-#define READ_U32_BOUND(offset, bound) ((uint32_t)READ_U16(offset) | ((uint32_t)READ_U16((offset) + 2) << 16))
+#define READ_U8_BOUND(offset, bound) (((offset) < (bound)) ? (*(uint8_t*)(moddata + (offset))) : 0)
+#define READ_U16_BOUND(offset, bound) ((uint16_t)READ_U8_BOUND(offset, bound) | ((uint16_t)READ_U8_BOUND((offset) + 1, bound) << 8))
+#define READ_U32_BOUND(offset, bound) ((uint32_t)READ_U16_BOUND(offset, bound) | ((uint32_t)READ_U16_BOUND((offset) + 2, bound) << 16))
 #define READ_MEMCPY_BOUND(ptr, offset, length, bound) memcpy_pad(ptr, length, moddata, bound, offset)
 
 #define READ_U8(offset) READ_U8_BOUND(offset, moddata_length)
