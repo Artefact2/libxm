@@ -907,7 +907,7 @@ static void xm_row(xm_context_t* ctx) {
 						 * is still necessary to go the next
 						 * pattern. */
 	if(!ctx->position_jump && !ctx->pattern_break &&
-	   (ctx->current_row >= (cur ? cur->num_rows : 64) || ctx->current_row == 0)) {
+	   (ctx->current_row >= (cur ? cur->num_rows : DEFAULT_PATTERN_LENGTH) || ctx->current_row == 0)) {
 		ctx->current_table_index++;
 		ctx->current_row = ctx->jump_row; /* This will be 0 most of
 										   * the time, except when E60

@@ -39,6 +39,7 @@ extern int __fail[-1];
 #define NUM_NOTES 96
 #define NUM_ENVELOPE_POINTS 12
 #define MAX_NUM_ROWS 256
+#define DEFAULT_PATTERN_LENGTH 64
 
 #if XM_RAMPING
 #define XM_SAMPLE_RAMPING_POINTS 0x20

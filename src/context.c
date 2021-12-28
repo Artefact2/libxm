@@ -197,7 +197,9 @@ uint16_t xm_get_number_of_patterns(xm_context_t* ctx) {
 }
 
 uint16_t xm_get_number_of_rows(xm_context_t* ctx, uint16_t pattern) {
-	return ctx->module.patterns[pattern].num_rows;
+	if(pattern < ctx->module.num_patterns)
+		return ctx->module.patterns[pattern].num_rows;
+	return DEFAULT_PATTERN_LENGTH;
 }
 
 uint16_t xm_get_number_of_instruments(xm_context_t* ctx) {
