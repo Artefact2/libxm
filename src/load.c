@@ -157,7 +157,9 @@ char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_leng
 	mempool += mod->num_instruments * sizeof(xm_instrument_t);
 
 	uint16_t flags = READ_U32(offset + 14);
+	#if XM_FREQUENCY_TYPES == 3
 	mod->frequency_type = (flags & (1 << 0)) ? XM_LINEAR_FREQUENCIES : XM_AMIGA_FREQUENCIES;
+	#endif
 
 	ctx->tempo = READ_U16(offset + 16);
 	ctx->bpm = READ_U16(offset + 18);

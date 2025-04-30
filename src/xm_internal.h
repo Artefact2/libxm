@@ -151,8 +151,11 @@ struct xm_module_s {
 	uint16_t num_channels;
 	uint16_t num_patterns;
 	uint16_t num_instruments;
-	xm_frequency_type_t frequency_type;
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
+
+#if XM_FREQUENCY_TYPES == 3
+	xm_frequency_type_t frequency_type;
+#endif
 
 #if XM_STRINGS
 	char name[MODULE_NAME_LENGTH + 1];

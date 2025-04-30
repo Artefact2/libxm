@@ -40,6 +40,21 @@ static size_t zero_waveforms(xm_context_t* ctx) {
 	return total_saved_bytes;
 }
 
+static void analyze(const char* arg0, xm_context_t* ctx) {
+	fprintf(stderr, "%s: detected features: cmake", arg0);
+
+	fprintf(stderr,
+	        " -D XM_FREQUENCY_TYPES=%d",
+	        #if XM_FREQUENCY_TYPES != 3
+                XM_FREQUENCY_TYPES
+	        #else
+	        ctx->module.frequency_type == XM_LINEAR_FREQUENCIES ? 1 : 2
+	        #endif
+	       );
+
+	fprintf(stderr, "\n");
+}
+
 int main(int argc, char** argv) {
 	xm_context_t* ctx;
 	FILE* in;
@@ -61,6 +76,8 @@ int main(int argc, char** argv) {
 	xm_create_context_safe(&ctx, xmdata, i, 0); /* sample rate of 0 will be overwritten at load time */
 	if(ctx == NULL) exit(1);
 	free(xmdata);
+
+	analyze(argv[0], ctx);
 
 	out = fopen(argv[argc - 1], "wb");
 	if(out == NULL) FATAL("output file %s not writeable\n", argv[argc - 1]);

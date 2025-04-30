@@ -20,6 +20,11 @@ OPTION_AND_DEFINE(XM_STRINGS "Store module, instrument and sample names in conte
 OPTION_AND_DEFINE(XM_LIBXMIZE_DELTA_SAMPLES "Delta-code samples in libxmize format" "ON")
 MARK_AS_ADVANCED(XM_LIBXMIZE_DELTA_SAMPLES)
 
+SET(XM_FREQUENCY_TYPES "3" CACHE STRING "Supported frequency types (1=Linear,2=Amiga,3=Both)")
+MARK_AS_ADVANCED(XM_FREQUENCY_TYPES)
+ADD_DEFINITIONS("-DXM_FREQUENCY_TYPES=${XM_FREQUENCY_TYPES}")
+
+
 
 OPTION(XM_BUILD_SHARED_LIBS "Build shared library" "ON")
 OPTION(XM_BUILD_EXAMPLES "Build example programs" "ON")

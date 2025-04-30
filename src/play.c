@@ -26,10 +26,14 @@ static float xm_envelope_lerp(xm_envelope_point_t*, xm_envelope_point_t*, uint16
 static void xm_envelope_tick(xm_channel_context_t*, xm_envelope_t*, uint16_t*, float*);
 static void xm_envelopes(xm_channel_context_t*);
 
+#if XM_FREQUENCY_TYPES & 1
 static float xm_linear_period(float);
-static float xm_linear_frequency(float);
+static float xm_linear_frequency(float, float, float);
+#endif
+#if XM_FREQUENCY_TYPES & 2
 static float xm_amiga_period(float);
-static float xm_amiga_frequency(float);
+static float xm_amiga_frequency(float, float, float);
+#endif
 static float xm_period(xm_context_t*, float);
 static float xm_frequency(xm_context_t*, float, float, float);
 static void xm_update_frequency(xm_context_t*, xm_channel_context_t*);
@@ -53,15 +57,6 @@ static void xm_sample(xm_context_t*, float*, float*);
 #define XM_TRIGGER_KEEP_PERIOD (1 << 1)
 #define XM_TRIGGER_KEEP_SAMPLE_POSITION (1 << 2)
 #define XM_TRIGGER_KEEP_ENVELOPE (1 << 3)
-
-#define AMIGA_FREQ_SCALE   1024
-
-static const uint32_t amiga_frequencies[] = {
-	1712*AMIGA_FREQ_SCALE, 1616*AMIGA_FREQ_SCALE, 1525*AMIGA_FREQ_SCALE, 1440*AMIGA_FREQ_SCALE, /* C-2, C#2, D-2, D#2 */
-	1357*AMIGA_FREQ_SCALE, 1281*AMIGA_FREQ_SCALE, 1209*AMIGA_FREQ_SCALE, 1141*AMIGA_FREQ_SCALE, /* E-2, F-2, F#2, G-2 */
-	1077*AMIGA_FREQ_SCALE, 1017*AMIGA_FREQ_SCALE,  961*AMIGA_FREQ_SCALE,  907*AMIGA_FREQ_SCALE, /* G#2, A-2, A#2, B-2 */
-	856*AMIGA_FREQ_SCALE,                                                                       /* C-3 */
-};
 
 static const float multi_retrig_add[] = {
 	 0.f,  -1.f,  -2.f,  -4.f,  /* 0, 1, 2, 3 */
@@ -218,12 +213,19 @@ static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 	 * target note. */
 	if(ch->tone_portamento_target_period == 0.f) return;
 
+	float incr = ch->tone_portamento_param;
+	#if XM_FREQUENCY_TYPES == 2
+	incr *= 4.f;
+	#elif XM_FREQUENCY_TYPES == 3
+	if(ctx->module.frequency_type == XM_LINEAR_FREQUENCIES) {
+		incr *= 4.f;
+	}
+	#endif
+
 	if(ch->period != ch->tone_portamento_target_period) {
 		XM_SLIDE_TOWARDS(ch->period,
 		                 ch->tone_portamento_target_period,
-		                 (ctx->module.frequency_type == XM_LINEAR_FREQUENCIES ?
-		                  4.f : 1.f) * ch->tone_portamento_param
-		);
+		                 incr);
 		xm_update_frequency(ctx, ch);
 	}
 }
@@ -231,9 +233,13 @@ static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch, float period_offset) {
 	/* Don't ask about the 4.f coefficient. I found mention of it
 	 * nowhere. Found by ear™. */
+	#if XM_FREQUENCY_TYPES == 2
+	period_offset *= 4.f;
+	#elif XM_FREQUENCY_TYPES == 3
 	if(ctx->module.frequency_type == XM_LINEAR_FREQUENCIES) {
 		period_offset *= 4.f;
 	}
+	#endif
 
 	ch->period += period_offset;
 	XM_CLAMP_DOWN(ch->period);
@@ -301,13 +307,26 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	}
 }
 
+#if XM_FREQUENCY_TYPES & 1
 static float xm_linear_period(float note) {
 	return 7680.f - note * 64.f;
 }
 
-static float xm_linear_frequency(float period) {
+static float xm_linear_frequency(float period, float note_offset, float period_offset) {
+	period -= 64.f * note_offset + 16.f * period_offset;
 	return 8363.f * powf(2.f, (4608.f - period) / 768.f);
 }
+#endif
+
+#if XM_FREQUENCY_TYPES & 2
+
+#define AMIGA_FREQ_SCALE 1024
+static const uint32_t amiga_frequencies[] = {
+	1712*AMIGA_FREQ_SCALE, 1616*AMIGA_FREQ_SCALE, 1525*AMIGA_FREQ_SCALE, 1440*AMIGA_FREQ_SCALE, /* C-2, C#2, D-2, D#2 */
+	1357*AMIGA_FREQ_SCALE, 1281*AMIGA_FREQ_SCALE, 1209*AMIGA_FREQ_SCALE, 1141*AMIGA_FREQ_SCALE, /* E-2, F-2, F#2, G-2 */
+	1077*AMIGA_FREQ_SCALE, 1017*AMIGA_FREQ_SCALE,  961*AMIGA_FREQ_SCALE,  907*AMIGA_FREQ_SCALE, /* G#2, A-2, A#2, B-2 */
+	856*AMIGA_FREQ_SCALE,                                                                       /* C-3 */
+};
 
 static float xm_amiga_period(float note) {
 	unsigned int intnote = note;
@@ -326,14 +345,82 @@ static float xm_amiga_period(float note) {
 	return XM_LERP(p1, p2, note - intnote) / AMIGA_FREQ_SCALE;
 }
 
-static float xm_amiga_frequency(float period) {
+static float xm_amiga_frequency(float period, float note_offset, float period_offset) {
 	if(period == .0f) return .0f;
 
+	if(note_offset == 0) {
+		/* A chance to escape from insanity */
+		period += 16.f * period_offset;
+		goto end;
+	}
+
+	uint8_t a;
+	int8_t octave;
+	float note;
+	int32_t p1, p2;
+
+	/* FIXME: this is very crappy at best */
+	a = octave = 0;
+
+	/* Find the octave of the current period */
+	period *= AMIGA_FREQ_SCALE;
+	if(period > amiga_frequencies[0]) {
+		--octave;
+		while(period > (amiga_frequencies[0] << (-octave))) --octave;
+	} else if(period < amiga_frequencies[12]) {
+		++octave;
+		while(period < (amiga_frequencies[12] >> octave)) ++octave;
+	}
+
+	/* Find the smallest note closest to the current period */
+	for(uint8_t i = 0; i < 12; ++i) {
+		p1 = amiga_frequencies[i], p2 = amiga_frequencies[i + 1];
+
+		if(octave > 0) {
+			p1 >>= octave;
+			p2 >>= octave;
+		} else if(octave < 0) {
+			p1 <<= (-octave);
+			p2 <<= (-octave);
+		}
+
+		if(p2 <= period && period <= p1) {
+			a = i;
+			break;
+		}
+	}
+
+	if(XM_DEBUG && (p1 < period || p2 > period)) {
+		DEBUG("%" PRId32 " <= %f <= %" PRId32 " should hold but doesn't, this is a bug", p2, period, p1);
+	}
+
+	note = 12.f * (octave + 2) + a + XM_INVERSE_LERP(p1, p2, period);
+	period = xm_amiga_period(note + note_offset) + 16.f * period_offset;
+
+ end:
 	/* This is the PAL value. No reason to choose this one over the
 	 * NTSC value. */
 	return 7093789.2f / (period * 2.f);
 }
+#endif
 
+#if XM_FREQUENCY_TYPES == 1
+static float xm_period(__attribute__((unused)) xm_context_t* ctx, float note) {
+	return xm_linear_period(note);
+
+}
+static float xm_frequency(__attribute__((unused)) xm_context_t* ctx, float period, float note_offset, float period_offset) {
+	return xm_linear_frequency(period, note_offset, period_offset);
+}
+#elif XM_FREQUENCY_TYPES == 2
+static float xm_period(__attribute__((unused)) xm_context_t* ctx, float note) {
+	return xm_amiga_period(note);
+
+}
+static float xm_frequency(__attribute__((unused)) xm_context_t* ctx, float period, float note_offset, float period_offset) {
+	return xm_amiga_frequency(period, note_offset, period_offset);
+}
+#else
 static float xm_period(xm_context_t* ctx, float note) {
 	switch(ctx->module.frequency_type) {
 	case XM_LINEAR_FREQUENCIES:
@@ -343,67 +430,16 @@ static float xm_period(xm_context_t* ctx, float note) {
 	}
 	return .0f;
 }
-
 static float xm_frequency(xm_context_t* ctx, float period, float note_offset, float period_offset) {
-	uint8_t a;
-	int8_t octave;
-	float note;
-	int32_t p1, p2;
-
 	switch(ctx->module.frequency_type) {
-
 	case XM_LINEAR_FREQUENCIES:
-		return xm_linear_frequency(period - 64.f * note_offset - 16.f * period_offset);
-
+		return xm_linear_frequency(period, note_offset, period_offset);
 	case XM_AMIGA_FREQUENCIES:
-		if(note_offset == 0) {
-			/* A chance to escape from insanity */
-			return xm_amiga_frequency(period + 16.f * period_offset);
-		}
-
-		/* FIXME: this is very crappy at best */
-		a = octave = 0;
-
-		/* Find the octave of the current period */
-		period *= AMIGA_FREQ_SCALE;
-		if(period > amiga_frequencies[0]) {
-			--octave;
-			while(period > (amiga_frequencies[0] << (-octave))) --octave;
-		} else if(period < amiga_frequencies[12]) {
-			++octave;
-			while(period < (amiga_frequencies[12] >> octave)) ++octave;
-		}
-
-		/* Find the smallest note closest to the current period */
-		for(uint8_t i = 0; i < 12; ++i) {
-			p1 = amiga_frequencies[i], p2 = amiga_frequencies[i + 1];
-
-			if(octave > 0) {
-				p1 >>= octave;
-				p2 >>= octave;
-			} else if(octave < 0) {
-				p1 <<= (-octave);
-				p2 <<= (-octave);
-			}
-
-			if(p2 <= period && period <= p1) {
-				a = i;
-				break;
-			}
-		}
-
-		if(XM_DEBUG && (p1 < period || p2 > period)) {
-			DEBUG("%" PRId32 " <= %f <= %" PRId32 " should hold but doesn't, this is a bug", p2, period, p1);
-		}
-
-		note = 12.f * (octave + 2) + a + XM_INVERSE_LERP(p1, p2, period);
-
-		return xm_amiga_frequency(xm_amiga_period(note + note_offset) + 16.f * period_offset);
-
+		return xm_amiga_frequency(period, note_offset, period_offset);
 	}
-
 	return .0f;
 }
+#endif
 
 static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->frequency = xm_frequency(
@@ -1400,11 +1436,11 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	*left *= fgvol;
 	*right *= fgvol;
 
-	if(XM_DEBUG) {
-		if(fabs(*left) > 1 || fabs(*right) > 1) {
-			DEBUG("clipping frame: %f %f, this is a bad module or a libxm bug", *left, *right);
-		}
+	#if XM_DEBUG
+	if(fabs(*left) > 1 || fabs(*right) > 1) {
+		DEBUG("clipping frame: %f %f, this is a bad module or a libxm bug", *left, *right);
 	}
+	#endif
 }
 
 void xm_generate_samples(xm_context_t* ctx, float* output, size_t numsamples) {
