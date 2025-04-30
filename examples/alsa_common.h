@@ -8,22 +8,23 @@
 
 #include <alsa/asoundlib.h>
 
-#define FATAL_ALSA_ERR(s, err) do {							\
+#define FATAL_ALSA_ERR(s, err) do {                                     \
 		fprintf(stderr, "%s(%i) " s " : %s\n", __FILE__, __LINE__, snd_strerror((err))); \
-		fflush(stderr);										\
-		exit(1);											\
+		fflush(stderr); \
+		exit(1); \
 	} while(0)
 
-#define CHECK_ALSA_CALL(call) do {							\
-		int ret = (call);									\
-		if(ret < 0)	{										\
-			ret = snd_pcm_recover(device, ret, 0);			\
-			if(ret < 0)										\
-				FATAL_ALSA_ERR("ALSA internal error", ret);	\
-		}													\
+#define CHECK_ALSA_CALL(call) do {                                      \
+		int ret = (call); \
+		if(ret < 0)	{ \
+			ret = snd_pcm_recover(device, ret, 0); \
+			if(ret < 0) \
+				FATAL_ALSA_ERR("ALSA internal error", ret); \
+		} \
 	} while(0)
 
-#define CLAMP(f) (f > 1.f ? 1.f : (f < -1.f ? -1.f : f))
+#define CLAMPF(f) (f > 1.f ? 1.f : (f < -1.f ? -1.f : f))
+#define CLAMP(d) (d > 1.0 ? 1.0 : (d < -1.0 ? -1.0 : d))
 
 /* Create an ALSA device from command line arguments:
  *
@@ -178,11 +179,11 @@ void play_floatbuffer(snd_pcm_t* device, snd_pcm_format_t format, size_t period_
 
 		if(format == SND_PCM_FORMAT_S16) {
 			for(size_t i = 0; i < period_size * channels; ++i) {
-				((int16_t*)alsabuffer)[i] = (int16_t)(CLAMP((double)buffer[i] * preamp) * 32767.);
+				((int16_t*)alsabuffer)[i] = (int16_t)(CLAMPF((float)buffer[i] * preamp) * 32767.f);
 			}
 		} else if(format == SND_PCM_FORMAT_S32) {
 			for(size_t i = 0; i < period_size * channels; ++i) {
-				((int32_t*)alsabuffer)[i] = (int32_t)(CLAMP((double)buffer[i] * preamp) * 2147483647.);
+				((int32_t*)alsabuffer)[i] = (int32_t)(CLAMP((double)buffer[i] * (double)preamp) * 2147483647.);
 			}
 		} else if(format == SND_PCM_FORMAT_FLOAT) {
 			for(size_t i = 0; i < period_size * channels; ++i) {
