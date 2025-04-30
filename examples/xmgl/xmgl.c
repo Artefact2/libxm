@@ -21,10 +21,11 @@
 #define MAX_CHANNELS 32
 #define NUM_TIMING 32 // keep this many channel timing infos for latency
 		      // compensation
-#define TIMING_FRAMES 256 // record channel timing info every X generated audio
+#define TIMING_FRAME_SIZE 256 // record channel timing info every X generated audio
 			  // frames
 #define GL_FRAMES_AVG_COUNT 60 // measure display latency over this many video
 			       // frames (running average)
+#define AOT_TIMING_FRAMES 4 // pre-generate this many timing frames ahead of time, for latency compensation
 
 #include "hlines.vs.h"
 #include "hlines.fs.h"
@@ -75,8 +76,8 @@ static jack_client_t* client;
 static jack_port_t* left;
 static jack_port_t* right;
 static unsigned int rate;
-static jack_nframes_t time_offset = 0;
-static uint64_t jack_latency_comp = 0;
+static jack_nframes_t time_basis = 0; /* absolute time (from jack) at which we started rendering the first audio frames from libxm */
+static uint64_t jack_latency = 0;
 
 static xm_context_t* xmctx;
 static uint8_t loop = 1;
@@ -111,13 +112,16 @@ struct module_timing_info {
 };
 
 static struct module_timing_info mti;
+static float aot_left[AOT_TIMING_FRAMES][TIMING_FRAME_SIZE];
+static float aot_right[AOT_TIMING_FRAMES][TIMING_FRAME_SIZE];
+static size_t num_aot_timing_frames = 0;
+static size_t first_aot_timing_frame_idx = 0;
 
 static jack_nframes_t glf_total = 0;
 static jack_nframes_t glf_times[GL_FRAMES_AVG_COUNT];
 static jack_nframes_t glf_last = 0;
 static uint64_t gl_framecount = 0;
-static uint64_t gl_latency_comp = 0;
-static int64_t latency_comp = 0;
+static uint64_t gl_latency = 0;
 
 void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s\n"
@@ -128,7 +132,7 @@ void usage(char* progname) {
 }
 
 static void generate_timing_frame(float* lbuf, float* rbuf, jack_nframes_t tframes) {
-	static float buffer[TIMING_FRAMES * 2];
+	static float buffer[TIMING_FRAME_SIZE * 2];
 
 	mti.latest_cti_idx = (mti.latest_cti_idx + 1) % NUM_TIMING;
 	xm_generate_samples(xmctx, buffer, tframes);
@@ -149,42 +153,62 @@ static void generate_timing_frame(float* lbuf, float* rbuf, jack_nframes_t tfram
 	}
 }
 
-int jack_process(jack_nframes_t nframes, __attribute__((unused)) void* arg) {
+int jack_process_callback(jack_nframes_t nframes, __attribute__((unused)) void* arg) {
 	float* lbuf = jack_port_get_buffer(left, nframes);
 	float* rbuf = jack_port_get_buffer(right, nframes);
+
+	if(time_basis == 0) {
+		time_basis = jack_time_to_frames(client, jack_get_time());
+	}
 
 	if(paused) {
 		memset(lbuf, 0, nframes * sizeof(float));
 		memset(rbuf, 0, nframes * sizeof(float));
-		time_offset += nframes;
+		time_basis += nframes;
+		return 0;
+	}
+
+	size_t tframes;
+	if(nframes >= TIMING_FRAME_SIZE) {
+		assert(nframes % TIMING_FRAME_SIZE == 0);
+		tframes = TIMING_FRAME_SIZE;
 	} else {
-		size_t tframes;
-		if(nframes >= TIMING_FRAMES) {
-			assert(nframes % TIMING_FRAMES == 0);
-			tframes = TIMING_FRAMES;
+		tframes = nframes;
+	}
+
+	for(size_t off = 0; off < nframes; off += tframes) {
+		if(num_aot_timing_frames > 0) {
+			memcpy(lbuf, aot_left[first_aot_timing_frame_idx], tframes * sizeof(float));
+			memcpy(rbuf, aot_right[first_aot_timing_frame_idx], tframes * sizeof(float));
+			num_aot_timing_frames -= 1;
+			first_aot_timing_frame_idx = (first_aot_timing_frame_idx + 1) % AOT_TIMING_FRAMES;
 		} else {
-			tframes = nframes;
+			generate_timing_frame(lbuf, rbuf, tframes);
 		}
 
-		for(size_t off = 0; off < nframes; off += tframes) {
-			generate_timing_frame(lbuf, rbuf, tframes);
-			lbuf = &(lbuf[tframes]);
-			rbuf = &(rbuf[tframes]);
-		}
+		lbuf = &(lbuf[tframes]);
+		rbuf = &(rbuf[tframes]);
+	}
+
+	while(num_aot_timing_frames < AOT_TIMING_FRAMES) {
+		generate_timing_frame(aot_left[(first_aot_timing_frame_idx + num_aot_timing_frames) % AOT_TIMING_FRAMES],
+		                      aot_right[(first_aot_timing_frame_idx + num_aot_timing_frames) % AOT_TIMING_FRAMES],
+		                      tframes);
+		num_aot_timing_frames += 1;
 	}
 
 	return 0;
 }
 
-void jack_latency(jack_latency_callback_mode_t mode, __attribute__((unused)) void* arg) {
+void jack_latency_callback(jack_latency_callback_mode_t mode, __attribute__((unused)) void* arg) {
 	if(mode == JackCaptureLatency) return;
 
 	jack_latency_range_t range;
 	jack_port_get_latency_range(left, mode, &range);
-	if(jack_latency_comp == range.max) return;
+	if(jack_latency == range.max) return;
 
 	printf("JACK output latency: %d/%d frames\n", range.min, range.max);
-	jack_latency_comp = range.max;
+	jack_latency = range.max;
 }
 
 void switch_program(void) {
@@ -335,8 +359,8 @@ void setup(int argc, char** argv) {
 	printf("JACK client name: %s\n", jack_get_client_name(client));
 	printf("JACK buffer size: %d frames\n", jack_get_buffer_size(client));
 
-	jack_set_process_callback(client, jack_process, NULL);
-	jack_set_latency_callback(client, jack_latency, NULL);
+	jack_set_process_callback(client, jack_process_callback, NULL);
+	jack_set_latency_callback(client, jack_latency_callback, NULL);
 	rate = jack_get_sample_rate(client);
 	printf("Using JACK sample rate: %d Hz\n", rate);
 
@@ -348,7 +372,6 @@ void setup(int argc, char** argv) {
 	channels = xm_get_number_of_channels(xmctx);
 	instruments = xm_get_number_of_instruments(xmctx);
 
-	latency_comp = 0;
 	mti.latest_cti_idx = NUM_TIMING - 1;
 
 	jack_activate(client);
@@ -392,18 +415,16 @@ void render(void) {
 
 	struct channel_timing_info* chns = NULL;
 	uint64_t frames;
-	if(time_offset == 0) {
-		time_offset = jack_time_to_frames(client, jack_get_time());
-	}
 	jack_nframes_t now = jack_time_to_frames(client, jack_get_time());
-	jack_nframes_t target = now - time_offset;
-	latency_comp = jack_latency_comp - gl_latency_comp;
 
-	/* XXX: be smarter */
+	/* when jack_latency > gl_latency, we display mtis from the past */
+	/* when jack_latency < gl_latency, we display mtis from the future  */
+	jack_nframes_t target = now - time_basis - jack_latency + gl_latency;
+
 	/* find channel timing infos with a timestamp closest to target */
 	size_t j = mti.latest_cti_idx;
 
-	while(mti.audio_frames[j] + latency_comp > target) {
+	while(mti.audio_frames[j] > target) {
 		if(j == 0) {
 			j = NUM_TIMING - 1;
 		} else {
@@ -443,7 +464,7 @@ void render(void) {
 	glf_times[gl_framecount] = now - glf_last;
 	glf_total += now - glf_last;
 	glf_last = now;
-	gl_latency_comp = glf_total / GL_FRAMES_AVG_COUNT;
+	gl_latency = glf_total / GL_FRAMES_AVG_COUNT; // assume 1 display frame latency on average
 	gl_framecount = (gl_framecount + 1) % GL_FRAMES_AVG_COUNT;
 }
 
