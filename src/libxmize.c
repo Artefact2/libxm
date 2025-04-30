@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
 	if(xmdata == NULL) FATAL("malloc failed to allocate %lu bytes\n", i);
 	rewind(in);
 	if(!fread(xmdata, i, 1, in)) FATAL("input file %s not readable (fread)\n", argv[argc - 2]);
-	xm_create_context_safe(&ctx, xmdata, i, 48000);
+	xm_create_context_safe(&ctx, xmdata, i, 0); /* sample rate of 0 will be overwritten at load time */
 	if(ctx == NULL) exit(1);
 	free(xmdata);
 

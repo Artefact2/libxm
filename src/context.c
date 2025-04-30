@@ -119,6 +119,7 @@ void xm_create_context_from_libxmize(xm_context_t** ctxp, char* libxmized, uint3
 	size_t i, j;
 
 	*ctxp = (void*)libxmized;
+	(*ctxp)->rate = rate;
 
 	/* Reverse steps of libxmize.c */
 	OFFSET((*ctxp)->module.patterns);
