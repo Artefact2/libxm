@@ -19,46 +19,49 @@
 #include <assert.h>
 
 #define MAX_CHANNELS 32
-#define NUM_TIMING 512
-#define TIMING_FRAMES 256
-#define GL_FRAMES_AVG_COUNT 60
+#define NUM_TIMING 32 // keep this many channel timing infos for latency
+		      // compensation
+#define TIMING_FRAMES 256 // record channel timing info every X generated audio
+			  // frames
+#define GL_FRAMES_AVG_COUNT 60 // measure display latency over this many video
+			       // frames (running average)
 
 #include "hlines.vs.h"
 #include "hlines.fs.h"
 #include "triangles.vs.h"
 #include "triangles.fs.h"
 
-#define CREATE_SHADER(RET, TYPE, SRC) do {					\
-		GLint status;										\
-		const char* src = SRC;								\
-		(RET) = glCreateShader(TYPE);						\
-		glShaderSource((RET), 1, &src, NULL);				\
-		glCompileShader(RET);								\
-		glGetShaderiv((RET), GL_COMPILE_STATUS, &status);	\
-		if(status != GL_TRUE) {								\
-			char msg[1024];									\
-			glGetShaderInfoLog((RET), 1024, NULL, msg);		\
-			fprintf(stderr, "%d:%s", TYPE, msg);			\
-			exit(2);										\
-		}													\
+#define CREATE_SHADER(RET, TYPE, SRC) do {                              \
+		GLint status; \
+		const char* src = SRC; \
+		(RET) = glCreateShader(TYPE); \
+		glShaderSource((RET), 1, &src, NULL); \
+		glCompileShader(RET); \
+		glGetShaderiv((RET), GL_COMPILE_STATUS, &status); \
+		if(status != GL_TRUE) { \
+			char msg[1024]; \
+			glGetShaderInfoLog((RET), 1024, NULL, msg); \
+			fprintf(stderr, "%d:%s", TYPE, msg); \
+			exit(2); \
+		} \
 	} while(0)
 
-#define CREATE_PROGRAM(RET, NAME) do {								\
-		GLuint vsn, fsn;											\
-		GLint status;												\
-		CREATE_SHADER(vsn, GL_VERTEX_SHADER, NAME ## _vs);			\
-		CREATE_SHADER(fsn, GL_FRAGMENT_SHADER, NAME ## _fs);		\
-		(RET) = glCreateProgram();									\
-		glAttachShader((RET), vsn);									\
-		glAttachShader((RET), fsn);									\
-		glLinkProgram(RET);											\
-		glGetProgramiv((RET), GL_LINK_STATUS, &status);				\
-		if(status != GL_TRUE) {										\
-			char msg[1024];											\
-			glGetProgramInfoLog((RET), 1024, NULL, msg);			\
-			fprintf(stderr, "prog:%s\n", msg);						\
-			exit(3);												\
-		}															\
+#define CREATE_PROGRAM(RET, NAME) do {                                  \
+		GLuint vsn, fsn; \
+		GLint status; \
+		CREATE_SHADER(vsn, GL_VERTEX_SHADER, NAME ## _vs); \
+		CREATE_SHADER(fsn, GL_FRAGMENT_SHADER, NAME ## _fs); \
+		(RET) = glCreateProgram(); \
+		glAttachShader((RET), vsn); \
+		glAttachShader((RET), fsn); \
+		glLinkProgram(RET); \
+		glGetProgramiv((RET), GL_LINK_STATUS, &status); \
+		if(status != GL_TRUE) { \
+			char msg[1024]; \
+			glGetProgramInfoLog((RET), 1024, NULL, msg); \
+			fprintf(stderr, "prog:%s\n", msg); \
+			exit(3); \
+		} \
 	} while(0)
 
 static GLFWwindow* window;
@@ -72,7 +75,7 @@ static jack_client_t* client;
 static jack_port_t* left;
 static jack_port_t* right;
 static unsigned int rate;
-static jack_nframes_t time_offset;
+static jack_nframes_t time_offset = 0;
 static uint64_t jack_latency_comp = 0;
 
 static xm_context_t* xmctx;
@@ -93,20 +96,18 @@ const GLbyte indices[] = {
 };
 
 struct channel_timing_info {
-	bool active;
-	uint16_t instrument;
+	uint64_t latest_trigger; // in audio frames
 	float frequency;
 	float volume;
 	float panning;
-	uint64_t latest_trigger;
+	uint16_t instrument;
+	bool active;
 };
 
 struct module_timing_info {
-	int64_t latency_comp;
-	size_t i;
-
-	uint64_t frames[NUM_TIMING];
-	struct channel_timing_info channels[MAX_CHANNELS * NUM_TIMING];
+	struct channel_timing_info channels[NUM_TIMING][MAX_CHANNELS]; // ring buffer
+	uint64_t audio_frames[NUM_TIMING]; // timestamps in audio frames of each cti
+	size_t latest_cti_idx;
 };
 
 static struct module_timing_info mti;
@@ -116,6 +117,7 @@ static jack_nframes_t glf_times[GL_FRAMES_AVG_COUNT];
 static jack_nframes_t glf_last = 0;
 static uint64_t gl_framecount = 0;
 static uint64_t gl_latency_comp = 0;
+static int64_t latency_comp = 0;
 
 void usage(char* progname) {
 	FATAL("Usage:\n" "\t%s\n"
@@ -125,8 +127,29 @@ void usage(char* progname) {
 		  progname, progname);
 }
 
-int jack_process(jack_nframes_t nframes, void* arg) {
+static void generate_timing_frame(float* lbuf, float* rbuf, jack_nframes_t tframes) {
 	static float buffer[TIMING_FRAMES * 2];
+
+	mti.latest_cti_idx = (mti.latest_cti_idx + 1) % NUM_TIMING;
+	xm_generate_samples(xmctx, buffer, tframes);
+	xm_get_position(xmctx, NULL, NULL, NULL, &(mti.audio_frames[mti.latest_cti_idx]));
+	for(size_t k = 1; k <= channels; ++k) {
+		struct channel_timing_info* chn = &(mti.channels[mti.latest_cti_idx][k-1]);
+		chn->active = xm_is_channel_active(xmctx, k);
+		chn->instrument = xm_get_instrument_of_channel(xmctx, k);
+		chn->frequency = xm_get_frequency_of_channel(xmctx, k);
+		chn->volume = xm_get_volume_of_channel(xmctx, k);
+		chn->panning = xm_get_panning_of_channel(xmctx, k);
+		chn->latest_trigger = xm_get_latest_trigger_of_channel(xmctx, k);
+	}
+
+	for(size_t i = 0; i < tframes; ++i) {
+		lbuf[i] = buffer[i << 1];
+		rbuf[i] = buffer[(i << 1) + 1];
+	}
+}
+
+int jack_process(jack_nframes_t nframes, __attribute__((unused)) void* arg) {
 	float* lbuf = jack_port_get_buffer(left, nframes);
 	float* rbuf = jack_port_get_buffer(right, nframes);
 
@@ -144,32 +167,16 @@ int jack_process(jack_nframes_t nframes, void* arg) {
 		}
 
 		for(size_t off = 0; off < nframes; off += tframes) {
-			xm_generate_samples(xmctx, buffer, tframes);
-
-			xm_get_position(xmctx, NULL, NULL, NULL, &(mti.frames[mti.i]));
-			for(size_t k = 1; k <= channels; ++k) {
-				struct channel_timing_info* chn = &(mti.channels[mti.i * channels + k - 1]);
-				chn->active = xm_is_channel_active(xmctx, k);
-				chn->instrument = xm_get_instrument_of_channel(xmctx, k);
-				chn->frequency = xm_get_frequency_of_channel(xmctx, k);
-				chn->volume = xm_get_volume_of_channel(xmctx, k);
-				chn->panning = xm_get_panning_of_channel(xmctx, k);
-				chn->latest_trigger = xm_get_latest_trigger_of_channel(xmctx, k);
-			}
-
-			for(size_t i = 0; i < tframes; ++i) {
-				lbuf[off + i] = buffer[i << 1];
-				rbuf[off + i] = buffer[(i << 1) + 1];
-			}
-
-			mti.i = (mti.i + 1) % NUM_TIMING;
+			generate_timing_frame(lbuf, rbuf, tframes);
+			lbuf = &(lbuf[tframes]);
+			rbuf = &(rbuf[tframes]);
 		}
 	}
 
 	return 0;
 }
 
-void jack_latency(jack_latency_callback_mode_t mode, void* arg) {
+void jack_latency(jack_latency_callback_mode_t mode, __attribute__((unused)) void* arg) {
 	if(mode == JackCaptureLatency) return;
 
 	jack_latency_range_t range;
@@ -187,7 +194,7 @@ void switch_program(void) {
 	glUseProgram(programs[curprog]);
 }
 
-void keyfun(GLFWwindow* window, int key, int scancode, int action, int mods) {
+void keyfun(GLFWwindow* window, int key, __attribute__((unused)) int scancode, int action, __attribute__((unused)) int mods) {
 	if(action != GLFW_PRESS) return;
 
 	if(key == GLFW_KEY_ESCAPE) {
@@ -218,9 +225,9 @@ void charfun(GLFWwindow* window, unsigned int codepoint) {
 }
 
 void setup(int argc, char** argv) {
-	size_t filenameidx = 1;
+	int filenameidx = 1;
 
-	for(size_t i = 1; i < argc; ++i) {
+	for(int i = 1; i < argc; ++i) {
 		if(!strcmp(argv[i], "--")) {
 			filenameidx = i+1;
 			break;
@@ -341,11 +348,10 @@ void setup(int argc, char** argv) {
 	channels = xm_get_number_of_channels(xmctx);
 	instruments = xm_get_number_of_instruments(xmctx);
 
-	mti.latency_comp = 0;
-	mti.i = 0;
+	latency_comp = 0;
+	mti.latest_cti_idx = NUM_TIMING - 1;
 
 	jack_activate(client);
-	time_offset = jack_time_to_frames(client, jack_get_time());
 
 	if(autoconnect) {
 		const char** ports = jack_get_ports(client, NULL, NULL, JackPortIsPhysical | JackPortIsInput | JackPortIsTerminal);
@@ -386,19 +392,29 @@ void render(void) {
 
 	struct channel_timing_info* chns = NULL;
 	uint64_t frames;
+	if(time_offset == 0) {
+		time_offset = jack_time_to_frames(client, jack_get_time());
+	}
 	jack_nframes_t now = jack_time_to_frames(client, jack_get_time());
 	jack_nframes_t target = now - time_offset;
-	size_t j = 0;
-	mti.latency_comp = jack_latency_comp - gl_latency_comp;
+	latency_comp = jack_latency_comp - gl_latency_comp;
 
 	/* XXX: be smarter */
-	for(size_t i = 1; i < NUM_TIMING; ++i) {
-		if(labs(mti.frames[i] + mti.latency_comp - target) >= labs(mti.frames[j] + mti.latency_comp - target)) continue;
-		j = i;
-		if(labs(mti.frames[i] + mti.latency_comp - target) < TIMING_FRAMES) break;
+	/* find channel timing infos with a timestamp closest to target */
+	size_t j = mti.latest_cti_idx;
+
+	while(mti.audio_frames[j] + latency_comp > target) {
+		if(j == 0) {
+			j = NUM_TIMING - 1;
+		} else {
+			j -= 1;
+		}
+		if(j == mti.latest_cti_idx) {
+			break;
+		}
 	}
-	chns = &(mti.channels[j * channels]);
-	frames = mti.frames[j];
+	chns = &(mti.channels[j][0]);
+	frames = mti.audio_frames[j];
 
 	glUniform4f(xmgu, (float)frames / (float)rate, (float)width / (float)height, 0.f, 0.f);
 
