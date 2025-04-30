@@ -1,4 +1,4 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.10)
 PROJECT(libxm C)
 
 FUNCTION(OPTION_AND_DEFINE name description default_value)
@@ -11,8 +11,8 @@ ENDIF()
 ENDFUNCTION()
 
 OPTION_AND_DEFINE(XM_DEBUG "Enable debug symbols and print debugging messages to stderr" "ON")
-OPTION_AND_DEFINE(XM_DEFENSIVE "Defensively check XM data for errors/inconsistencies" "ON")
-OPTION_AND_DEFINE(XM_BIG_ENDIAN "Use big endian byte order (unfinished)" "OFF")
+OPTION_AND_DEFINE(XM_DEFENSIVE "Defensively check XM data for errors/inconsistencies (do not play unknown files with this OFF)" "ON")
+OPTION_AND_DEFINE(XM_BIG_ENDIAN "Use big endian byte order (unfinished, do not use)" "OFF")
 
 OPTION_AND_DEFINE(XM_LINEAR_INTERPOLATION "Use linear interpolation (CPU hungry)" "ON")
 OPTION_AND_DEFINE(XM_RAMPING "Enable ramping (smooth volume/panning transitions, CPU hungry)" "ON")
@@ -21,18 +21,18 @@ OPTION_AND_DEFINE(XM_LIBXMIZE_DELTA_SAMPLES "Delta-code samples in libxmize form
 
 OPTION(XM_BUILD_SHARED_LIBS "Build shared library" "ON")
 OPTION(XM_BUILD_EXAMPLES "Build example programs" "ON")
-OPTION(XM_DEMO_MODE "Optimize for size (then link statically against libxms and strip dead code)" "OFF")
+OPTION(XM_OPTIMISE_FOR_SIZE "Optimize for size (for static linking)" "OFF")
 
 ADD_DEFINITIONS("-Wall -pedantic --std=c11")
 
 IF(XM_DEBUG)
-ADD_DEFINITIONS("-g")
+ADD_DEFINITIONS("-g -Og")
 ENDIF()
 
-IF(XM_DEMO_MODE)
-ADD_DEFINITIONS("-Os -fdata-sections -ffunction-sections -flto -fuse-linker-plugin -fvisibility=hidden")
+IF(XM_OPTIMISE_FOR_SIZE)
+ADD_DEFINITIONS("-Oz -ffast-math -fdata-sections -ffunction-sections -flto -fuse-linker-plugin -fvisibility=hidden")
 SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
-ELSE()
+ELSEIF(NOT XM_DEBUG)
 ADD_DEFINITIONS("-O2")
 ENDIF()
 
