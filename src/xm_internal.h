@@ -85,46 +85,45 @@ struct xm_envelope_s {
 typedef struct xm_envelope_s xm_envelope_t;
 
 struct xm_sample_s {
-#if XM_STRINGS
-	char name[SAMPLE_NAME_LENGTH + 1];
-#endif
-	uint8_t bits; /* Either 8 or 16 */
-
+	uint64_t latest_trigger;
+	union {
+		int8_t* data8;
+		int16_t* data16;
+	};
 	uint32_t length;
 	uint32_t loop_start;
 	uint32_t loop_length;
 	uint32_t loop_end;
 	float volume;
-	int8_t finetune;
-	xm_loop_type_t loop_type;
 	float panning;
+	xm_loop_type_t loop_type;
+	uint8_t bits; /* Either 8 or 16 */
+	int8_t finetune;
 	int8_t relative_note;
-	uint64_t latest_trigger;
 
-	union {
-		int8_t* data8;
-		int16_t* data16;
-	};
+#if XM_STRINGS
+	char name[SAMPLE_NAME_LENGTH + 1];
+#endif
 };
 typedef struct xm_sample_s xm_sample_t;
 
 struct xm_instrument_s {
-#if XM_STRINGS
-	char name[INSTRUMENT_NAME_LENGTH + 1];
-#endif
-	uint16_t num_samples;
+	uint64_t latest_trigger;
+	xm_sample_t* samples;
 	uint8_t sample_of_notes[NUM_NOTES];
+	uint16_t num_samples;
+	uint16_t volume_fadeout;
 	xm_envelope_t volume_envelope;
 	xm_envelope_t panning_envelope;
 	xm_waveform_type_t vibrato_type;
 	uint8_t vibrato_sweep;
 	uint8_t vibrato_depth;
 	uint8_t vibrato_rate;
-	uint16_t volume_fadeout;
-	uint64_t latest_trigger;
 	bool muted;
 
-	xm_sample_t* samples;
+#if XM_STRINGS
+	char name[INSTRUMENT_NAME_LENGTH + 1];
+#endif
 };
 typedef struct xm_instrument_s xm_instrument_t;
 
@@ -138,16 +137,15 @@ struct xm_pattern_slot_s {
 typedef struct xm_pattern_slot_s xm_pattern_slot_t;
 
 struct xm_pattern_s {
-	uint16_t num_rows;
 	xm_pattern_slot_t* slots; /* Array of size num_rows * num_channels */
+	uint16_t num_rows;
 };
 typedef struct xm_pattern_s xm_pattern_t;
 
 struct xm_module_s {
-#if XM_STRINGS
-	char name[MODULE_NAME_LENGTH + 1];
-	char trackername[TRACKER_NAME_LENGTH + 1];
-#endif
+	xm_pattern_t* patterns;
+	xm_instrument_t* instruments; /* Instrument 1 has index 0,
+	                               * instrument 2 has index 1, etc. */
 	uint16_t length;
 	uint16_t restart_position;
 	uint16_t num_channels;
@@ -156,9 +154,10 @@ struct xm_module_s {
 	xm_frequency_type_t frequency_type;
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 
-	xm_pattern_t* patterns;
-	xm_instrument_t* instruments; /* Instrument 1 has index 0,
-								   * instrument 2 has index 1, etc. */
+#if XM_STRINGS
+	char name[MODULE_NAME_LENGTH + 1];
+	char trackername[TRACKER_NAME_LENGTH + 1];
+#endif
 };
 typedef struct xm_module_s xm_module_t;
 
@@ -173,13 +172,23 @@ struct xm_channel_context_s {
 	float period;
 	float frequency;
 	float step;
-	bool ping; /* For ping-pong samples: true is -->, false is <-- */
 
 	float volume; /* Ideally between 0 (muted) and 1 (loudest) */
 	float panning; /* Between 0 (left) and 1 (right); 0.5 is centered */
+	float actual_volume[2]; /* Multiplier for left/right channel */
+
+#if XM_RAMPING
+	/* These values are updated at the end of each tick, to save
+	 * a couple of float operations on every generated sample. */
+	float target_volume[2];
+
+	unsigned long frame_count;
+	float end_of_previous_sample[RAMPING_POINTS];
+#endif
 
 	uint16_t autovibrato_ticks;
 
+	bool ping; /* For ping-pong samples: true is -->, false is <-- */
 	bool sustained;
 	float fadeout_volume;
 	float volume_envelope_volume;
@@ -223,17 +232,6 @@ struct xm_channel_context_s {
 
 	uint64_t latest_trigger;
 	bool muted;
-
-#if XM_RAMPING
-	/* These values are updated at the end of each tick, to save
-	 * a couple of float operations on every generated sample. */
-	float target_volume[2];
-
-	unsigned long frame_count;
-	float end_of_previous_sample[RAMPING_POINTS];
-#endif
-
-	float actual_volume[2];
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
 

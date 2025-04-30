@@ -16,21 +16,21 @@ OPTION_AND_DEFINE(XM_BIG_ENDIAN "Use big endian byte order (unfinished, do not u
 
 OPTION_AND_DEFINE(XM_LINEAR_INTERPOLATION "Use linear interpolation (CPU hungry)" "ON")
 OPTION_AND_DEFINE(XM_RAMPING "Enable ramping (smooth volume/panning transitions, CPU hungry)" "ON")
-OPTION_AND_DEFINE(XM_STRINGS "Store module, instrument and sample names in context" "OFF")
+OPTION_AND_DEFINE(XM_STRINGS "Store module, instrument and sample names in context" "ON")
 OPTION_AND_DEFINE(XM_LIBXMIZE_DELTA_SAMPLES "Delta-code samples in libxmize format" "ON")
 
 OPTION(XM_BUILD_SHARED_LIBS "Build shared library" "ON")
 OPTION(XM_BUILD_EXAMPLES "Build example programs" "ON")
 OPTION(XM_OPTIMISE_FOR_SIZE "Optimize for size (for static linking)" "OFF")
 
-ADD_DEFINITIONS("-Wall -Wextra -Wpadded -Wdouble-promotion -Wpedantic --std=c11")
+ADD_DEFINITIONS("-Wall -Wextra -Wpadded -Wdouble-promotion -Wpedantic --std=c11 -fshort-enums")
 
 IF(XM_DEBUG)
 ADD_DEFINITIONS("-g -Og")
 ENDIF()
 
 IF(XM_OPTIMISE_FOR_SIZE)
-ADD_DEFINITIONS("-Oz -ffast-math -fshort-enums -fdata-sections -ffunction-sections -flto -fuse-linker-plugin -fvisibility=hidden")
+ADD_DEFINITIONS("-Oz -ffast-math -fdata-sections -ffunction-sections -flto -fuse-linker-plugin -fvisibility=hidden")
 SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
 ELSEIF(NOT XM_DEBUG)
 ADD_DEFINITIONS("-O2")
