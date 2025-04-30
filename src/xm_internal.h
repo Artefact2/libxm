@@ -40,10 +40,7 @@ extern int __fail[-1];
 #define NUM_ENVELOPE_POINTS 12
 #define MAX_NUM_ROWS 256
 #define DEFAULT_PATTERN_LENGTH 64
-
-#if XM_RAMPING
-#define XM_SAMPLE_RAMPING_POINTS 0x20
-#endif
+#define RAMPING_POINTS 0x20
 
 /* ----- Data types ----- */
 
@@ -233,7 +230,7 @@ struct xm_channel_context_s {
 	float target_volume[2];
 
 	unsigned long frame_count;
-	float end_of_previous_sample[XM_SAMPLE_RAMPING_POINTS];
+	float end_of_previous_sample[RAMPING_POINTS];
 #endif
 
 	float actual_volume[2];

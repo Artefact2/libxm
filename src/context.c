@@ -8,25 +8,35 @@
 
 #include "xm_internal.h"
 
-#define OFFSET(ptr) do {										\
-		(ptr) = (void*)((intptr_t)(ptr) + (intptr_t)(*ctxp));	\
+#define OFFSET(ptr) do { \
+		(ptr) = (void*)((intptr_t)(ptr) + (intptr_t)(*ctxp)); \
 	} while(0)
 
+#if XM_DEFENSIVE
 #define CHECK_CHANNEL(ctx, c) do { \
-		if(XM_DEBUG && ((c) == 0 || (c) > (ctx)->module.num_channels)) \
+		if(((c) == 0 || (c) > (ctx)->module.num_channels)) { \
 			DEBUG("invalid channel %d", (c)); \
+			return 0; \
+		} \
 	} while(0)
-
 #define CHECK_INSTRUMENT(ctx, i) do { \
-		if(XM_DEBUG && ((i) == 0 || (i) > (ctx)->module.num_instruments)) \
+		if(((i) == 0 || (i) > (ctx)->module.num_instruments)) { \
 			DEBUG("invalid instrument %d", (i)); \
+			return 0; \
+		} \
 	} while(0)
-
-#define CHECK_SAMPLE(ctx, i, s) do {                                      \
+#define CHECK_SAMPLE(ctx, i, s) do { \
 		CHECK_INSTRUMENT((ctx), (i)); \
-		if(XM_DEBUG && ((s) > (ctx)->module.instruments[(i)].num_samples)) \
+		if(((s) > (ctx)->module.instruments[(i)].num_samples)) { \
 			DEBUG("invalid sample %d for instrument %d", (s), (i)); \
+			return 0; \
+		} \
 	} while(0)
+#else
+#define CHECK_CHANNEL(ctx, c)
+#define CHECK_INSTRUMENT(ctx, i)
+#define CHECK_SAMPLE(ctx, i, s)
+#endif
 
 
 
@@ -49,7 +59,7 @@ int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t modd
 
 	bytes_needed = xm_get_memory_needed_for_context(moddata, moddata_length);
 	mempool = malloc(bytes_needed);
-	if(mempool == NULL && bytes_needed > 0) {
+	if(XM_DEFENSIVE && mempool == NULL && bytes_needed > 0) {
 		/* malloc() failed, trouble ahead */
 		DEBUG("call to malloc() failed, returned %p", (void*)mempool);
 		return 2;
@@ -191,11 +201,11 @@ const char* xm_get_tracker_name(xm_context_t* ctx) {
 	return ctx->module.trackername;
 }
 #else
-const char* xm_get_module_name(xm_context_t* ctx) {
+const char* xm_get_module_name(__attribute__((unused)) xm_context_t* ctx) {
 	return NULL;
 }
 
-const char* xm_get_tracker_name(xm_context_t* ctx) {
+const char* xm_get_tracker_name(__attribute__((unused)) xm_context_t* ctx) {
 	return NULL;
 }
 #endif

@@ -450,7 +450,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 		} else {
 			if(instr->sample_of_notes[s->note - 1] < instr->num_samples) {
 #if XM_RAMPING
-				for(unsigned int z = 0; z < XM_SAMPLE_RAMPING_POINTS; ++z) {
+				for(unsigned int z = 0; z < RAMPING_POINTS; ++z) {
 					ch->end_of_previous_sample[z] = xm_next_of_sample(ch);
 				}
 				ch->frame_count = 0;
@@ -1255,9 +1255,9 @@ static float xm_sample_at(xm_sample_t* sample, size_t k) {
 static float xm_next_of_sample(xm_channel_context_t* ch) {
 	if(ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
 #if XM_RAMPING
-		if(ch->frame_count < XM_SAMPLE_RAMPING_POINTS) {
+		if(ch->frame_count < RAMPING_POINTS) {
 			return XM_LERP(ch->end_of_previous_sample[ch->frame_count], .0f,
-			               (float)ch->frame_count / (float)XM_SAMPLE_RAMPING_POINTS);
+			               (float)ch->frame_count / (float)RAMPING_POINTS);
 		}
 #endif
 		return .0f;
@@ -1352,10 +1352,10 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 	float endval = (XM_LINEAR_INTERPOLATION ? XM_LERP(u, v, t) : u);
 
 #if XM_RAMPING
-	if(ch->frame_count < XM_SAMPLE_RAMPING_POINTS) {
+	if(ch->frame_count < RAMPING_POINTS) {
 		/* Smoothly transition between old and new sample. */
 		return XM_LERP(ch->end_of_previous_sample[ch->frame_count], endval,
-		               (float)ch->frame_count / (float)XM_SAMPLE_RAMPING_POINTS);
+		               (float)ch->frame_count / (float)RAMPING_POINTS);
 	}
 #endif
 

@@ -23,14 +23,14 @@ OPTION(XM_BUILD_SHARED_LIBS "Build shared library" "ON")
 OPTION(XM_BUILD_EXAMPLES "Build example programs" "ON")
 OPTION(XM_OPTIMISE_FOR_SIZE "Optimize for size (for static linking)" "OFF")
 
-ADD_DEFINITIONS("-Wall -pedantic --std=c11")
+ADD_DEFINITIONS("-Wall -Wextra -Wpadded -Wdouble-promotion -Wpedantic --std=c11")
 
 IF(XM_DEBUG)
 ADD_DEFINITIONS("-g -Og")
 ENDIF()
 
 IF(XM_OPTIMISE_FOR_SIZE)
-ADD_DEFINITIONS("-Oz -ffast-math -fdata-sections -ffunction-sections -flto -fuse-linker-plugin -fvisibility=hidden")
+ADD_DEFINITIONS("-Oz -ffast-math -fshort-enums -fdata-sections -ffunction-sections -flto -fuse-linker-plugin -fvisibility=hidden")
 SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
 ELSEIF(NOT XM_DEBUG)
 ADD_DEFINITIONS("-O2")
