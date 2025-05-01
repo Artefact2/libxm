@@ -18,23 +18,26 @@
 #define maybe_assert_eq(x, y) assert((x) == (y))
 #endif
 
-static const unsigned int channels = 2;
-static const unsigned int rate = 48000;
-static const size_t buffer_size = (1 << 12);
+static const unsigned char header[] = {
+	'.', 's', 'n', 'd', /* .snd magic */
+	0, 0, 0, 28, /* header size */
+	255, 255, 255, 255, /* data size (unknown) */
+	0, 0, 0, 6, /* encoding (ieee float32) */
+	0, 0, 187, 128, /* sample rate (48000) */
+	0, 0, 0, 2, /* channels */
+	0, 0, 0, 0, /* description string (min 4 bytes) */
+};
 
-static void puts_uint32_be(uint32_t i) {
-	if(!XM_BIG_ENDIAN) {
-		/* (optimised into single bswap instruction) */
-		i = (i << 24)
-			| (i << 8 & 0xFF0000)
-			| (i >> 8 & 0xFF00)
-			| (i >> 24);
-	}
-	maybe_assert_eq(write(STDOUT_FILENO, &i, 4), 4);
+static void byteswap32(uint32_t* i) {
+	/* (optimised into single bswap instruction) */
+	*i = (*i << 24)
+		| (*i << 8 & 0xFF0000)
+		| (*i >> 8 & 0xFF00)
+		| (*i >> 24);
 }
 
 void _start(void) {
-	float buffer[buffer_size];
+	static float buffer[128];
 	xm_context_t* ctx;
 	char* data;
 	ssize_t datalen;
@@ -43,27 +46,18 @@ void _start(void) {
 	data = malloc(datalen);
 	((size_t*)data)[0] = datalen;
 	maybe_assert_eq(read(0, data + sizeof(datalen), datalen - (ssize_t)sizeof(datalen)), datalen - (ssize_t)sizeof(datalen));
-	xm_create_context_from_libxmize(&ctx, data, rate);
+	xm_create_context_from_libxmize(&ctx, data, 48000);
 
-	puts_uint32_be(0x2E736E64); /* .snd magic number */
-	puts_uint32_be(28); /* Header size */
-	puts_uint32_be((uint32_t)(-1)); /* Data size, unknown */
-	puts_uint32_be(6); /* Encoding: 32-bit IEEE floating point */
-	puts_uint32_be(rate); /* Sample rate */
-	puts_uint32_be(channels); /* Number of interleaved channels */
-	puts_uint32_be(0); /* Optional text information */
+	maybe_assert_eq(write(STDOUT_FILENO, header, sizeof(header)), (ssize_t)sizeof(header));
 
 	while(!xm_get_loop_count(ctx)) {
-		xm_generate_samples(ctx, buffer, sizeof(buffer) / (channels * sizeof(float)));
-		for(size_t k = 0; k < buffer_size; ++k) {
-			union {
-				float f;
-				uint32_t i;
-			} u;
-
-			u.f = buffer[k];
-			puts_uint32_be(u.i);
+		xm_generate_samples(ctx, buffer, sizeof(buffer) / (2 * sizeof(float)));
+		if(!XM_BIG_ENDIAN) {
+			for(size_t k = 0; k < sizeof(buffer) / sizeof(float); ++k) {
+				byteswap32((uint32_t*)&(buffer[k]));
+			}
 		}
+		maybe_assert_eq(write(STDOUT_FILENO, buffer, sizeof(buffer)), (ssize_t)sizeof(buffer));
 	}
 
 	exit(0);
