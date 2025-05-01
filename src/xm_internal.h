@@ -11,12 +11,16 @@
 #include <string.h>
 #include <assert.h>
 
-#if XM_DEBUG
+#if XM_DEBUG || XM_DEFENSIVE
 #include <stdio.h>
-#define DEBUG(fmt, ...) do {										\
-		fprintf(stderr, "%s(): " fmt "\n", __func__, __VA_ARGS__);	\
-		fflush(stderr);												\
+#define NOTICE(fmt, ...) do {                                           \
+		fprintf(stderr, "%s(): " fmt "\n", __func__, __VA_ARGS__); \
+		fflush(stderr); \
 	} while(0)
+#endif
+
+#if XM_DEBUG
+#define DEBUG NOTICE
 #else
 #define DEBUG(...)
 #endif
@@ -30,7 +34,6 @@ extern int __fail[-1];
 /* ----- XM constants ----- */
 
 #define SAMPLE_NAME_LENGTH 22
-#define INSTRUMENT_HEADER_LENGTH 263
 #define INSTRUMENT_NAME_LENGTH 22
 #define MODULE_NAME_LENGTH 20
 #define TRACKER_NAME_LENGTH 20
@@ -52,19 +55,6 @@ enum xm_waveform_type_e {
 };
 typedef enum xm_waveform_type_e xm_waveform_type_t;
 
-enum xm_loop_type_e {
-	XM_NO_LOOP,
-	XM_FORWARD_LOOP,
-	XM_PING_PONG_LOOP,
-};
-typedef enum xm_loop_type_e xm_loop_type_t;
-
-enum xm_frequency_type_e {
-	XM_LINEAR_FREQUENCIES,
-	XM_AMIGA_FREQUENCIES,
-};
-typedef enum xm_frequency_type_e xm_frequency_type_t;
-
 struct xm_envelope_point_s {
 	uint16_t frame;
 	uint16_t value;
@@ -85,18 +75,19 @@ typedef struct xm_envelope_s xm_envelope_t;
 
 struct xm_sample_s {
 	uint64_t latest_trigger;
-	union {
-		int8_t* data8;
-		int16_t* data16;
-	};
+	/* ctx->sample_data[index..(index+length)] */
+	uint32_t index;
 	uint32_t length;
 	uint32_t loop_start;
 	uint32_t loop_length;
 	uint32_t loop_end;
 	float volume;
 	float panning;
-	xm_loop_type_t loop_type;
-	uint8_t bits; /* Either 8 or 16 */
+	enum {
+		XM_NO_LOOP,
+		XM_FORWARD_LOOP,
+		XM_PING_PONG_LOOP,
+	} loop_type;
 	int8_t finetune;
 	int8_t relative_note;
 
@@ -108,9 +99,7 @@ typedef struct xm_sample_s xm_sample_t;
 
 struct xm_instrument_s {
 	uint64_t latest_trigger;
-	xm_sample_t* samples;
-	uint8_t sample_of_notes[NUM_NOTES];
-	uint16_t num_samples;
+	uint16_t sample_of_notes[NUM_NOTES];
 	uint16_t volume_fadeout;
 	xm_envelope_t volume_envelope;
 	xm_envelope_t panning_envelope;
@@ -136,24 +125,28 @@ struct xm_pattern_slot_s {
 typedef struct xm_pattern_slot_s xm_pattern_slot_t;
 
 struct xm_pattern_s {
-	xm_pattern_slot_t* slots; /* Array of size num_rows * num_channels */
+	/* ctx->pattern_slots[index..(index+num_rows)] */
+	uint16_t index;
 	uint16_t num_rows;
 };
 typedef struct xm_pattern_s xm_pattern_t;
 
 struct xm_module_s {
-	xm_pattern_t* patterns;
-	xm_instrument_t* instruments; /* Instrument 1 has index 0,
-	                               * instrument 2 has index 1, etc. */
 	uint16_t length;
 	uint16_t restart_position;
 	uint16_t num_channels;
 	uint16_t num_patterns;
 	uint16_t num_instruments;
+	uint16_t num_samples;
+	uint32_t num_rows;
+	uint32_t samples_data_length;
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 
 #if XM_FREQUENCY_TYPES == 3
-	xm_frequency_type_t frequency_type;
+	enum {
+		XM_LINEAR_FREQUENCIES,
+		XM_AMIGA_FREQUENCIES,
+	} frequency_type;
 #endif
 
 #if XM_STRINGS
@@ -164,6 +157,7 @@ struct xm_module_s {
 typedef struct xm_module_s xm_module_t;
 
 struct xm_channel_context_s {
+	uint64_t latest_trigger;
 	float note;
 	float orig_note; /* The original note before effect modifications, as read in the pattern. */
 	xm_instrument_t* instrument; /* Could be NULL */
@@ -231,21 +225,26 @@ struct xm_channel_context_s {
 	float tremolo_volume;
 	uint8_t tremor_param;
 	bool tremor_on;
-
-	uint64_t latest_trigger;
 	bool muted;
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
 
 struct xm_context_s {
-	size_t ctx_size; /* Must be first, see xm_create_context_from_libxmize() */
 	xm_module_t module;
-	uint32_t rate;
+	xm_channel_context_t* channels;
+	xm_pattern_t* patterns;
+	xm_instrument_t* instruments; /* Instrument 1 has index 0,
+	                               * instrument 2 has index 1, etc. */
+	xm_pattern_slot_t* pattern_slots;
+	xm_sample_t* samples;
+	int16_t* samples_data;
+	uint8_t* row_loop_count;
 
-	uint16_t tempo;
-	uint16_t bpm;
 	float global_volume;
 	float amplification;
+	uint32_t rate;
+	uint16_t tempo;
+	uint16_t bpm;
 
 #if XM_RAMPING
 	/* How much is a channel final volume allowed to change per
@@ -269,11 +268,10 @@ struct xm_context_s {
 	 * Used for EEy effect */
 	uint16_t extra_ticks;
 
-	uint8_t* row_loop_count; /* Array of size MAX_NUM_ROWS * module_length */
+
 	uint8_t loop_count;
 	uint8_t max_loop_count;
 
-	xm_channel_context_t* channels;
 };
 
 /* ----- Internal API ----- */

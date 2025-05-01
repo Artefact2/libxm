@@ -9,6 +9,10 @@
 
 #include "xm_internal.h"
 
+/* XXX */
+#define INSTRUMENT_HEADER_LENGTH 263
+#define SAMPLE_HEADER_SIZE 40
+
 /* .xm files are little-endian. */
 
 /* Bounded reader macros.
@@ -40,7 +44,7 @@ static inline void memcpy_pad(void* dst, size_t dst_len, const void* src, size_t
 	memset(dst_c + copy_bytes, 0, dst_len - copy_bytes);
 }
 
-int xm_check_sanity_preload(const char* module, size_t module_length) {
+static int xm_check_sanity_preload(const char* module, size_t module_length) {
 	if(module_length < 60) {
 		return 4;
 	}
@@ -61,50 +65,49 @@ int xm_check_sanity_preload(const char* module, size_t module_length) {
 	return 0;
 }
 
-int xm_check_sanity_postload(__attribute__((unused)) xm_context_t* ctx) {
+static int xm_check_sanity_postload(__attribute__((unused)) xm_context_t* ctx) {
 	/* @todo: plenty of stuff to do here… */
 	return 0;
 }
 
-size_t xm_get_memory_needed_for_context(const char* moddata, size_t moddata_length) {
-	size_t memory_needed = 0;
+static void xm_prescan_module(const char* moddata, size_t moddata_length,
+                           uint16_t* num_channels,
+                           uint16_t* num_patterns,
+                           uint16_t* num_instruments,
+                           uint16_t* num_samples,
+                           uint32_t* num_rows,
+                           uint32_t* samples_data_length) {
 	size_t offset = 60; /* Skip the first header */
-	uint16_t num_channels;
-	uint16_t num_patterns;
-	uint16_t num_instruments;
 
 	/* Read the module header */
-
-	num_channels = READ_U16(offset + 8);
-	num_patterns = READ_U16(offset + 10);
-	memory_needed += num_patterns * sizeof(xm_pattern_t);
-
-	num_instruments = READ_U16(offset + 12);
-	memory_needed += num_instruments * sizeof(xm_instrument_t);
-
-	memory_needed += MAX_NUM_ROWS * READ_U16(offset + 4) * sizeof(uint8_t); /* Module length */
+	*num_channels = READ_U16(offset + 8);
+	*num_patterns = READ_U16(offset + 10);
+	*num_instruments = READ_U16(offset + 12);
+	*rum_samples = 0;
+	*num_rows = 0;
+	*samples_data_length = 0;
 
 	/* Header size */
 	offset += READ_U32(offset);
 
 	/* Read pattern headers */
-	for(uint16_t i = 0; i < num_patterns; ++i) {
-		uint16_t num_rows;
-
-		num_rows = READ_U16(offset + 5);
-		memory_needed += num_rows * num_channels * sizeof(xm_pattern_slot_t);
+	for(uint16_t i = 0; i < *num_patterns; ++i) {
+		*num_rows += READ_U16(offset + 5);
 
 		/* Pattern header length + packed pattern data size */
 		offset += READ_U32(offset) + READ_U16(offset + 7);
 	}
 
 	/* Read instrument headers */
-	for(uint16_t i = 0; i < num_instruments; ++i) {
-		uint16_t num_samples;
-		uint32_t sample_size_aggregate = 0;
+	for(uint16_t i = 0; i < *num_instruments; ++i) {
+		*num_samples += READ_U16(offset + 27);
 
-		num_samples = READ_U16(offset + 27);
-		memory_needed += num_samples * sizeof(xm_sample_t);
+		#if XM_DEFENSIVE
+		uint32_t sample_header_size = READ_U32(offset + 29);
+		if(sample_header_size != SAMPLE_HEADER_SIZE) {
+			NOTICE("dodgy sample header size (%d) for instrument %d", sample_header_size, i+1);
+		}
+		#endif
 
 		/* Instrument header size */
 		uint32_t ins_header_size = READ_U32(offset);
@@ -113,21 +116,22 @@ size_t xm_get_memory_needed_for_context(const char* moddata, size_t moddata_leng
 		offset += ins_header_size;
 
 		for(uint16_t j = 0; j < num_samples; ++j) {
-			uint32_t sample_size;
-
-			sample_size = READ_U32(offset);
-			sample_size_aggregate += sample_size;
-			memory_needed += sample_size;
-			offset += 40; /* See comment in xm_load_module() */
+			uint32_t sample_length = READ_U32(offset);
+			if(READ_U8(offset + 14) & 64) {
+				/* 16-bit sample data */
+				#if XM_DEFENSIVE
+				if(sample_length % 2) {
+					NOTICE("sample %d of instrument %d is 16-bit with an odd length!", j, i+1);
+				}
+				#endif
+				*samples_data_length += sample_length/2;
+			} else {
+				/* 8-bit sample data */
+				*samples_data_length += sample_length;
+			}
+			offset += SAMPLE_HEADER_SIZE;
 		}
-
-		offset += sample_size_aggregate;
 	}
-
-	memory_needed += num_channels * sizeof(xm_channel_context_t);
-	memory_needed += sizeof(xm_context_t);
-
-	return memory_needed;
 }
 
 char* xm_load_module(xm_context_t* ctx, const char* moddata, size_t moddata_length, char* mempool) {

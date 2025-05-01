@@ -46,8 +46,8 @@ static void xm_post_pattern_change(xm_context_t*);
 static void xm_row(xm_context_t*);
 static void xm_tick(xm_context_t*);
 
-static float xm_sample_at(xm_sample_t*, size_t);
-static float xm_next_of_sample(xm_channel_context_t*);
+static float xm_sample_at(xm_context_t*, xm_sample_t*, size_t);
+static float xm_next_of_sample(xm_context_t*, xm_channel_context_t*);
 static void xm_sample(xm_context_t*, float*, float*);
 
 /* ----- Other oddities ----- */
@@ -484,7 +484,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			if(instr->sample_of_notes[s->note - 1] < instr->num_samples) {
 #if XM_RAMPING
 				for(unsigned int z = 0; z < RAMPING_POINTS; ++z) {
-					ch->end_of_previous_sample[z] = xm_next_of_sample(ch);
+					ch->end_of_previous_sample[z] = xm_next_of_sample(ctx, ch);
 				}
 				ch->frame_count = 0;
 #endif
@@ -913,7 +913,7 @@ static void xm_row(xm_context_t* ctx) {
 	}
 
 	uint8_t pat_idx = ctx->module.pattern_table[ctx->current_table_index];
-	xm_pattern_t* cur = (pat_idx < ctx->module.num_patterns ? ctx->module.patterns + pat_idx : NULL);
+	xm_pattern_t* cur = (pat_idx < ctx->module.num_patterns ? ctx->patterns + pat_idx : NULL);
 	bool in_a_loop = false;
 
 	/* Read notes… */
@@ -1284,11 +1284,11 @@ static void xm_tick(xm_context_t* ctx) {
 	ctx->remaining_samples_in_tick += (float)ctx->rate / ((float)ctx->bpm * 0.4f);
 }
 
-static float xm_sample_at(xm_sample_t* sample, size_t k) {
-	return sample->bits == 8 ? (sample->data8[k] / 128.f) : (sample->data16[k] / 32768.f);
+static float xm_sample_at(xm_context_t* ctx, xm_sample_t* sample, size_t k) {
+	return (float)ctx->samples_data[sample->index + k]  / 32768.f;
 }
 
-static float xm_next_of_sample(xm_channel_context_t* ch) {
+static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
 #if XM_RAMPING
 		if(ch->frame_count < RAMPING_POINTS) {
@@ -1305,20 +1305,20 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 	float u, v, t;
 	uint32_t a, b;
 	a = (uint32_t)ch->sample_position; /* This cast is fine,
-										* sample_position will not
-										* go above integer
-										* ranges */
+	                                    * sample_position will not
+	                                    * go above integer
+	                                    * ranges */
 	if(XM_LINEAR_INTERPOLATION) {
 		b = a + 1;
 		t = ch->sample_position - a; /* Cheaper than fmodf(., 1.f) */
 	}
-	u = xm_sample_at(ch->sample, a);
+	u = xm_sample_at(ctx, ch->sample, a);
 
 	switch(ch->sample->loop_type) {
 
 	case XM_NO_LOOP:
 		if(XM_LINEAR_INTERPOLATION) {
-			v = (b < ch->sample->length) ? xm_sample_at(ch->sample, b) : .0f;
+			v = (b < ch->sample->length) ? xm_sample_at(ctx, ch->sample, b) : .0f;
 		}
 		ch->sample_position += ch->step;
 		if(ch->sample_position >= ch->sample->length) {
@@ -1328,10 +1328,9 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 
 	case XM_FORWARD_LOOP:
 		if(XM_LINEAR_INTERPOLATION) {
-			v = xm_sample_at(
-				ch->sample,
-				(b == ch->sample->loop_end) ? ch->sample->loop_start : b
-				);
+			v = xm_sample_at(ctx,
+			                 ch->sample,
+			                 (b == ch->sample->loop_end) ? ch->sample->loop_start : b);
 		}
 		ch->sample_position += ch->step;
 		while(ch->sample_position >= ch->sample->loop_end) {
@@ -1349,7 +1348,7 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 		 * (ie switches direction more than once per sample */
 		if(ch->ping) {
 			if(XM_LINEAR_INTERPOLATION) {
-				v = xm_sample_at(ch->sample, (b >= ch->sample->loop_end) ? a : b);
+				v = xm_sample_at(ctx, ch->sample, (b >= ch->sample->loop_end) ? a : b);
 			}
 			if(ch->sample_position >= ch->sample->loop_end) {
 				ch->ping = false;
@@ -1363,10 +1362,9 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 		} else {
 			if(XM_LINEAR_INTERPOLATION) {
 				v = u;
-				u = xm_sample_at(
-					ch->sample,
-					(b == 1 || b - 2 <= ch->sample->loop_start) ? a : (b - 2)
-					);
+				u = xm_sample_at(ctx,
+				                 ch->sample,
+				                 (b == 1 || b - 2 <= ch->sample->loop_start) ? a : (b - 2));
 			}
 			if(ch->sample_position <= ch->sample->loop_start) {
 				ch->ping = true;
@@ -1418,7 +1416,7 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 			continue;
 		}
 
-		const float fval = xm_next_of_sample(ch);
+		const float fval = xm_next_of_sample(ctx, ch);
 
 		if(!ch->muted && !ch->instrument->muted) {
 			*left += fval * ch->actual_volume[0];
