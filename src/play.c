@@ -15,7 +15,7 @@
 static float xm_waveform(xm_waveform_type_t, uint8_t);
 static void xm_autovibrato(xm_context_t*, xm_channel_context_t*);
 static void xm_vibrato(xm_context_t*, xm_channel_context_t*, uint8_t);
-static void xm_tremolo(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t);
+static void xm_tremolo(xm_channel_context_t*, uint8_t, uint16_t);
 static void xm_arpeggio(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t);
 static void xm_tone_portamento(xm_context_t*, xm_channel_context_t*);
 static void xm_pitch_slide(xm_context_t*, xm_channel_context_t*, float);
@@ -181,7 +181,7 @@ static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t para
 	xm_update_frequency(ctx, ch);
 }
 
-static void xm_tremolo(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, uint16_t pos) {
+static void xm_tremolo(xm_channel_context_t* ch, uint8_t param, uint16_t pos) {
 	unsigned int step = pos * (param >> 4);
 	/* Not so sure about this, it sounds correct by ear compared with
 	 * MilkyTracker, but it could come from other bugs */
@@ -514,9 +514,13 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 
 	case 0x5:
 		if(s->volume_column > 0x50) break;
+		__attribute__((fallthrough));
 	case 0x1:
+		__attribute__((fallthrough));
 	case 0x2:
+		__attribute__((fallthrough));
 	case 0x3:
+		__attribute__((fallthrough));
 	case 0x4:
 		/* Set volume */
 		ch->volume = (float)(s->volume_column - 0x10) / (float)0x40;
@@ -1084,30 +1088,29 @@ static void xm_tick(xm_context_t* ctx) {
 		switch(ch->current->effect_type) {
 
 		case 0: /* 0xy: Arpeggio */
-			if(ch->current->effect_param > 0) {
-				char arp_offset = ctx->tempo % 3;
-				switch(arp_offset) {
-				case 2: /* 0 -> x -> 0 -> y -> x -> … */
-					if(ctx->current_tick == 1) {
-						ch->arp_in_progress = true;
-						ch->arp_note_offset = ch->current->effect_param >> 4;
-						xm_update_frequency(ctx, ch);
-						break;
-					}
-					/* No break here, this is intended */
-				case 1: /* 0 -> 0 -> y -> x -> … */
-					if(ctx->current_tick == 0) {
-						ch->arp_in_progress = false;
-						ch->arp_note_offset = 0;
-						xm_update_frequency(ctx, ch);
-						break;
-					}
-					/* No break here, this is intended */
-				case 0: /* 0 -> y -> x -> … */
-					xm_arpeggio(ctx, ch, ch->current->effect_param, ctx->current_tick - arp_offset);
-				default:
+			if(ch->current->effect_param == 0) break;
+			char arp_offset = ctx->tempo % 3;
+			switch(arp_offset) {
+			case 2: /* 0 -> x -> 0 -> y -> x -> … */
+				if(ctx->current_tick == 1) {
+					ch->arp_in_progress = true;
+					ch->arp_note_offset = ch->current->effect_param >> 4;
+					xm_update_frequency(ctx, ch);
 					break;
 				}
+				__attribute__((fallthrough));
+			case 1: /* 0 -> 0 -> y -> x -> … */
+				if(ctx->current_tick == 0) {
+					ch->arp_in_progress = false;
+					ch->arp_note_offset = 0;
+					xm_update_frequency(ctx, ch);
+					break;
+				}
+				__attribute__((fallthrough));
+			case 0: /* 0 -> y -> x -> … */
+				xm_arpeggio(ctx, ch, ch->current->effect_param, ctx->current_tick - arp_offset);
+			default:
+				break;
 			}
 			break;
 
@@ -1147,7 +1150,7 @@ static void xm_tick(xm_context_t* ctx) {
 
 		case 7: /* 7xy: Tremolo */
 			if(ctx->current_tick == 0) break;
-			xm_tremolo(ctx, ch, ch->tremolo_param, ch->tremolo_ticks++);
+			xm_tremolo(ch, ch->tremolo_param, ch->tremolo_ticks++);
 			break;
 
 		case 0xA: /* Axy: Volume slide */

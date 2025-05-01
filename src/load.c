@@ -61,7 +61,7 @@ int xm_check_sanity_preload(const char* module, size_t module_length) {
 	return 0;
 }
 
-int xm_check_sanity_postload(xm_context_t* ctx) {
+int xm_check_sanity_postload(__attribute__((unused)) xm_context_t* ctx) {
 	/* @todo: plenty of stuff to do here… */
 	return 0;
 }
