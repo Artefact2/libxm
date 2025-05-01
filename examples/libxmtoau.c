@@ -7,29 +7,30 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
 #include <assert.h>
-#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <sys/mman.h>
-#include <sys/resource.h>
 #include <xm.h>
+
+#ifdef NDEBUG
+#define maybe_assert_eq(x, y) (x)
+#else
+#define maybe_assert_eq(x, y) assert((x) == (y))
+#endif
 
 static const unsigned int channels = 2;
 static const unsigned int rate = 48000;
 static const size_t buffer_size = (1 << 12);
 
 static void puts_uint32_be(uint32_t i) {
-	char* c = (char*)(&i);
-
-	if(XM_BIG_ENDIAN) {
-		putchar(c[0]);
-		putchar(c[1]);
-		putchar(c[2]);
-		putchar(c[3]);
-	} else {
-		putchar(c[3]);
-		putchar(c[2]);
-		putchar(c[1]);
-		putchar(c[0]);
+	if(!XM_BIG_ENDIAN) {
+		/* (optimised into single bswap instruction) */
+		i = (i << 24)
+			| (i << 8 & 0xFF0000)
+			| (i >> 8 & 0xFF00)
+			| (i >> 24);
 	}
+	maybe_assert_eq(write(STDOUT_FILENO, &i, 4), 4);
 }
 
 int main(int argc, char** argv) {
@@ -37,15 +38,15 @@ int main(int argc, char** argv) {
 	xm_context_t* ctx;
 	void* data;
 	size_t datalen;
-	FILE* fp;
+	int in_fd;
 
-	if(argc != 2) return 1;
+	if(XM_DEFENSIVE && argc != 2) return 1;
 
-	fp = fopen(argv[1], "rb");
-	assert(fp);
-	assert(fread(&datalen, sizeof(size_t), 1, fp));
-	rewind(fp);
-	data = mmap(0, datalen, PROT_READ|PROT_WRITE, MAP_PRIVATE, fileno(fp), 0);
+	in_fd = open(argv[1], O_RDONLY);
+	assert(in_fd);
+	maybe_assert_eq(read(in_fd, &datalen, sizeof(size_t)), sizeof(size_t));
+	maybe_assert_eq(lseek(in_fd, 0, SEEK_SET), 0);
+	data = mmap(0, datalen, PROT_READ|PROT_WRITE, MAP_PRIVATE, in_fd, 0);
 	assert(data != MAP_FAILED);
 	xm_create_context_from_libxmize(&ctx, data, rate);
 
@@ -70,11 +71,5 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	struct rusage r;
-	assert(!getrusage(RUSAGE_SELF, &r));
-	fprintf(stderr, "%s: libxmized length %lu, ru_maxrss %ld\n", argv[0], datalen, r.ru_maxrss);
-
-	munmap(data, datalen);
-	fclose(fp);
-	return 0;
+	exit(0);
 }
