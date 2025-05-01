@@ -1,5 +1,6 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.20)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.21)
 PROJECT(libxm C)
+SET(CMAKE_C_STANDARD 23)
 
 FUNCTION(OPTION_AND_DEFINE name description default_value)
 OPTION(${name} ${description} ${default_value})
@@ -30,7 +31,7 @@ OPTION(XM_BUILD_SHARED_LIBS "Build shared library" "ON")
 OPTION(XM_BUILD_EXAMPLES "Build example programs" "ON")
 OPTION(XM_OPTIMISE_FOR_SIZE "Optimize for size (for static linking)" "OFF")
 
-ADD_DEFINITIONS("-Wall -Wextra -Wpadded -Wdouble-promotion -Wpedantic --std=c11 -fshort-enums")
+ADD_DEFINITIONS("-Wall -Wextra -Wpadded -Wdouble-promotion -Wpedantic -fshort-enums")
 
 IF(CMAKE_C_BYTE_ORDER STREQUAL "BIG")
 ADD_DEFINITIONS("-DXM_BIG_ENDIAN=1")

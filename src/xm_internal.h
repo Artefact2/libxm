@@ -7,7 +7,6 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
 #include <xm.h>
-#include <stdbool.h>
 #include <math.h>
 #include <string.h>
 #include <inttypes.h>

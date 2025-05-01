@@ -12,15 +12,5 @@ ADD_EXECUTABLE(xmgl xmgl.c)
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR} ${GLFW_INCLUDE_DIRS} ${JACK_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIR})
 TARGET_LINK_LIBRARIES(xmgl ${JACK_LIBRARIES} ${XM_LIBRARIES} xms ${OPENGL_gl_LIBRARY} ${GLFW_LIBRARIES})
 
-FUNCTION(ADD_PROGRAM name)
-ADD_CUSTOM_COMMAND(OUTPUT ${name}.vs.h COMMAND filetoh ${name}_vs ${CMAKE_CURRENT_SOURCE_DIR}/${name}.vs.c ${name}.vs.h DEPENDS filetoh ${name}.vs.c)
-ADD_CUSTOM_COMMAND(OUTPUT ${name}.fs.h COMMAND filetoh ${name}_fs ${CMAKE_CURRENT_SOURCE_DIR}/${name}.fs.c ${name}.fs.h DEPENDS filetoh ${name}.fs.c)
-ADD_CUSTOM_TARGET(xmgl_${name} DEPENDS ${name}.vs.h ${name}.fs.h)
-ADD_DEPENDENCIES(xmgl xmgl_${name})
-ENDFUNCTION()
-
-ADD_PROGRAM(hlines)
-ADD_PROGRAM(triangles)
-
 ENDIF()
 ENDIF()

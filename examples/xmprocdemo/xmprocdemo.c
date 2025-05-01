@@ -8,12 +8,15 @@
 
 #include <xm.h>
 #include <alsa/asoundlib.h>
-#include "mus.h"
 
 static xm_context_t* ctx;
 static snd_pcm_t* device;
 static snd_pcm_hw_params_t* params;
 static float buffer[4096];
+
+static char libxm_data[] = {
+#embed "mus.libxm"
+};
 
 static void gen_waveforms(void) {
 	size_t i;
@@ -60,7 +63,7 @@ int main(void) {
 	snd_pcm_hw_params_set_rate_near(device, params, &rate, NULL);
 	snd_pcm_hw_params(device, params);
 
-	xm_create_context_from_libxmize(&ctx, mus, rate);
+	xm_create_context_from_libxmize(&ctx, libxm_data, rate);
 	gen_waveforms();
 
 	snd_pcm_prepare(device);

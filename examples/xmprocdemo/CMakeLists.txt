@@ -1,6 +1,10 @@
-ADD_CUSTOM_COMMAND(OUTPUT mus.libxm COMMAND libxmize --zero-all-waveforms ${CMAKE_CURRENT_SOURCE_DIR}/mus.xm mus.libxm DEPENDS libxmize mus.xm)
-ADD_CUSTOM_COMMAND(OUTPUT mus.h COMMAND filetoh mus mus.libxm mus.h DEPENDS filetoh mus.libxm)
+FIND_PACKAGE(ALSA)
+IF(${ALSA_FOUND})
 
-ADD_EXECUTABLE(xmprocdemo xmprocdemo.c mus.h)
-INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
+ADD_CUSTOM_COMMAND(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mus.libxm COMMAND libxmize --zero-all-waveforms ${CMAKE_CURRENT_SOURCE_DIR}/mus.xm ${CMAKE_CURRENT_BINARY_DIR}/mus.libxm DEPENDS libxmize mus.xm)
+ADD_DEFINITIONS(-D_POSIX_SOURCE --embed-dir=${CMAKE_CURRENT_BINARY_DIR})
+ADD_EXECUTABLE(xmprocdemo xmprocdemo.c)
+set_source_files_properties(xmprocdemo.c PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mus.libxm)
 TARGET_LINK_LIBRARIES(xmprocdemo ${ALSA_LIBRARIES} ${XM_LIBRARIES} xms)
+
+ENDIF()

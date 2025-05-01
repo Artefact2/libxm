@@ -13,7 +13,6 @@
 #include <jack/jack.h>
 #include <GLFW/glfw3.h>
 #include <string.h>
-#include <stdbool.h>
 #include <unistd.h>
 #include <math.h>
 #include <assert.h>
@@ -27,10 +26,19 @@
 			       // frames (running average)
 #define AOT_TIMING_FRAMES 4 // pre-generate this many timing frames ahead of time, for latency compensation
 
-#include "hlines.vs.h"
-#include "hlines.fs.h"
-#include "triangles.vs.h"
-#include "triangles.fs.h"
+static const char hlines_vs[] = {
+#embed "hlines.vs.c"
+};
+static const char hlines_fs[] = {
+#embed "hlines.fs.c"
+};
+
+static const char triangles_vs[] = {
+#embed "triangles.vs.c"
+};
+static const char triangles_fs[] = {
+#embed "triangles.fs.c"
+};
 
 #define CREATE_SHADER(RET, TYPE, SRC) do {                              \
 		GLint status; \
