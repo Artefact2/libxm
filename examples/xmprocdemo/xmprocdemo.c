@@ -7,12 +7,13 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
 #include <xm.h>
-#include <alsa/asoundlib.h>
+#include <signal.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 static xm_context_t* ctx;
-static snd_pcm_t* device;
-static snd_pcm_hw_params_t* params;
-static float buffer[4096];
+static float buffer[256];
+int pipe_fd[2]; /* 0 => read end, 1 => write end */
 
 static char libxm_data[] = {
 #embed "mus.libxm"
@@ -51,27 +52,31 @@ static void gen_waveforms(void) {
 	}
 }
 
-int main(void) {
-	unsigned int rate = 48000;
+// XXX: pipewire requires environment. figure out a way to get it within
+// _start() and use -nostartfiles?
+int main() {
+	pipe(pipe_fd);
 
-	snd_pcm_open(&device, "default", SND_PCM_STREAM_PLAYBACK, 0);
-	snd_pcm_hw_params_malloc(&params);
-	snd_pcm_hw_params_any(device, params);
-	snd_pcm_hw_params_set_access(device, params, SND_PCM_ACCESS_RW_INTERLEAVED);
-	snd_pcm_hw_params_set_format(device, params, SND_PCM_FORMAT_FLOAT);
-	snd_pcm_hw_params_set_channels(device, params, 2);
-	snd_pcm_hw_params_set_rate_near(device, params, &rate, NULL);
-	snd_pcm_hw_params(device, params);
+	if(fork()) {
+		/* parent */
+		xm_create_context_from_libxmize(&ctx, libxm_data, 48000);
+		gen_waveforms();
 
-	xm_create_context_from_libxmize(&ctx, libxm_data, rate);
-	gen_waveforms();
+		xm_set_max_loop_count(ctx, 1);
+		while(xm_get_loop_count(ctx) == 0) {
+			xm_generate_samples(ctx, buffer, sizeof(buffer) / (2 * sizeof(float)));
+			write(pipe_fd[1], buffer, sizeof(buffer));
+		}
 
-	snd_pcm_prepare(device);
-
-	while(1) {
-		xm_generate_samples(ctx, buffer, 2048);
-		snd_pcm_writei(device, buffer, 2048);
+		kill(0, SIGTERM);
+		waitpid(0, NULL, 0);
+		exit(0);
 	}
 
-	return 0;
+	/* child  */
+	dup2(pipe_fd[0], STDIN_FILENO);
+	execlp("aplay", "aplay", "-traw", "-fdat",
+	       XM_BIG_ENDIAN ? "-fFLOAT_BE" : "-fFLOAT_LE",
+	       NULL);
+	__builtin_unreachable();
 }
