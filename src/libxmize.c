@@ -41,10 +41,9 @@ static size_t zero_waveforms(xm_context_t* ctx) {
 }
 
 static void analyze(const char* arg0, xm_context_t* ctx) {
-	fprintf(stderr, "%s: detected features: cmake", arg0);
+	printf("%s: detected features: cmake", arg0);
 
-	fprintf(stderr,
-	        " -D XM_FREQUENCY_TYPES=%d",
+	printf(" -D XM_FREQUENCY_TYPES=%d",
 	        #if XM_FREQUENCY_TYPES != 3
                 XM_FREQUENCY_TYPES
 	        #else
@@ -52,7 +51,7 @@ static void analyze(const char* arg0, xm_context_t* ctx) {
 	        #endif
 	       );
 
-	fprintf(stderr, "\n");
+	printf("\n");
 }
 
 int main(int argc, char** argv) {
@@ -64,7 +63,7 @@ int main(int argc, char** argv) {
 
 	if(argc < 3) FATAL("Usage: %s [--zero-all-waveforms] <in.xm> <out.libxm>\n", argv[0]);
 
-	fprintf(stderr, "%s: this format is highly non-portable. Check the README for more information.\n", argv[0]);
+	printf("%s: this format is highly non-portable. Check the README for more information.\n", argv[0]);
 
 	in = fopen(argv[argc - 2], "rb");
 	if(in == NULL) FATAL("input file %s not readable (fopen)\n", argv[argc - 2]);
@@ -83,7 +82,7 @@ int main(int argc, char** argv) {
 	if(out == NULL) FATAL("output file %s not writeable\n", argv[argc - 1]);
 
 	if(!strcmp("--zero-all-waveforms", argv[1])) {
-		fprintf(stderr, "%s: zeroing waveforms, saved %lu bytes.\n", argv[0], zero_waveforms(ctx));
+		printf("%s: zeroing waveforms, saved %lu bytes.\n", argv[0], zero_waveforms(ctx));
 	}
 
 	/* Ugly pointer offsetting ahead */
@@ -123,7 +122,7 @@ int main(int argc, char** argv) {
 
 	if(!fwrite(ctx, ctx->ctx_size, 1, out)) FATAL("fwrite() failed writing %lu bytes\n", ctx->ctx_size);
 	fclose(out);
-	fprintf(stderr, "%s: done writing %lu bytes.\n", argv[0], ctx->ctx_size);
+	printf("%s: done writing %lu bytes.\n", argv[0], ctx->ctx_size);
 
 	xm_free_context(ctx);
 	return 0;

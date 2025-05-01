@@ -1432,14 +1432,15 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 #endif
 	}
 
+	#if XM_DEBUG
+	/* catch obvious bugs, don't fail on potential clipping */
+	assert(fabs(*left) <= ctx->module.num_channels && fabs(*right) <= ctx->module.num_channels);
+        #endif
+
 	const float fgvol = ctx->global_volume * ctx->amplification;
 	*left *= fgvol;
 	*right *= fgvol;
 
-	#if XM_DEBUG
-	/* leave some leeway for clipping */
-	assert(fabs(*left) <= 2 && fabs(*right) <= 2);
-        #endif
 	#if XM_DEFENSIVE
 	XM_CLAMP2F(*left, 1.f, -1.f);
 	XM_CLAMP2F(*right, 1.f, -1.f);

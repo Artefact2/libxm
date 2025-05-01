@@ -36,16 +36,28 @@ static void byteswap32(uint32_t* i) {
 		| (*i >> 24);
 }
 
-void _start(void) {
+#if XM_DEBUG
+int main(void)
+#else
+void _start(void)
+#endif
+{
 	static float buffer[128];
 	xm_context_t* ctx;
 	char* data;
+	char* cur;
 	ssize_t datalen;
 
-	maybe_assert_eq(read(0, &datalen, sizeof(datalen)), sizeof(datalen));
+	maybe_assert_eq(read(STDIN_FILENO, &datalen, sizeof(datalen)), sizeof(datalen));
 	data = malloc(datalen);
 	((size_t*)data)[0] = datalen;
-	maybe_assert_eq(read(0, data + sizeof(datalen), datalen - (ssize_t)sizeof(datalen)), datalen - (ssize_t)sizeof(datalen));
+	cur = data + sizeof(datalen);
+	while(cur - data != datalen) {
+		/* read() will return early when eg, reading from a pipe */
+		ssize_t r = read(STDIN_FILENO, cur, datalen);
+		assert(r > 0);
+		cur += r;
+	}
 	xm_create_context_from_libxmize(&ctx, data, 48000);
 
 	maybe_assert_eq(write(STDOUT_FILENO, header, sizeof(header)), (ssize_t)sizeof(header));

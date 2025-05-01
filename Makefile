@@ -9,15 +9,14 @@ build-prod: CMakeLists.txt
 	@cd $@ && CC=gcc cmake -D XM_DEBUG=OFF -D XM_DEFENSIVE=OFF -D XM_STRINGS=OFF -D XM_OPTIMISE_FOR_SIZE=ON -D XM_LINEAR_INTERPOLATION=OFF -D XM_RAMPING=OFF ..
 
 test:
-	parallel -0 --ungroup -N1 '${XMTOAU} {} >/dev/null || echo {}' :::: <(find ${XMDIR} -iname "*.xm" -print0)
+	make -C ${BUILD_DIR} libxmize libxmtoau
+	parallel -0 --lb -N1 '${BUILD_DIR}/src/libxmize {} >(${BUILD_DIR}/examples/libxmtoau {} >/dev/null || echo libxmtoau: {}) >/dev/null || echo libxmize: {}' :::: <(find ${XMDIR} -iname "*.xm" -print0)
 
 test-debug: build-debug
-	make -C $< xmtoau
-	make test XMTOAU=./build-debug/examples/xmtoau XMDIR=${XMDIR}
+	make test BUILD_DIR=./build-debug XMDIR=${XMDIR}
 
 test-prod: build-prod
-	make -C $< xmtoau
-	make test XMTOAU=./build-prod/examples/xmtoau XMDIR=${XMDIR}
+	make test BUILD_DIR=./build-prod XMDIR=${XMDIR}
 
 dist-clean:
 	@rm -Rf build-debug build-prod
