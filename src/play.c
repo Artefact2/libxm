@@ -8,7 +8,6 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
 #include "xm_internal.h"
-#include <inttypes.h>
 
 /* ----- Static functions ----- */
 
@@ -390,9 +389,7 @@ static float xm_amiga_frequency(float period, float note_offset, float period_of
 		}
 	}
 
-	if(XM_DEBUG && (p1 < period || p2 > period)) {
-		DEBUG("%" PRId32 " <= %f <= %" PRId32 " should hold but doesn't, this is a bug", p2, period, p1);
-	}
+	assert(p1 < period || p2 > period);
 
 	note = 12.f * (octave + 2) + a + XM_INVERSE_LERP(p1, p2, period);
 	period = xm_amiga_period(note + note_offset) + 16.f * period_offset;
@@ -1440,9 +1437,12 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	*right *= fgvol;
 
 	#if XM_DEBUG
-	if(fabs(*left) > 1 || fabs(*right) > 1) {
-		DEBUG("clipping frame: %f %f, this is a bad module or a libxm bug", *left, *right);
-	}
+	/* leave some leeway for clipping */
+	assert(fabs(*left) <= 2 && fabs(*right) <= 2);
+        #endif
+	#if XM_DEFENSIVE
+	XM_CLAMP2F(*left, 1.f, -1.f);
+	XM_CLAMP2F(*right, 1.f, -1.f);
 	#endif
 }
 

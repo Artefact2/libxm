@@ -33,21 +33,16 @@ static void puts_uint32_be(uint32_t i) {
 	maybe_assert_eq(write(STDOUT_FILENO, &i, 4), 4);
 }
 
-int main(int argc, char** argv) {
+void _start(void) {
 	float buffer[buffer_size];
 	xm_context_t* ctx;
-	void* data;
-	size_t datalen;
-	int in_fd;
+	char* data;
+	ssize_t datalen;
 
-	if(XM_DEFENSIVE && argc != 2) return 1;
-
-	in_fd = open(argv[1], O_RDONLY);
-	assert(in_fd);
-	maybe_assert_eq(read(in_fd, &datalen, sizeof(size_t)), sizeof(size_t));
-	maybe_assert_eq(lseek(in_fd, 0, SEEK_SET), 0);
-	data = mmap(0, datalen, PROT_READ|PROT_WRITE, MAP_PRIVATE, in_fd, 0);
-	assert(data != MAP_FAILED);
+	maybe_assert_eq(read(0, &datalen, sizeof(datalen)), sizeof(datalen));
+	data = malloc(datalen);
+	((size_t*)data)[0] = datalen;
+	maybe_assert_eq(read(0, data + sizeof(datalen), datalen - (ssize_t)sizeof(datalen)), datalen - (ssize_t)sizeof(datalen));
 	xm_create_context_from_libxmize(&ctx, data, rate);
 
 	puts_uint32_be(0x2E736E64); /* .snd magic number */

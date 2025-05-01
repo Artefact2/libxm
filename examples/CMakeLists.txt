@@ -2,13 +2,7 @@ INCLUDE_DIRECTORIES(${XM_INCLUDE_DIRS})
 
 ADD_EXECUTABLE(libxmtoau libxmtoau.c)
 TARGET_LINK_LIBRARIES(libxmtoau ${XM_LIBRARIES} xms)
-
-FIND_PACKAGE(ALSA)
-
-IF(${ALSA_FOUND})
-ADD_DEFINITIONS(-D_POSIX_SOURCE)
-
-ENDIF()
+target_link_options(libxmtoau PRIVATE -z norelro -nostartfiles)
 
 ADD_SUBDIRECTORY(xmprocdemo)
 ADD_SUBDIRECTORY(xmgl)

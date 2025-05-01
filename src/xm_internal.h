@@ -9,7 +9,7 @@
 #include <xm.h>
 #include <math.h>
 #include <string.h>
-#include <inttypes.h>
+#include <assert.h>
 
 #if XM_DEBUG
 #include <stdio.h>
