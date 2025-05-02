@@ -612,14 +612,15 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 		break;
 
 	case 9: /* 9xx: Sample offset */
-		if(ch->sample != NULL && NOTE_IS_VALID(s->note)) {
-			uint32_t final_offset = s->effect_param << (ch->sample->bits == 16 ? 7 : 8);
-			if(final_offset >= ch->sample->length) {
-				/* Pretend the sample dosen't loop and is done playing */
-				ch->sample_position = -1;
-				break;
-			}
-			ch->sample_position = final_offset;
+		if(s->effect_param > 0) {
+			ch->sample_offset_param = s->effect_param;
+		}
+		if(ch->sample == NULL || !NOTE_IS_VALID(s->note))
+			break;
+		ch->sample_position += ch->sample_offset_param * 256;
+		if(ch->sample_position >= ch->sample->length) {
+			/* Pretend the sample dosen't loop and is done playing */
+			ch->sample_position = -1;
 		}
 		break;
 

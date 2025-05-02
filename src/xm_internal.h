@@ -229,6 +229,7 @@ struct xm_channel_context_s {
 	uint8_t tremolo_ticks;
 	float tremolo_volume;
 	uint8_t tremor_param;
+	uint8_t sample_offset_param;
 	bool tremor_on;
 	bool muted;
 };
