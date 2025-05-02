@@ -46,8 +46,8 @@ static void xm_post_pattern_change(xm_context_t*);
 static void xm_row(xm_context_t*);
 static void xm_tick(xm_context_t*);
 
-static float xm_sample_at(xm_sample_t*, size_t);
-static float xm_next_of_sample(xm_channel_context_t*);
+static float xm_sample_at(xm_context_t*, xm_sample_t*, size_t);
+static float xm_next_of_sample(xm_context_t*, xm_channel_context_t*);
 static void xm_sample(xm_context_t*, float*, float*);
 
 /* ----- Other oddities ----- */
@@ -463,7 +463,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			ch->instrument = NULL;
 			ch->sample = NULL;
 		} else {
-			ch->instrument = ctx->module.instruments + (s->instrument - 1);
+			ch->instrument = ctx->instruments + (s->instrument - 1);
 		}
 	}
 
@@ -482,13 +482,14 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			xm_cut_note(ch);
 		} else {
 			if(instr->sample_of_notes[s->note - 1] < instr->num_samples) {
-#if XM_RAMPING
+				#if XM_RAMPING
 				for(unsigned int z = 0; z < RAMPING_POINTS; ++z) {
-					ch->end_of_previous_sample[z] = xm_next_of_sample(ch);
+					ch->end_of_previous_sample[z] = xm_next_of_sample(ctx, ch);
 				}
 				ch->frame_count = 0;
-#endif
-				ch->sample = instr->samples + instr->sample_of_notes[s->note - 1];
+				#endif
+
+				ch->sample = ctx->samples + instr->samples_index + instr->sample_of_notes[s->note - 1];
 				ch->orig_note = ch->note = s->note + ch->sample->relative_note
 					+ ch->sample->finetune / 128.f - 1.f;
 				if(s->instrument > 0) {
@@ -612,14 +613,15 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 		break;
 
 	case 9: /* 9xx: Sample offset */
-		if(ch->sample != NULL && NOTE_IS_VALID(s->note)) {
-			uint32_t final_offset = s->effect_param << (ch->sample->bits == 16 ? 7 : 8);
-			if(final_offset >= ch->sample->length) {
-				/* Pretend the sample dosen't loop and is done playing */
-				ch->sample_position = -1;
-				break;
-			}
-			ch->sample_position = final_offset;
+		if(s->effect_param > 0) {
+			ch->sample_offset_param = s->effect_param;
+		}
+		if(ch->sample == NULL || !NOTE_IS_VALID(s->note))
+			break;
+		ch->sample_position += ch->sample_offset_param * 256;
+		if(ch->sample_position >= ch->sample->length) {
+			/* Pretend the sample dosen't loop and is done playing */
+			ch->sample_position = -1;
 		}
 		break;
 
@@ -895,8 +897,6 @@ static void xm_key_off(xm_channel_context_t* ch) {
 }
 
 static void xm_row(xm_context_t* ctx) {
-	static xm_pattern_slot_t empty_slot = {0};
-
 	if(ctx->position_jump) {
 		ctx->current_table_index = ctx->jump_dest;
 		ctx->current_row = ctx->jump_row;
@@ -912,15 +912,13 @@ static void xm_row(xm_context_t* ctx) {
 		xm_post_pattern_change(ctx);
 	}
 
-	uint8_t pat_idx = ctx->module.pattern_table[ctx->current_table_index];
-	xm_pattern_t* cur = (pat_idx < ctx->module.num_patterns ? ctx->module.patterns + pat_idx : NULL);
+	xm_pattern_t* cur = ctx->patterns + ctx->module.pattern_table[ctx->current_table_index];
+	xm_pattern_slot_t* s = ctx->pattern_slots + cur->slots_index + ctx->module.num_channels * ctx->current_row;
+	xm_channel_context_t* ch = ctx->channels;
 	bool in_a_loop = false;
 
 	/* Read notes… */
-	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
-		xm_pattern_slot_t* s = (cur ? cur->slots + ctx->current_row * ctx->module.num_channels + i : &empty_slot);
-		xm_channel_context_t* ch = ctx->channels + i;
-
+	for(uint8_t i = 0; i < ctx->module.num_channels; ++i, ++ch, ++s) {
 		ch->current = s;
 
 		if(s->effect_type != 0xE || s->effect_param >> 4 != 0xD) {
@@ -929,35 +927,35 @@ static void xm_row(xm_context_t* ctx) {
 			ch->note_delay_param = s->effect_param & 0x0F;
 		}
 
-		if(!in_a_loop && ch->pattern_loop_count > 0) {
+		if(ch->pattern_loop_count > 0) {
 			in_a_loop = true;
 		}
 	}
 
 	if(!in_a_loop) {
 		/* No E6y loop is in effect (or we are in the first pass) */
-		ctx->loop_count = (ctx->row_loop_count[MAX_NUM_ROWS * ctx->current_table_index + ctx->current_row]++);
+		ctx->loop_count = (ctx->row_loop_count[MAX_ROWS_PER_PATTERN * ctx->current_table_index + ctx->current_row]++);
 	}
 
 	ctx->current_row++; /* Since this is an uint8, this line can
-						 * increment from 255 to 0, in which case it
-						 * is still necessary to go the next
-						 * pattern. */
+	                     * increment from 255 to 0, in which case it
+	                     * is still necessary to go the next
+	                     * pattern. */
 	if(!ctx->position_jump && !ctx->pattern_break &&
-	   (ctx->current_row >= (cur ? cur->num_rows : DEFAULT_PATTERN_LENGTH) || ctx->current_row == 0)) {
+	   (ctx->current_row >= cur->num_rows || ctx->current_row == 0)) {
 		ctx->current_table_index++;
 		ctx->current_row = ctx->jump_row; /* This will be 0 most of
-										   * the time, except when E60
-										   * is used */
+		                                   * the time, except when E60
+		                                   * is used */
 		ctx->jump_row = 0;
 		xm_post_pattern_change(ctx);
 	}
 }
 
 static void xm_envelope_tick(xm_channel_context_t* ch,
-							 xm_envelope_t* env,
-							 uint16_t* counter,
-							 float* outval) {
+                             xm_envelope_t* env,
+                             uint16_t* counter,
+                             float* outval) {
 	if(env->num_points < 2) {
 		/* Don't really know what to do… */
 		if(env->num_points == 1) {
@@ -1008,16 +1006,16 @@ static void xm_envelopes(xm_channel_context_t* ch) {
 			}
 
 			xm_envelope_tick(ch,
-							 &(ch->instrument->volume_envelope),
-							 &(ch->volume_envelope_frame_count),
-							 &(ch->volume_envelope_volume));
+			                 &(ch->instrument->volume_envelope),
+			                 &(ch->volume_envelope_frame_count),
+			                 &(ch->volume_envelope_volume));
 		}
 
 		if(ch->instrument->panning_envelope.enabled) {
 			xm_envelope_tick(ch,
-							 &(ch->instrument->panning_envelope),
-							 &(ch->panning_envelope_frame_count),
-							 &(ch->panning_envelope_panning));
+			                 &(ch->instrument->panning_envelope),
+			                 &(ch->panning_envelope_frame_count),
+			                 &(ch->panning_envelope_panning));
 		}
 	}
 }
@@ -1284,11 +1282,11 @@ static void xm_tick(xm_context_t* ctx) {
 	ctx->remaining_samples_in_tick += (float)ctx->rate / ((float)ctx->bpm * 0.4f);
 }
 
-static float xm_sample_at(xm_sample_t* sample, size_t k) {
-	return sample->bits == 8 ? (sample->data8[k] / 128.f) : (sample->data16[k] / 32768.f);
+static float xm_sample_at(xm_context_t* ctx, xm_sample_t* sample, size_t k) {
+	return (float)ctx->samples_data[sample->index + k]  / 32768.f;
 }
 
-static float xm_next_of_sample(xm_channel_context_t* ch) {
+static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
 #if XM_RAMPING
 		if(ch->frame_count < RAMPING_POINTS) {
@@ -1305,20 +1303,20 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 	float u, v, t;
 	uint32_t a, b;
 	a = (uint32_t)ch->sample_position; /* This cast is fine,
-										* sample_position will not
-										* go above integer
-										* ranges */
+	                                    * sample_position will not
+	                                    * go above integer
+	                                    * ranges */
 	if(XM_LINEAR_INTERPOLATION) {
 		b = a + 1;
 		t = ch->sample_position - a; /* Cheaper than fmodf(., 1.f) */
 	}
-	u = xm_sample_at(ch->sample, a);
+	u = xm_sample_at(ctx, ch->sample, a);
 
 	switch(ch->sample->loop_type) {
 
 	case XM_NO_LOOP:
 		if(XM_LINEAR_INTERPOLATION) {
-			v = (b < ch->sample->length) ? xm_sample_at(ch->sample, b) : .0f;
+			v = (b < ch->sample->length) ? xm_sample_at(ctx, ch->sample, b) : .0f;
 		}
 		ch->sample_position += ch->step;
 		if(ch->sample_position >= ch->sample->length) {
@@ -1328,10 +1326,9 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 
 	case XM_FORWARD_LOOP:
 		if(XM_LINEAR_INTERPOLATION) {
-			v = xm_sample_at(
-				ch->sample,
-				(b == ch->sample->loop_end) ? ch->sample->loop_start : b
-				);
+			v = xm_sample_at(ctx,
+			                 ch->sample,
+			                 (b == ch->sample->loop_end) ? ch->sample->loop_start : b);
 		}
 		ch->sample_position += ch->step;
 		while(ch->sample_position >= ch->sample->loop_end) {
@@ -1349,7 +1346,7 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 		 * (ie switches direction more than once per sample */
 		if(ch->ping) {
 			if(XM_LINEAR_INTERPOLATION) {
-				v = xm_sample_at(ch->sample, (b >= ch->sample->loop_end) ? a : b);
+				v = xm_sample_at(ctx, ch->sample, (b >= ch->sample->loop_end) ? a : b);
 			}
 			if(ch->sample_position >= ch->sample->loop_end) {
 				ch->ping = false;
@@ -1363,10 +1360,9 @@ static float xm_next_of_sample(xm_channel_context_t* ch) {
 		} else {
 			if(XM_LINEAR_INTERPOLATION) {
 				v = u;
-				u = xm_sample_at(
-					ch->sample,
-					(b == 1 || b - 2 <= ch->sample->loop_start) ? a : (b - 2)
-					);
+				u = xm_sample_at(ctx,
+				                 ch->sample,
+				                 (b == 1 || b - 2 <= ch->sample->loop_start) ? a : (b - 2));
 			}
 			if(ch->sample_position <= ch->sample->loop_start) {
 				ch->ping = true;
@@ -1418,7 +1414,7 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 			continue;
 		}
 
-		const float fval = xm_next_of_sample(ch);
+		const float fval = xm_next_of_sample(ctx, ch);
 
 		if(!ch->muted && !ch->instrument->muted) {
 			*left += fval * ch->actual_volume[0];
@@ -1447,10 +1443,12 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	#endif
 }
 
-void xm_generate_samples(xm_context_t* ctx, float* output, size_t numsamples) {
+void xm_generate_samples(xm_context_t* ctx,
+                         float* output,
+                         uint16_t numsamples) {
 	ctx->generated_samples += numsamples;
-
-	for(size_t i = 0; i < numsamples; i++) {
-		xm_sample(ctx, output + (2 * i), output + (2 * i + 1));
+	for(uint16_t i = 0; i < numsamples; i++) {
+		xm_sample(ctx, output, output + 1);
+		output += 2;
 	}
 }

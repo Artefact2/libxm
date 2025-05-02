@@ -21,34 +21,32 @@ static char libxm_data[] = {
 
 static void gen_waveforms(void) {
 	size_t i;
-	int8_t* buf;
-	size_t len;
-	uint8_t bits;
+	int16_t* buf;
+	uint32_t len;
 
 	/* Square, large duty, half volume */
-	buf = xm_get_sample_waveform(ctx, 1, 0, &len, &bits);
-	for(i = 0x40; i < len; ++i) buf[i] = 127;
+	buf = xm_get_sample_waveform(ctx, 1, 0, &len);
+	for(i = 0x40; i < len; ++i) buf[i] = INT16_MAX;
 
 	/* Ramp */
-	buf = xm_get_sample_waveform(ctx, 2, 0, &len, &bits);
-	for(i = 0; i < len; ++i) buf[i] = (256 * i) / len - 128;
+	buf = xm_get_sample_waveform(ctx, 2, 0, &len);
+	for(i = 0; i < len; ++i) buf[i] = (int16_t)((UINT16_MAX * i) / len);
 
 	/* Square, small duty */
-	buf = xm_get_sample_waveform(ctx, 4, 0, &len, &bits);
-	for(i = 0; i < 0x80; ++i) buf[i] = -128;
-	for(; i < 0xB0; ++i) buf[i] = 127;
-	for(; i < len; ++i) buf[i] = -128;
+	buf = xm_get_sample_waveform(ctx, 4, 0, &len);
+	for(i = 0; i < 0x30; ++i) buf[i] = INT16_MAX;
+	for(; i < len; ++i) buf[i] = INT16_MIN;
 
 	/* XXX: Kick */
 	/* XXX: Pad */
 	/* XXX: Drum */
 
 	/* Noise */
-	buf = xm_get_sample_waveform(ctx, 8, 0, &len, &bits);
+	buf = xm_get_sample_waveform(ctx, 8, 0, &len);
 	unsigned int next = 1;
 	for(i = 0; i < len; ++i) {
 		next = next * 8127 + 1; /* A very simple linear congruence generator, see rand(3) */
-		buf[i] = next >> 16 & 0xFF;
+		buf[i] = next >> 16;
 	}
 }
 
@@ -59,7 +57,7 @@ int main() {
 
 	if(fork()) {
 		/* parent */
-		xm_create_context_from_libxmize(&ctx, libxm_data, 48000);
+		ctx = xm_create_context_from_libxm(libxm_data, 48000);
 		gen_waveforms();
 
 		xm_set_max_loop_count(ctx, 1);
@@ -68,9 +66,8 @@ int main() {
 			write(pipe_fd[1], buffer, sizeof(buffer));
 		}
 
-		kill(0, SIGTERM);
-		waitpid(0, NULL, 0);
-		exit(0);
+		kill(0, SIGKILL);
+		__builtin_unreachable();
 	}
 
 	/* child  */

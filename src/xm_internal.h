@@ -7,16 +7,23 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
 #include <xm.h>
+#include <stdlib.h>
 #include <math.h>
 #include <string.h>
 #include <assert.h>
 
-#if XM_DEBUG
+#if XM_DEBUG || XM_DEFENSIVE
 #include <stdio.h>
-#define DEBUG(fmt, ...) do {										\
-		fprintf(stderr, "%s(): " fmt "\n", __func__, __VA_ARGS__);	\
-		fflush(stderr);												\
+#define NOTICE(fmt, ...) do {                                           \
+		fprintf(stderr, "%s(): " fmt "\n", __func__ __VA_OPT__(,) __VA_ARGS__); \
+		fflush(stderr); \
 	} while(0)
+#else
+#define NOTICE(...)
+#endif
+
+#if XM_DEBUG
+#define DEBUG NOTICE
 #else
 #define DEBUG(...)
 #endif
@@ -30,15 +37,13 @@ extern int __fail[-1];
 /* ----- XM constants ----- */
 
 #define SAMPLE_NAME_LENGTH 22
-#define INSTRUMENT_HEADER_LENGTH 263
 #define INSTRUMENT_NAME_LENGTH 22
 #define MODULE_NAME_LENGTH 20
 #define TRACKER_NAME_LENGTH 20
 #define PATTERN_ORDER_TABLE_LENGTH 256
 #define NUM_NOTES 96
-#define NUM_ENVELOPE_POINTS 12
-#define MAX_NUM_ROWS 256
-#define DEFAULT_PATTERN_LENGTH 64
+#define MAX_ENVELOPE_POINTS 12
+#define MAX_ROWS_PER_PATTERN 256
 #define RAMPING_POINTS 0x20
 
 /* ----- Data types ----- */
@@ -52,19 +57,6 @@ enum xm_waveform_type_e {
 };
 typedef enum xm_waveform_type_e xm_waveform_type_t;
 
-enum xm_loop_type_e {
-	XM_NO_LOOP,
-	XM_FORWARD_LOOP,
-	XM_PING_PONG_LOOP,
-};
-typedef enum xm_loop_type_e xm_loop_type_t;
-
-enum xm_frequency_type_e {
-	XM_LINEAR_FREQUENCIES,
-	XM_AMIGA_FREQUENCIES,
-};
-typedef enum xm_frequency_type_e xm_frequency_type_t;
-
 struct xm_envelope_point_s {
 	uint16_t frame;
 	uint16_t value;
@@ -72,7 +64,7 @@ struct xm_envelope_point_s {
 typedef struct xm_envelope_point_s xm_envelope_point_t;
 
 struct xm_envelope_s {
-	xm_envelope_point_t points[NUM_ENVELOPE_POINTS];
+	xm_envelope_point_t points[MAX_ENVELOPE_POINTS];
 	uint8_t num_points;
 	uint8_t sustain_point;
 	uint8_t loop_start_point;
@@ -85,44 +77,46 @@ typedef struct xm_envelope_s xm_envelope_t;
 
 struct xm_sample_s {
 	uint64_t latest_trigger;
-	union {
-		int8_t* data8;
-		int16_t* data16;
-	};
+	/* ctx->samples_data[index..(index+length)] */
+	uint32_t index;
 	uint32_t length;
 	uint32_t loop_start;
 	uint32_t loop_length;
 	uint32_t loop_end;
 	float volume;
 	float panning;
-	xm_loop_type_t loop_type;
-	uint8_t bits; /* Either 8 or 16 */
+	enum {
+		XM_NO_LOOP,
+		XM_FORWARD_LOOP,
+		XM_PING_PONG_LOOP,
+	} loop_type;
 	int8_t finetune;
 	int8_t relative_note;
 
-#if XM_STRINGS
+	#if XM_STRINGS
 	char name[SAMPLE_NAME_LENGTH + 1];
-#endif
+	#endif
 };
 typedef struct xm_sample_s xm_sample_t;
 
 struct xm_instrument_s {
 	uint64_t latest_trigger;
-	xm_sample_t* samples;
-	uint8_t sample_of_notes[NUM_NOTES];
-	uint16_t num_samples;
-	uint16_t volume_fadeout;
 	xm_envelope_t volume_envelope;
 	xm_envelope_t panning_envelope;
+	uint8_t sample_of_notes[NUM_NOTES];
+	/* ctx->samples[index..(index+num_samples)] */
+	uint16_t samples_index;
+	uint16_t num_samples;
+	uint16_t volume_fadeout;
 	xm_waveform_type_t vibrato_type;
 	uint8_t vibrato_sweep;
 	uint8_t vibrato_depth;
 	uint8_t vibrato_rate;
 	bool muted;
 
-#if XM_STRINGS
+	#if XM_STRINGS
 	char name[INSTRUMENT_NAME_LENGTH + 1];
-#endif
+	#endif
 };
 typedef struct xm_instrument_s xm_instrument_t;
 
@@ -136,34 +130,39 @@ struct xm_pattern_slot_s {
 typedef struct xm_pattern_slot_s xm_pattern_slot_t;
 
 struct xm_pattern_s {
-	xm_pattern_slot_t* slots; /* Array of size num_rows * num_channels */
+	/* ctx->pattern_slots[index..(index+num_rows)] */
+	uint16_t slots_index;
 	uint16_t num_rows;
 };
 typedef struct xm_pattern_s xm_pattern_t;
 
 struct xm_module_s {
-	xm_pattern_t* patterns;
-	xm_instrument_t* instruments; /* Instrument 1 has index 0,
-	                               * instrument 2 has index 1, etc. */
 	uint16_t length;
 	uint16_t restart_position;
 	uint16_t num_channels;
 	uint16_t num_patterns;
 	uint16_t num_instruments;
+	uint16_t num_samples;
+	uint32_t num_rows;
+	uint32_t samples_data_length;
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 
-#if XM_FREQUENCY_TYPES == 3
-	xm_frequency_type_t frequency_type;
-#endif
+	#if XM_FREQUENCY_TYPES == 3
+	enum {
+		XM_LINEAR_FREQUENCIES,
+		XM_AMIGA_FREQUENCIES,
+	} frequency_type;
+	#endif
 
-#if XM_STRINGS
+	#if XM_STRINGS
 	char name[MODULE_NAME_LENGTH + 1];
 	char trackername[TRACKER_NAME_LENGTH + 1];
-#endif
+	#endif
 };
 typedef struct xm_module_s xm_module_t;
 
 struct xm_channel_context_s {
+	uint64_t latest_trigger;
 	float note;
 	float orig_note; /* The original note before effect modifications, as read in the pattern. */
 	xm_instrument_t* instrument; /* Could be NULL */
@@ -179,14 +178,14 @@ struct xm_channel_context_s {
 	float panning; /* Between 0 (left) and 1 (right); 0.5 is centered */
 	float actual_volume[2]; /* Multiplier for left/right channel */
 
-#if XM_RAMPING
+	#if XM_RAMPING
 	/* These values are updated at the end of each tick, to save
 	 * a couple of float operations on every generated sample. */
 	float target_volume[2];
 
 	unsigned long frame_count;
 	float end_of_previous_sample[RAMPING_POINTS];
-#endif
+	#endif
 
 	uint16_t autovibrato_ticks;
 
@@ -230,33 +229,39 @@ struct xm_channel_context_s {
 	uint8_t tremolo_ticks;
 	float tremolo_volume;
 	uint8_t tremor_param;
+	uint8_t sample_offset_param;
 	bool tremor_on;
-
-	uint64_t latest_trigger;
 	bool muted;
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
 
 struct xm_context_s {
-	size_t ctx_size; /* Must be first, see xm_create_context_from_libxmize() */
 	xm_module_t module;
-	uint32_t rate;
+	xm_pattern_t* patterns;
+	xm_pattern_slot_t* pattern_slots;
+	xm_instrument_t* instruments; /* Instrument 1 has index 0,
+	                               * instrument 2 has index 1, etc. */
+	xm_sample_t* samples;
+	int16_t* samples_data;
+	xm_channel_context_t* channels;
+	uint8_t* row_loop_count;
 
-	uint16_t tempo;
-	uint16_t bpm;
 	float global_volume;
 	float amplification;
+	uint32_t rate;
+	uint16_t tempo;
+	uint16_t bpm;
 
-#if XM_RAMPING
+	#if XM_RAMPING
 	/* How much is a channel final volume allowed to change per
 	 * sample; this is used to avoid abrubt volume changes which
 	 * manifest as "clicks" in the generated sound. */
 	float volume_ramp;
-#endif
+	#endif
 
 	uint8_t current_table_index;
 	uint8_t current_row;
-	uint16_t current_tick; /* Can go below 255, with high tempo and a pattern delay */
+	uint16_t current_tick; /* Can go beyond 255, with high tempo and a pattern delay */
 	float remaining_samples_in_tick;
 	uint64_t generated_samples;
 
@@ -269,46 +274,8 @@ struct xm_context_s {
 	 * Used for EEy effect */
 	uint16_t extra_ticks;
 
-	uint8_t* row_loop_count; /* Array of size MAX_NUM_ROWS * module_length */
+
 	uint8_t loop_count;
 	uint8_t max_loop_count;
 
-	xm_channel_context_t* channels;
 };
-
-/* ----- Internal API ----- */
-
-/** Check the module data for errors/inconsistencies.
- *
- * @returns 0 if everything looks OK. Module should be safe to load.
- */
-int xm_check_sanity_preload(const char*, size_t);
-
-/** Check a loaded module for errors/inconsistencies.
- *
- * @returns 0 if everything looks OK.
- */
-int xm_check_sanity_postload(xm_context_t*);
-
-/** Get the number of bytes needed to store the module data in a
- * dynamically allocated blank context.
- *
- * Things that are dynamically allocated:
- * - sample data
- * - sample structures in instruments
- * - pattern data
- * - row loop count arrays
- * - pattern structures in module
- * - instrument structures in module
- * - channel contexts
- * - context structure itself
-
- * @returns 0 if everything looks OK.
- */
-size_t xm_get_memory_needed_for_context(const char*, size_t);
-
-/** Populate the context from module data.
- *
- * @returns pointer to the memory pool
- */
-char* xm_load_module(xm_context_t*, const char*, size_t, char*);

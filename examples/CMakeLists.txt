@@ -1,5 +1,8 @@
 INCLUDE_DIRECTORIES(${XM_INCLUDE_DIRS})
 
+ADD_EXECUTABLE(libxmize libxmize.c)
+TARGET_LINK_LIBRARIES(libxmize ${XM_LIBRARIES} xms)
+
 ADD_EXECUTABLE(libxmtoau libxmtoau.c)
 TARGET_LINK_LIBRARIES(libxmtoau ${XM_LIBRARIES} xms)
 target_link_options(libxmtoau PRIVATE -z norelro)

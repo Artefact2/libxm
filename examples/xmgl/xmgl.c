@@ -375,7 +375,7 @@ void setup(int argc, char** argv) {
 	left = jack_port_register(client, "Left", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput | JackPortIsTerminal, 0);
 	right = jack_port_register(client, "Right", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput | JackPortIsTerminal, 0);
 
-	create_context_from_file(&xmctx, rate, argv[filenameidx]);
+	xmctx = create_context_from_file(rate, argv[filenameidx]);
 	if(xmctx == NULL) exit(1);
 	channels = xm_get_number_of_channels(xmctx);
 	instruments = xm_get_number_of_instruments(xmctx);
@@ -408,8 +408,7 @@ void setup(int argc, char** argv) {
 
 void teardown(void) {
 	jack_client_close(client);
-	xm_free_context(xmctx);
-
+	munmap(xmctx, xm_context_size(xmctx));
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
