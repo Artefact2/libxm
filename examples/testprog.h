@@ -36,23 +36,21 @@
 		exit(1); \
 	} while(0)
 
-static void create_context_from_file(xm_context_t** ctx, uint32_t rate, const char* filename) {
+static xm_context_t* create_context_from_file(uint32_t rate, const char* filename) {
 	int xmfiledes;
 	off_t size;
 
 	xmfiledes = open(filename, O_RDONLY);
 	if(xmfiledes == -1) {
 		DEBUG_ERR("Could not open input file");
-		*ctx = NULL;
-		return;
+		return NULL;
 	}
 
 	size = lseek(xmfiledes, 0, SEEK_END);
 	if(size == -1) {
 		close(xmfiledes);
 		DEBUG_ERR("lseek() failed");
-		*ctx = NULL;
-		return;
+		return NULL;
 	}
 
 	/* NB: using a VLA here was a bad idea, as the size of the
@@ -63,26 +61,20 @@ static void create_context_from_file(xm_context_t** ctx, uint32_t rate, const ch
 	if(data == MAP_FAILED)
 		FATAL_ERR("mmap() failed");
 
-	switch(xm_create_context_safe(ctx, data, size, rate)) {
-		
-	case 0:
-		break;
-
-	case 1:
-		DEBUG("could not create context: module is not sane\n");
-		*ctx = NULL;
-		break;
-
-	case 2:
-		FATAL("could not create context: malloc failed\n");
-		break;
-		
-	default:
-		FATAL("could not create context: unknown error\n");
-		break;
-		
+	char p_raw[XM_PRESCAN_DATA_SIZE];
+	xm_prescan_data_t* p = (xm_prescan_data_t*)p_raw;
+	if(xm_prescan_module(data, size, p) == false) {
+		DEBUG_ERR("xm_prescan_module() failed");
+		return NULL;
 	}
-	
+
+	uint32_t ctx_size = xm_size_for_context(p);
+	char* pool = mmap(0, ctx_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+	if(data == MAP_FAILED)
+		FATAL_ERR("mmap() failed");
+
+	xm_context_t* ctx = xm_create_context(pool, p, data, size, rate);
 	munmap(data, size);
 	close(xmfiledes);
+	return ctx;
 }
