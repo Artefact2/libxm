@@ -1,4 +1,4 @@
-ADD_CUSTOM_COMMAND(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mus.libxm COMMAND libxmize --zero-all-waveforms ${CMAKE_CURRENT_SOURCE_DIR}/mus.xm ${CMAKE_CURRENT_BINARY_DIR}/mus.libxm DEPENDS libxmize mus.xm)
+ADD_CUSTOM_COMMAND(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mus.libxm COMMAND libxmize --zero-all-waveforms ${CMAKE_CURRENT_SOURCE_DIR}/mus.xm > ${CMAKE_CURRENT_BINARY_DIR}/mus.libxm DEPENDS libxmize mus.xm)
 ADD_EXECUTABLE(xmprocdemo xmprocdemo.c)
 TARGET_COMPILE_OPTIONS(xmprocdemo PRIVATE --embed-dir=${CMAKE_CURRENT_BINARY_DIR})
 TARGET_LINK_OPTIONS(xmprocdemo PRIVATE -z norelro)

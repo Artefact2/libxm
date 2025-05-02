@@ -47,7 +47,10 @@ static uint32_t xm_load_instrument(xm_context_t*, xm_instrument_t*, const char*,
 static void xm_fix_envelope(xm_envelope_t*);
 static uint32_t xm_load_sample_header(xm_context_t*, xm_sample_t*, bool*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_sample_data(bool, uint32_t, int16_t*, const char*, uint32_t, uint32_t);
+
+#if XM_DEBUG
 static uint64_t xm_fnv1a(const char*, uint32_t);
+#endif
 
 /* ----- Function definitions ----- */
 
@@ -622,13 +625,14 @@ void xm_context_to_libxm(xm_context_t* ctx, char* out) {
 	  ch->current */
 	ctx->current_tick = 0;
 
-	/* Everything done after this should be deterministically reversible */
+	/* (*) Everything done after this should be deterministically
+	   reversible */
 	uint32_t ctx_size = xm_context_size(ctx);
 	#if XM_DEBUG
 	uint64_t old_hash = xm_fnv1a((void*)ctx, ctx_size);
 	#endif
 
-	uint32_t rate = ctx->rate;
+	uint32_t old_rate = ctx->rate;
 	ctx->rate = 0;
 
 	CALC_OFFSET(ctx->patterns, ctx);
@@ -641,10 +645,10 @@ void xm_context_to_libxm(xm_context_t* ctx, char* out) {
 
 	__builtin_memcpy(out, ctx, ctx_size);
 
+	/* Restore the context back to the state marked (*) */
+	ctx = xm_create_context_from_libxm((void*)ctx, old_rate);
+
 	#if XM_DEBUG
-	/* Restore the context back to its initial state, and check that the
-	   inverse process gives back the same context */
-	ctx = xm_create_context_from_libxm((void*)ctx, rate);
 	if(xm_fnv1a((void*)ctx, ctx_size) != old_hash) {
 		DEBUG("old and new hashes should match, but don't");
 	}
@@ -678,4 +682,6 @@ xm_context_t* xm_create_context_from_libxm(char* data, uint32_t rate) {
 	/* 		} */
 	/* 	} */
 	/* } */
+
+	return ctx;
 }

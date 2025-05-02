@@ -6,11 +6,10 @@
  * License, Version 2, as published by Sam Hocevar. See
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
-#include <assert.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/mman.h>
 #include <xm.h>
+#include <assert.h>
+#include <unistd.h>
+#include <stdlib.h>
 
 #ifdef NDEBUG
 #define maybe_assert_eq(x, y) (x)
@@ -44,21 +43,22 @@ void _start(void)
 {
 	static float buffer[128];
 	xm_context_t* ctx;
-	char* data;
-	char* cur;
-	ssize_t datalen;
+	char* stdin_data = NULL;
+	uint32_t stdin_alloc_length = 0, stdin_data_idx = 0;
+	ssize_t r_ret;
 
-	maybe_assert_eq(read(STDIN_FILENO, &datalen, sizeof(datalen)), sizeof(datalen));
-	data = malloc(datalen);
-	((size_t*)data)[0] = datalen;
-	cur = data + sizeof(datalen);
-	while(cur - data != datalen) {
-		/* read() will return early when eg, reading from a pipe */
-		ssize_t r = read(STDIN_FILENO, cur, datalen);
-		assert(r > 0);
-		cur += r;
-	}
-	xm_create_context_from_libxmize(&ctx, data, 48000);
+	do {
+		if(stdin_data_idx == stdin_alloc_length) {
+			stdin_alloc_length += 1048576;
+			stdin_data = realloc(stdin_data, stdin_alloc_length);
+		}
+		r_ret = read(STDIN_FILENO,
+		             stdin_data + stdin_data_idx,
+		             stdin_alloc_length - stdin_data_idx);
+		stdin_data_idx += r_ret;
+	} while(r_ret > 0);
+
+	ctx = xm_create_context_from_libxm(stdin_data, 48000);
 
 	maybe_assert_eq(write(STDOUT_FILENO, header, sizeof(header)), (ssize_t)sizeof(header));
 
