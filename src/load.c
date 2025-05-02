@@ -437,7 +437,7 @@ static size_t xm_load_sample_header(xm_context_t* ctx,
 	}
 
 	#if XM_DEFENSIVE
-	if(flags & 0b11110100) {
+	if(flags & 0b11101100) {
 		NOTICE("ignoring unknown flags (%d) in sample", flags);
 	}
 	#endif
@@ -450,7 +450,7 @@ static size_t xm_load_sample_header(xm_context_t* ctx,
 	sample->name[SAMPLE_NAME_LENGTH] = 0;
 	#endif
 
-	*is_16bit = flags & 0b00001000;
+	*is_16bit = flags & 0b00010000;
 	if(*is_16bit) {
 		sample->loop_start >>= 1;
 		sample->loop_length >>= 1;
