@@ -83,7 +83,8 @@ xm_context_t* xm_create_context(char* pool, const xm_prescan_data_t* p,
 uint32_t xm_context_size(xm_context_t*);
 
 /** Save a context to the libxm format. This format is highly non-portable and
- * is meant for static linking only.
+ * is meant for static linking only. Do not use this function on a context that
+ * has been used to generate audio samples.
  *
  *  @param ctx the context to save
  *
@@ -206,9 +207,11 @@ uint16_t xm_get_number_of_samples(xm_context_t*, uint16_t);
  *
  * @note Sample numbers go from 0 to
  * xm_get_nubmer_of_samples(...,instr)-1.
+ *
+ * @returns pointer to sample data, or NULL on error
  */
 int16_t* xm_get_sample_waveform(xm_context_t*, uint16_t instr,
-                                uint16_t sample, uint32_t* length);
+                                uint16_t sample, uint32_t* out_length);
 
 
 

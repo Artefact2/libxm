@@ -11,10 +11,6 @@
 
 #define SAMPLE_HEADER_SIZE 40
 
-#define OFFSET(ptr) do { \
-		(ptr) = (void*)((intptr_t)(ptr) + (intptr_t)(*ctxp)); \
-	} while(0)
-
 /* .xm files are little-endian. */
 
 /* Bounded reader macros.
@@ -51,6 +47,7 @@ static uint32_t xm_load_instrument(xm_context_t*, xm_instrument_t*, const char*,
 static void xm_fix_envelope(xm_envelope_t*);
 static uint32_t xm_load_sample_header(xm_context_t*, xm_sample_t*, bool*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_sample_data(bool, uint32_t, int16_t*, const char*, uint32_t, uint32_t);
+static uint64_t xm_fnv1a(const char*, uint32_t);
 
 /* ----- Function definitions ----- */
 
@@ -589,18 +586,79 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 	return ctx;
 }
 
-void xm_create_context_from_libxmize(xm_context_t** ctxp, char* libxmized, uint32_t rate) {
-	*ctxp = (void*)libxmized;
-	(*ctxp)->rate = rate;
+#define CALC_OFFSET(dest, orig) do { \
+		(dest) = (void*)((intptr_t)(dest) - (intptr_t)(orig)); \
+	} while(0)
 
-	/* Reverse steps of libxmize.c */
-	OFFSET((*ctxp)->patterns);
-	OFFSET((*ctxp)->pattern_slots);
-	OFFSET((*ctxp)->instruments);
-	OFFSET((*ctxp)->samples);
-	OFFSET((*ctxp)->samples_data);
-	OFFSET((*ctxp)->channels);
-	OFFSET((*ctxp)->row_loop_count);
+#define APPLY_OFFSET(dest, orig) do { \
+		(dest) = (void*)((intptr_t)(dest) + (intptr_t)(orig)); \
+	} while(0)
+
+#if XM_DEBUG
+static uint64_t xm_fnv1a(const char* data, uint32_t length) {
+	uint64_t h = 14695981039346656037;
+	for(uint32_t i = 0; i < length; ++i) {
+		h ^= data[i];
+		h *= 1099511628211;
+	}
+	return h;
+}
+#endif
+
+void xm_context_to_libxm(xm_context_t* ctx, char* out) {
+	/* Reset internal pointers and playback position to 0 (normally not
+	   needed with correct usage of this function) */
+	for(uint16_t i = 0; i < ctx->module.num_channels; ++i) {
+		xm_channel_context_t* ch = ctx->channels + i;
+		ch->instrument = 0;
+		ch->sample = 0;
+		ch->current = 0;
+	}
+	/* Force next generated samples to call xm_row() and refill
+	  ch->current */
+	ctx->current_tick = 0;
+
+	/* Everything done after this should be deterministically reversible */
+	uint32_t ctx_size = xm_context_size(ctx);
+	#if XM_DEBUG
+	uint64_t old_hash = xm_fnv1a((void*)ctx, ctx_size);
+	#endif
+
+	uint32_t rate = ctx->rate;
+	ctx->rate = 0;
+
+	CALC_OFFSET(ctx->patterns, ctx);
+	CALC_OFFSET(ctx->pattern_slots, ctx);
+	CALC_OFFSET(ctx->instruments, ctx);
+	CALC_OFFSET(ctx->samples, ctx);
+	CALC_OFFSET(ctx->samples_data, ctx);
+	CALC_OFFSET(ctx->channels, ctx);
+	CALC_OFFSET(ctx->row_loop_count, ctx);
+
+	__builtin_memcpy(out, ctx, ctx_size);
+
+	#if XM_DEBUG
+	/* Restore the context back to its initial state, and check that the
+	   inverse process gives back the same context */
+	ctx = xm_create_context_from_libxm((void*)ctx, rate);
+	if(xm_fnv1a((void*)ctx, ctx_size) != old_hash) {
+		DEBUG("old and new hashes should match, but don't");
+	}
+	#endif
+}
+
+xm_context_t* xm_create_context_from_libxm(char* data, uint32_t rate) {
+	xm_context_t* ctx = (void*)data;
+	ctx->rate = rate;
+
+	/* Reverse steps of xm_context_to_libxm() */
+	APPLY_OFFSET(ctx->patterns, ctx);
+	APPLY_OFFSET(ctx->pattern_slots, ctx);
+	APPLY_OFFSET(ctx->instruments, ctx);
+	APPLY_OFFSET(ctx->samples, ctx);
+	APPLY_OFFSET(ctx->samples_data, ctx);
+	APPLY_OFFSET(ctx->channels, ctx);
+	APPLY_OFFSET(ctx->row_loop_count, ctx);
 
 	/* XXX */
 	/* if(XM_LIBXMIZE_DELTA_SAMPLES) { */
