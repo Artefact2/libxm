@@ -95,15 +95,18 @@ static void xm_prescan_module(const char* moddata, size_t moddata_length, struct
 	/* Read instrument headers */
 	for(uint16_t i = 0; i < out->num_instruments; ++i) {
 		uint16_t num_samples = READ_U16(offset + 27);
+		uint32_t inst_samples_bytes = 0;
 		out->num_samples += num_samples;
 
 		#if XM_DEFENSIVE
 		/* Notice that, even if there's a "sample header size" in the
 		   instrument header, that value seems ignored, and might even
 		   be wrong in some corrupted modules. */
-		uint32_t sample_header_size = READ_U32(offset + 29);
-		if(sample_header_size != SAMPLE_HEADER_SIZE) {
-			NOTICE("ignoring dodgy sample header size (%d) for instrument %d", sample_header_size, i+1);
+		if(num_samples > 0) {
+			uint32_t sample_header_size = READ_U32(offset + 29);
+			if(sample_header_size != SAMPLE_HEADER_SIZE) {
+				NOTICE("ignoring dodgy sample header size (%d) for instrument %d", sample_header_size, i+1);
+			}
 		}
 		#endif
 
@@ -124,9 +127,17 @@ static void xm_prescan_module(const char* moddata, size_t moddata_length, struct
 				/* 8-bit sample data */
 				out->samples_data_length += sample_length;
 			}
+			inst_samples_bytes += sample_length;
 			offset += SAMPLE_HEADER_SIZE;
 		}
+
+		offset += inst_samples_bytes;
 	}
+
+	DEBUG("read %d patterns, %d channels, %d rows, %d instruments, %d samples, %d sample frames, %d pot length",
+	      out->num_patterns, out->num_channels, out->num_rows,
+	      out->num_instruments, out->num_samples,
+	      out->samples_data_length, out->pot_length);
 }
 
 static size_t xm_load_module_header(xm_context_t* ctx, const char* moddata, size_t moddata_length) {
@@ -277,12 +288,13 @@ static size_t xm_load_instrument(xm_context_t* ctx, xm_instrument_t* instr, cons
 	#if XM_DEFENSIVE
 	uint8_t type = READ_U8(offset + 26);
 	if(type != 0) {
-		NOTICE("ignoring non-zero instrument type %d", type);
+		NOTICE("ignoring non-zero type %d on instrument %ld",
+		       type, (instr - ctx->instruments) + 1);
 	}
 	#endif
 
-	uint16_t num_samples = READ_U16(offset + 27);
-	if(num_samples == 0) {
+	instr->num_samples = READ_U16(offset + 27);
+	if(instr->num_samples == 0) {
 		return offset + ins_header_size;
 	}
 
@@ -293,13 +305,19 @@ static size_t xm_load_instrument(xm_context_t* ctx, xm_instrument_t* instr, cons
 
 	instr->volume_envelope.num_points = READ_U8(offset + 225);
 	if (instr->volume_envelope.num_points > MAX_ENVELOPE_POINTS) {
-		NOTICE("discarding overflowing volume envelope num_points (%d)", instr->volume_envelope.num_points);
+		NOTICE("clamping volume envelope num_points (%d -> %d) for instrument %ld",
+		       instr->volume_envelope.num_points,
+		       MAX_ENVELOPE_POINTS,
+		       (instr - ctx->instruments) + 1);
 		instr->volume_envelope.num_points = MAX_ENVELOPE_POINTS;
 	}
 
 	instr->panning_envelope.num_points = READ_U8(offset + 226);
 	if (instr->panning_envelope.num_points > MAX_ENVELOPE_POINTS) {
-		NOTICE("discarding overflowing panning envelope num_points (%d)", instr->volume_envelope.num_points);
+		NOTICE("clamping panning envelope num_points (%d -> %d) for instrument %ld",
+		       instr->panning_envelope.num_points,
+		       MAX_ENVELOPE_POINTS,
+		       (instr - ctx->instruments) + 1);
 		instr->panning_envelope.num_points = MAX_ENVELOPE_POINTS;
 	}
 
@@ -341,16 +359,16 @@ static size_t xm_load_instrument(xm_context_t* ctx, xm_instrument_t* instr, cons
 
 	/* Read sample headers */
 	instr->samples_index = ctx->module.num_samples;
-	ctx->module.num_samples += num_samples;
-	bool samples_16bit[num_samples]; /* true => 16 bit sample */
-	for(uint16_t i = 0; i < num_samples; ++i) {
-		offset += xm_load_sample_header(ctx, ctx->samples + instr->samples_index + i, samples_16bit + i, moddata, moddata_length, offset);
+	ctx->module.num_samples += instr->num_samples;
+	bool samples_16bit[instr->num_samples]; /* true => 16 bit sample */
+	for(uint16_t i = 0; i < instr->num_samples; ++i) {
+		offset = xm_load_sample_header(ctx, ctx->samples + instr->samples_index + i, samples_16bit + i, moddata, moddata_length, offset);
 	}
 
 	/* Read sample data */
-	for(uint16_t i = 0; i < num_samples; ++i) {
+	for(uint16_t i = 0; i < instr->num_samples; ++i) {
 		xm_sample_t* s = ctx->samples + instr->samples_index + i;
-		offset += xm_load_sample_data(samples_16bit[i], s->length, ctx->samples_data + s->index, moddata, moddata_length, offset);
+		offset = xm_load_sample_data(samples_16bit[i], s->length, ctx->samples_data + s->index, moddata, moddata_length, offset);
 	}
 
 	return offset;

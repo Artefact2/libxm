@@ -102,12 +102,13 @@ typedef struct xm_sample_s xm_sample_t;
 
 struct xm_instrument_s {
 	uint64_t latest_trigger;
-	uint8_t sample_of_notes[NUM_NOTES];
-	/* ctx->samples[index + sample_of_notes[...]] */
-	uint16_t samples_index;
-	uint16_t volume_fadeout;
 	xm_envelope_t volume_envelope;
 	xm_envelope_t panning_envelope;
+	uint8_t sample_of_notes[NUM_NOTES];
+	/* ctx->samples[index..(index+num_samples)] */
+	uint16_t samples_index;
+	uint16_t num_samples;
+	uint16_t volume_fadeout;
 	xm_waveform_type_t vibrato_type;
 	uint8_t vibrato_sweep;
 	uint8_t vibrato_depth;

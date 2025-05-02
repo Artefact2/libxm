@@ -29,7 +29,7 @@
 	} while(0)
 #define CHECK_SAMPLE(ctx, i, s) do { \
 		CHECK_INSTRUMENT((ctx), (i)); \
-		if((s) >= xm_get_number_of_samples((ctx), (i))) { \
+		if((s) >= (ctx)->instruments[(i)-1].num_samples) { \
 			NOTICE("invalid sample %d for instrument %d", (s), (i)); \
 			return 0; \
 		} \
@@ -121,11 +121,7 @@ uint16_t xm_get_number_of_instruments(xm_context_t* ctx) {
 
 uint16_t xm_get_number_of_samples(xm_context_t* ctx, uint16_t i) {
 	CHECK_INSTRUMENT(ctx, i);
-	if(i == ctx->module.num_instruments) {
-		return ((intptr_t)ctx->samples_data - (intptr_t)(ctx->samples + ctx->instruments[i-1].samples_index)) / sizeof(xm_sample_t);
-	} else {
-		return ctx->instruments[i].samples_index - ctx->instruments[i-1].samples_index;
-	}
+	return ctx->instruments[i-1].num_samples;
 }
 
 int16_t* xm_get_sample_waveform(xm_context_t* ctx, uint16_t instrument, uint16_t sample, uint32_t* length) {

@@ -463,7 +463,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			ch->instrument = NULL;
 			ch->sample = NULL;
 		} else {
-			ch->instrument = ctx->module.instruments + (s->instrument - 1);
+			ch->instrument = ctx->instruments + (s->instrument - 1);
 		}
 	}
 
@@ -482,13 +482,14 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_
 			xm_cut_note(ch);
 		} else {
 			if(instr->sample_of_notes[s->note - 1] < instr->num_samples) {
-#if XM_RAMPING
+				#if XM_RAMPING
 				for(unsigned int z = 0; z < RAMPING_POINTS; ++z) {
 					ch->end_of_previous_sample[z] = xm_next_of_sample(ctx, ch);
 				}
 				ch->frame_count = 0;
-#endif
-				ch->sample = instr->samples + instr->sample_of_notes[s->note - 1];
+				#endif
+
+				ch->sample = ctx->samples + instr->samples_index + instr->sample_of_notes[s->note - 1];
 				ch->orig_note = ch->note = s->note + ch->sample->relative_note
 					+ ch->sample->finetune / 128.f - 1.f;
 				if(s->instrument > 0) {
@@ -896,8 +897,6 @@ static void xm_key_off(xm_channel_context_t* ch) {
 }
 
 static void xm_row(xm_context_t* ctx) {
-	static xm_pattern_slot_t empty_slot = {0};
-
 	if(ctx->position_jump) {
 		ctx->current_table_index = ctx->jump_dest;
 		ctx->current_row = ctx->jump_row;
@@ -913,15 +912,13 @@ static void xm_row(xm_context_t* ctx) {
 		xm_post_pattern_change(ctx);
 	}
 
-	uint8_t pat_idx = ctx->module.pattern_table[ctx->current_table_index];
-	xm_pattern_t* cur = (pat_idx < ctx->module.num_patterns ? ctx->patterns + pat_idx : NULL);
+	xm_pattern_t* cur = ctx->patterns + ctx->module.pattern_table[ctx->current_table_index];
+	xm_pattern_slot_t* s = ctx->pattern_slots + cur->slots_index + ctx->module.num_channels * ctx->current_row;
+	xm_channel_context_t* ch = ctx->channels;
 	bool in_a_loop = false;
 
 	/* Read notes… */
-	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
-		xm_pattern_slot_t* s = (cur ? cur->slots + ctx->current_row * ctx->module.num_channels + i : &empty_slot);
-		xm_channel_context_t* ch = ctx->channels + i;
-
+	for(uint8_t i = 0; i < ctx->module.num_channels; ++i, ++ch, ++s) {
 		ch->current = s;
 
 		if(s->effect_type != 0xE || s->effect_param >> 4 != 0xD) {
@@ -930,7 +927,7 @@ static void xm_row(xm_context_t* ctx) {
 			ch->note_delay_param = s->effect_param & 0x0F;
 		}
 
-		if(!in_a_loop && ch->pattern_loop_count > 0) {
+		if(ch->pattern_loop_count > 0) {
 			in_a_loop = true;
 		}
 	}
