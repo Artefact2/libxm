@@ -582,7 +582,11 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 		ch->panning = ch->panning_envelope_panning = .5f;
 	}
 
-	assert(xm_context_size(ctx) == ctx_size);
+	/* Final ctx size can go down a little, for example if some POT entries
+	   were trimmed, actual size of ctx->row_loop_count decreases */
+	/* XXX: we can be more clever about this to begin with (parse POT in
+	   xm_size_for_context()) */
+	assert(xm_context_size(ctx) <= ctx_size);
 	return ctx;
 }
 
