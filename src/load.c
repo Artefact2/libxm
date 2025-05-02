@@ -596,10 +596,10 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 
 #if XM_DEBUG
 static uint64_t xm_fnv1a(const char* data, uint32_t length) {
-	uint64_t h = 14695981039346656037;
+	uint64_t h = 14695981039346656037UL;
 	for(uint32_t i = 0; i < length; ++i) {
 		h ^= data[i];
-		h *= 1099511628211;
+		h *= 1099511628211UL;
 	}
 	return h;
 }

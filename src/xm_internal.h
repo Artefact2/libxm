@@ -44,7 +44,6 @@ extern int __fail[-1];
 #define NUM_NOTES 96
 #define MAX_ENVELOPE_POINTS 12
 #define MAX_ROWS_PER_PATTERN 256
-#define DEFAULT_PATTERN_LENGTH 64
 #define RAMPING_POINTS 0x20
 
 /* ----- Data types ----- */
@@ -262,7 +261,7 @@ struct xm_context_s {
 
 	uint8_t current_table_index;
 	uint8_t current_row;
-	uint16_t current_tick; /* Can go below 255, with high tempo and a pattern delay */
+	uint16_t current_tick; /* Can go beyond 255, with high tempo and a pattern delay */
 	float remaining_samples_in_tick;
 	uint64_t generated_samples;
 

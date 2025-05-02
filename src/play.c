@@ -938,24 +938,24 @@ static void xm_row(xm_context_t* ctx) {
 	}
 
 	ctx->current_row++; /* Since this is an uint8, this line can
-						 * increment from 255 to 0, in which case it
-						 * is still necessary to go the next
-						 * pattern. */
+	                     * increment from 255 to 0, in which case it
+	                     * is still necessary to go the next
+	                     * pattern. */
 	if(!ctx->position_jump && !ctx->pattern_break &&
-	   (ctx->current_row >= (cur ? cur->num_rows : DEFAULT_PATTERN_LENGTH) || ctx->current_row == 0)) {
+	   (ctx->current_row >= cur->num_rows || ctx->current_row == 0)) {
 		ctx->current_table_index++;
 		ctx->current_row = ctx->jump_row; /* This will be 0 most of
-										   * the time, except when E60
-										   * is used */
+		                                   * the time, except when E60
+		                                   * is used */
 		ctx->jump_row = 0;
 		xm_post_pattern_change(ctx);
 	}
 }
 
 static void xm_envelope_tick(xm_channel_context_t* ch,
-							 xm_envelope_t* env,
-							 uint16_t* counter,
-							 float* outval) {
+                             xm_envelope_t* env,
+                             uint16_t* counter,
+                             float* outval) {
 	if(env->num_points < 2) {
 		/* Don't really know what to do… */
 		if(env->num_points == 1) {
@@ -1006,16 +1006,16 @@ static void xm_envelopes(xm_channel_context_t* ch) {
 			}
 
 			xm_envelope_tick(ch,
-							 &(ch->instrument->volume_envelope),
-							 &(ch->volume_envelope_frame_count),
-							 &(ch->volume_envelope_volume));
+			                 &(ch->instrument->volume_envelope),
+			                 &(ch->volume_envelope_frame_count),
+			                 &(ch->volume_envelope_volume));
 		}
 
 		if(ch->instrument->panning_envelope.enabled) {
 			xm_envelope_tick(ch,
-							 &(ch->instrument->panning_envelope),
-							 &(ch->panning_envelope_frame_count),
-							 &(ch->panning_envelope_panning));
+			                 &(ch->instrument->panning_envelope),
+			                 &(ch->panning_envelope_frame_count),
+			                 &(ch->panning_envelope_panning));
 		}
 	}
 }
