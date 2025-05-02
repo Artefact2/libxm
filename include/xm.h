@@ -156,8 +156,7 @@ uint16_t xm_get_number_of_samples(xm_context_t*, uint16_t);
 /** Get the internal buffer for a given sample waveform.
  *
  * This buffer can be read from or written to, at any time, but the
- * length cannot change. The buffer must be cast to (int8_t*) or
- * (int16_t*) depending on the sample type.
+ * length cannot change.
  *
  * @note Instrument numbers go from 1 to
  * xm_get_number_of_instruments(...).
@@ -165,7 +164,7 @@ uint16_t xm_get_number_of_samples(xm_context_t*, uint16_t);
  * @note Sample numbers go from 0 to
  * xm_get_nubmer_of_samples(...,instr)-1.
  */
-void* xm_get_sample_waveform(xm_context_t*, uint16_t instr, uint16_t sample, size_t* length, uint8_t* bits);
+int16_t* xm_get_sample_waveform(xm_context_t*, uint16_t instr, uint16_t sample, uint32_t* length);
 
 
 

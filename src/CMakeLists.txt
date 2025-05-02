@@ -1,9 +1,9 @@
 IF(XM_BUILD_SHARED_LIBS)
-ADD_LIBRARY(xm SHARED xm.c context.c load.c play.c)
+ADD_LIBRARY(xm SHARED xm.c load.c play.c)
 SET_TARGET_PROPERTIES(xm PROPERTIES VERSION 0.2 SOVERSION 1.0.1)
 ENDIF()
 
-ADD_LIBRARY(xms STATIC xm.c context.c load.c play.c)
+ADD_LIBRARY(xms STATIC xm.c load.c play.c)
 INCLUDE_DIRECTORIES(${XM_INCLUDE_DIRS})
 
 ADD_EXECUTABLE(libxmize libxmize.c)
