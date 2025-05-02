@@ -7,6 +7,7 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
 #include <xm.h>
+#include <stdlib.h>
 #include <math.h>
 #include <string.h>
 #include <assert.h>

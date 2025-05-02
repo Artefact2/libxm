@@ -62,9 +62,9 @@ static void memcpy_pad(void* dst, size_t dst_len, const void* src, size_t src_le
 	size_t copy_bytes = (src_len >= offset) ? (src_len - offset) : 0;
 	copy_bytes = copy_bytes > dst_len ? dst_len : copy_bytes;
 
-	memcpy(dst_c, src_c + offset, copy_bytes);
+	__builtin_memcpy(dst_c, src_c + offset, copy_bytes);
 	/* padded bytes */
-	memset(dst_c + copy_bytes, 0, dst_len - copy_bytes);
+	__builtin_memset(dst_c + copy_bytes, 0, dst_len - copy_bytes);
 }
 
 
@@ -149,6 +149,11 @@ static size_t xm_load_module_header(xm_context_t* ctx, const char* moddata, size
 	mod->num_patterns = READ_U16(offset + 10);
 	mod->num_instruments = READ_U16(offset + 12);
 
+	if(mod->length > PATTERN_ORDER_TABLE_LENGTH) {
+		NOTICE("clamping module pot length %d to %d\n", mod->length, PATTERN_ORDER_TABLE_LENGTH);
+		mod->length = PATTERN_ORDER_TABLE_LENGTH;
+	}
+
 	uint16_t flags = READ_U32(offset + 14);
 	#if XM_FREQUENCY_TYPES == 3
 	mod->frequency_type = (flags & 1) ? XM_LINEAR_FREQUENCIES : XM_AMIGA_FREQUENCIES;
@@ -162,7 +167,19 @@ static size_t xm_load_module_header(xm_context_t* ctx, const char* moddata, size
 	ctx->tempo = READ_U16(offset + 16);
 	ctx->bpm = READ_U16(offset + 18);
 
+	/* Read POT and delete invalid patterns */
 	READ_MEMCPY(mod->pattern_table, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
+	for(uint16_t i = 0; i < mod->length; ++i) {
+		if(mod->pattern_table[i] < mod->num_patterns) {
+			continue;
+		}
+		NOTICE("removing invalid pattern %d in pattern order table", mod->pattern_table[i]);
+		mod->length -= 1;
+		__builtin_memmove(mod->pattern_table + i,
+		                  mod->pattern_table + i + 1,
+		                  mod->length - i);
+	}
+
 	return offset + header_size;
 }
 
@@ -457,10 +474,10 @@ static size_t xm_load_sample_data(bool is_16bit,
 
 
 int xm_create_context(xm_context_t** ctxp, const char* moddata, uint32_t rate) {
-	return xm_create_context_safe(ctxp, moddata, SIZE_MAX, rate);
+	return xm_create_context_safe(ctxp, moddata, INT32_MAX, rate);
 }
 
-int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, size_t moddata_length, uint32_t rate) {
+int xm_create_context_safe(xm_context_t** ctxp, const char* moddata, uint32_t moddata_length, uint32_t rate) {
 	#if XM_DEFENSIVE
 	if(moddata_length < 60
 	   || memcmp("Extended Module: ", moddata, 17) != 0

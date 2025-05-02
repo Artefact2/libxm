@@ -1445,10 +1445,12 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 	#endif
 }
 
-void xm_generate_samples(xm_context_t* ctx, float* output, size_t numsamples) {
+void xm_generate_samples(xm_context_t* ctx,
+                         float* output,
+                         uint16_t numsamples) {
 	ctx->generated_samples += numsamples;
-
-	for(size_t i = 0; i < numsamples; i++) {
-		xm_sample(ctx, output + (2 * i), output + (2 * i + 1));
+	for(uint16_t i = 0; i < numsamples; i++) {
+		xm_sample(ctx, output, output + 1);
+		output += 2;
 	}
 }

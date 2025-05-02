@@ -9,26 +9,33 @@
 #include "xm_internal.h"
 
 #if XM_DEFENSIVE
+#define CHECK_PATTERN(ctx, p) do { \
+		if((p) >= (ctx)->module.num_patterns) { \
+			NOTICE("invalid pattern %d", (p)); \
+			return 0; \
+		} \
+	} while(0)
 #define CHECK_CHANNEL(ctx, c) do { \
-		if(((c) == 0 || (c) > (ctx)->module.num_channels)) { \
-			DEBUG("invalid channel %d", (c)); \
+		if((c) == 0 || (c) > (ctx)->module.num_channels) { \
+			NOTICE("invalid channel %d", (c)); \
 			return 0; \
 		} \
 	} while(0)
 #define CHECK_INSTRUMENT(ctx, i) do { \
-		if(((i) == 0 || (i) > (ctx)->module.num_instruments)) { \
-			DEBUG("invalid instrument %d", (i)); \
+		if((i) == 0 || (i) > (ctx)->module.num_instruments) { \
+			NOTICE("invalid instrument %d", (i)); \
 			return 0; \
 		} \
 	} while(0)
 #define CHECK_SAMPLE(ctx, i, s) do { \
 		CHECK_INSTRUMENT((ctx), (i)); \
-		if(((s) > (ctx)->module.instruments[(i)].num_samples)) { \
-			DEBUG("invalid sample %d for instrument %d", (s), (i)); \
+		if((s) >= xm_get_number_of_samples((ctx), (i))) { \
+			NOTICE("invalid sample %d for instrument %d", (s), (i)); \
 			return 0; \
 		} \
 	} while(0)
 #else
+#define CHECK_PATTERN(ctx, p)
 #define CHECK_CHANNEL(ctx, c)
 #define CHECK_INSTRUMENT(ctx, i)
 #define CHECK_SAMPLE(ctx, i, s)
@@ -64,8 +71,8 @@ bool xm_mute_channel(xm_context_t* ctx, uint16_t channel, bool mute) {
 
 bool xm_mute_instrument(xm_context_t* ctx, uint16_t instr, bool mute) {
 	CHECK_INSTRUMENT(ctx, instr);
-	bool old = ctx->module.instruments[instr - 1].muted;
-	ctx->module.instruments[instr - 1].muted = mute;
+	bool old = ctx->instruments[instr - 1].muted;
+	ctx->instruments[instr - 1].muted = mute;
 	return old;
 }
 
@@ -104,23 +111,26 @@ uint16_t xm_get_number_of_patterns(xm_context_t* ctx) {
 }
 
 uint16_t xm_get_number_of_rows(xm_context_t* ctx, uint16_t pattern) {
-	if(pattern < ctx->module.num_patterns)
-		return ctx->module.patterns[pattern].num_rows;
-	return DEFAULT_PATTERN_LENGTH;
+	CHECK_PATTERN(ctx, pattern);
+	return ctx->patterns[pattern].num_rows;
 }
 
 uint16_t xm_get_number_of_instruments(xm_context_t* ctx) {
 	return ctx->module.num_instruments;
 }
 
-uint16_t xm_get_number_of_samples(xm_context_t* ctx, uint16_t instrument) {
-	CHECK_INSTRUMENT(ctx, instrument);
-	return ctx->module.instruments[instrument - 1].num_samples;
+uint16_t xm_get_number_of_samples(xm_context_t* ctx, uint16_t i) {
+	CHECK_INSTRUMENT(ctx, i);
+	if(i == ctx->module.num_instruments) {
+		return ((intptr_t)ctx->samples_data - (intptr_t)(ctx->samples + ctx->instruments[i-1].samples_index)) / sizeof(xm_sample_t);
+	} else {
+		return ctx->instruments[i].samples_index - ctx->instruments[i-1].samples_index;
+	}
 }
 
 int16_t* xm_get_sample_waveform(xm_context_t* ctx, uint16_t instrument, uint16_t sample, uint32_t* length) {
-	CHECK_SAMPLE(ctx, i, s);
-	xm_sample_t* s = ctx->samples[ctx->instruments[instrument].samples_index + sample];
+	CHECK_SAMPLE(ctx, instrument, sample);
+	xm_sample_t* s = ctx->samples + ctx->instruments[instrument].samples_index + sample;
 	*length = s->length;
 	return ctx->samples_data + s->index;
 }
@@ -141,12 +151,12 @@ void xm_get_position(xm_context_t* ctx, uint8_t* pattern_index, uint8_t* pattern
 
 uint64_t xm_get_latest_trigger_of_instrument(xm_context_t* ctx, uint16_t instr) {
 	CHECK_INSTRUMENT(ctx, instr);
-	return ctx->module.instruments[instr - 1].latest_trigger;
+	return ctx->instruments[instr-1].latest_trigger;
 }
 
 uint64_t xm_get_latest_trigger_of_sample(xm_context_t* ctx, uint16_t instr, uint16_t sample) {
 	CHECK_SAMPLE(ctx, instr, sample);
-	return ctx->module.instruments[instr - 1].samples[sample].latest_trigger;
+	return ctx->samples[ctx->instruments[instr-1].samples_index + sample].latest_trigger;
 }
 
 uint64_t xm_get_latest_trigger_of_channel(xm_context_t* ctx, uint16_t chn) {
@@ -179,5 +189,5 @@ uint16_t xm_get_instrument_of_channel(xm_context_t* ctx, uint16_t chn) {
 	CHECK_CHANNEL(ctx, chn);
 	xm_channel_context_t* ch = ctx->channels + (chn - 1);
 	if(ch->instrument == NULL) return 0;
-	return 1 + (ch->instrument - ctx->module.instruments);
+	return 1 + (ch->instrument - ctx->instruments);
 }

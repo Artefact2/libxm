@@ -11,7 +11,6 @@
 #ifndef __has_xm_h
 #define __has_xm_h
 
-#include <stdlib.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -45,7 +44,7 @@ int xm_create_context(xm_context_t**, const char* moddata, uint32_t rate);
  * @returns 1 if module data is not sane
  * @returns 2 if memory allocation failed
  */
-int xm_create_context_safe(xm_context_t**, const char* moddata, size_t moddata_length, uint32_t rate);
+int xm_create_context_safe(xm_context_t**, const char* moddata, uint32_t moddata_length, uint32_t rate);
 
 /** Create a XM context.
  *
@@ -71,7 +70,7 @@ void xm_free_context(xm_context_t*);
  * @param output buffer of 2*numsamples elements
  * @param numsamples number of samples to generate
  */
-void xm_generate_samples(xm_context_t*, float* output, size_t numsamples);
+void xm_generate_samples(xm_context_t*, float* output, uint16_t numsamples);
 
 
 
