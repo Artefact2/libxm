@@ -26,7 +26,7 @@ static void zero_waveforms(xm_context_t* ctx) {
 			sample_data = xm_get_sample_waveform(ctx, i, s, &sample_length);
 			if(sample_data == NULL) continue;
 			memset(sample_data, 0, sample_length);
-			total_zeroed_bytes += sample_length;
+			total_zeroed_bytes += sample_length * sizeof(int16_t);
 		}
 
 	}
