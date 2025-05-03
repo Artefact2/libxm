@@ -707,6 +707,12 @@ void xm_context_to_libxm(xm_context_t* ctx, char* out) {
 	uint32_t old_rate = ctx->rate;
 	ctx->rate = 0;
 
+	#if XM_LIBXM_DELTA_SAMPLES
+	for(uint32_t i = ctx->module.samples_data_length - 1; i > 0; --i) {
+		ctx->samples_data[i] -= ctx->samples_data[i-1];
+	}
+	#endif
+
 	CALC_OFFSET(ctx->patterns, ctx);
 	CALC_OFFSET(ctx->pattern_slots, ctx);
 	CALC_OFFSET(ctx->instruments, ctx);
@@ -740,20 +746,11 @@ xm_context_t* xm_create_context_from_libxm(char* data, uint32_t rate) {
 	APPLY_OFFSET(ctx->channels, ctx);
 	APPLY_OFFSET(ctx->row_loop_count, ctx);
 
-	/* XXX */
-	/* if(XM_LIBXMIZE_DELTA_SAMPLES) { */
-	/* 	if((*ctxp)->module.instruments[i].samples[j].length > 1) { */
-	/* 		if((*ctxp)->module.instruments[i].samples[j].bits == 8) { */
-	/* 			for(size_t k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) { */
-	/* 				(*ctxp)->module.instruments[i].samples[j].data8[k] += (*ctxp)->module.instruments[i].samples[j].data8[k-1]; */
-	/* 			} */
-	/* 		} else { */
-	/* 			for(size_t k = 1; k < (*ctxp)->module.instruments[i].samples[j].length; ++k) { */
-	/* 				(*ctxp)->module.instruments[i].samples[j].data16[k] += (*ctxp)->module.instruments[i].samples[j].data16[k-1]; */
-	/* 			} */
-	/* 		} */
-	/* 	} */
-	/* } */
+	#if XM_LIBXM_DELTA_SAMPLES
+	for(uint32_t i = 1; i < ctx->module.samples_data_length; ++i) {
+		ctx->samples_data[i] += ctx->samples_data[i-1];
+	}
+	#endif
 
 	return ctx;
 }

@@ -18,8 +18,8 @@ OPTION_AND_DEFINE(XM_LINEAR_INTERPOLATION "Use linear interpolation (CPU hungry)
 OPTION_AND_DEFINE(XM_RAMPING "Enable ramping (smooth volume/panning transitions, CPU hungry)" "ON")
 OPTION_AND_DEFINE(XM_STRINGS "Store module, instrument and sample names in context" "ON")
 
-OPTION_AND_DEFINE(XM_LIBXMIZE_DELTA_SAMPLES "Delta-code samples in libxmize format" "ON")
-MARK_AS_ADVANCED(XM_LIBXMIZE_DELTA_SAMPLES)
+OPTION_AND_DEFINE(XM_LIBXM_DELTA_SAMPLES "Delta-code samples in libxm format (may improve compressibility, but adds some code size)" "ON")
+MARK_AS_ADVANCED(XM_LIBXM_DELTA_SAMPLES)
 
 SET(XM_FREQUENCY_TYPES "3" CACHE STRING "Supported frequency types (1=Linear,2=Amiga,3=Both)")
 MARK_AS_ADVANCED(XM_FREQUENCY_TYPES)
