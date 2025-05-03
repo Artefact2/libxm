@@ -46,9 +46,9 @@ static void gen_waveforms(void) {
 	buf = xm_get_sample_waveform(ctx, 2, 0, &len);
 	for(i = 0; i < len; ++i)
 		buf[i] = _Generic((xm_sample_point_t){},
-		                  int8_t: (int8_t)((UINT8_MAX * i) / len),
-		                  int16_t: (int16_t)((UINT16_MAX * i) / len),
-		                  float: -1.f + 2.f * (float)i / (float)len);
+		                  int8_t: (INT8_MIN + (2*INT8_MAX*i) / len),
+		                  int16_t: (INT16_MIN + (2*INT16_MAX*i) / len),
+		                  float: -1.f + 2.f*(float)i / (float)len);
 
 	/* XXX: Kick */
 	/* XXX: Pad */
