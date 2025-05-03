@@ -180,8 +180,10 @@ Thanks to:
   the specification of XM 1.04 files;
 
 * All the MilkyTracker contributors, for the [thorough
-  documentation](http://www.milkytracker.org/docs/MilkyTracker.html#effects)
+  documentation](http://www.milkytracker.org/docs/manual/MilkyTracker.html#effects)
   of effects;
+
+* Vladimir Kameñar, for writing `The Unofficial XM File Format Specification`;
 
 * All the people that helped on `#milkytracker` IRC;
 
