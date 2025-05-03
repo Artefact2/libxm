@@ -11,44 +11,44 @@
 
 /* ----- Static functions ----- */
 
-static float xm_waveform(xm_waveform_type_t, uint8_t);
-static void xm_autovibrato(xm_context_t*, xm_channel_context_t*);
-static void xm_vibrato(xm_context_t*, xm_channel_context_t*, uint8_t);
-static void xm_tremolo(xm_channel_context_t*, uint8_t, uint16_t);
-static void xm_arpeggio(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t);
-static void xm_tone_portamento(xm_context_t*, xm_channel_context_t*);
-static void xm_pitch_slide(xm_context_t*, xm_channel_context_t*, float);
-static void xm_panning_slide(xm_channel_context_t*, uint8_t);
-static void xm_volume_slide(xm_channel_context_t*, uint8_t);
+static float xm_waveform(xm_waveform_type_t, uint8_t) __attribute__((warn_unused_result));
+static void xm_autovibrato(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+static void xm_vibrato(xm_context_t*, xm_channel_context_t*, uint8_t) __attribute__((nonnull));
+static void xm_tremolo(xm_channel_context_t*, uint8_t, uint16_t) __attribute__((nonnull));
+static void xm_arpeggio(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t) __attribute__((nonnull));
+static void xm_tone_portamento(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+static void xm_pitch_slide(xm_context_t*, xm_channel_context_t*, float) __attribute__((nonnull));
+static void xm_panning_slide(xm_channel_context_t*, uint8_t) __attribute__((nonnull));
+static void xm_volume_slide(xm_channel_context_t*, uint8_t) __attribute__((nonnull));
 
-static float xm_envelope_lerp(xm_envelope_point_t*, xm_envelope_point_t*, uint16_t);
-static void xm_envelope_tick(xm_channel_context_t*, xm_envelope_t*, uint16_t*, float*);
-static void xm_envelopes(xm_channel_context_t*);
+static float xm_envelope_lerp(xm_envelope_point_t*, xm_envelope_point_t*, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static void xm_envelope_tick(xm_channel_context_t*, xm_envelope_t*, uint16_t*, float*) __attribute__((nonnull));
+static void xm_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
 #if XM_FREQUENCY_TYPES & 1
-static float xm_linear_period(float);
-static float xm_linear_frequency(float, float, float);
+static float xm_linear_period(float) __attribute__((warn_unused_result));
+static float xm_linear_frequency(float, float, float) __attribute__((warn_unused_result));
 #endif
 #if XM_FREQUENCY_TYPES & 2
-static float xm_amiga_period(float);
-static float xm_amiga_frequency(float, float, float);
+static float xm_amiga_period(float) __attribute__((warn_unused_result));
+static float xm_amiga_frequency(float, float, float) __attribute__((warn_unused_result));
 #endif
-static float xm_period(xm_context_t*, float);
-static float xm_frequency(xm_context_t*, float, float, float);
-static void xm_update_frequency(xm_context_t*, xm_channel_context_t*);
+static float xm_period(xm_context_t*, float) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static float xm_frequency(xm_context_t*, float, float, float) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static void xm_update_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
-static void xm_handle_note_and_instrument(xm_context_t*, xm_channel_context_t*, xm_pattern_slot_t*);
-static void xm_trigger_note(xm_context_t*, xm_channel_context_t*, unsigned int flags);
-static void xm_cut_note(xm_channel_context_t*);
-static void xm_key_off(xm_channel_context_t*);
+static void xm_handle_note_and_instrument(xm_context_t*, xm_channel_context_t*, xm_pattern_slot_t*) __attribute__((nonnull));
+static void xm_trigger_note(xm_context_t*, xm_channel_context_t*, unsigned int flags) __attribute__((nonnull));
+static void xm_cut_note(xm_channel_context_t*) __attribute__((nonnull));
+static void xm_key_off(xm_channel_context_t*) __attribute__((nonnull));
 
-static void xm_post_pattern_change(xm_context_t*);
-static void xm_row(xm_context_t*);
-static void xm_tick(xm_context_t*);
+static void xm_post_pattern_change(xm_context_t*) __attribute__((nonnull));
+static void xm_row(xm_context_t*) __attribute__((nonnull));
+static void xm_tick(xm_context_t*) __attribute__((nonnull));
 
-static float xm_sample_at(xm_context_t*, xm_sample_t*, size_t);
-static float xm_next_of_sample(xm_context_t*, xm_channel_context_t*);
-static void xm_sample(xm_context_t*, float*, float*);
+static float xm_sample_at(xm_context_t*, xm_sample_t*, size_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static float xm_next_of_sample(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static void xm_sample(xm_context_t*, float*, float*) __attribute__((nonnull));
 
 /* ----- Other oddities ----- */
 
@@ -71,44 +71,52 @@ static const float multi_retrig_multiply[] = {
 	1.f,   1.f,  1.5f,       2.f   /* C, D, E, F */
 };
 
-#define XM_CLAMP_UP1F(vol, limit) do {			\
-		if((vol) > (limit)) (vol) = (limit);	\
+#define XM_CLAMP_UP1F(vol, limit) do {                                  \
+		if((vol) > (limit)) (vol) = (limit); \
 	} while(0)
 #define XM_CLAMP_UP(vol) XM_CLAMP_UP1F((vol), 1.f)
 
-#define XM_CLAMP_DOWN1F(vol, limit) do {		\
-		if((vol) < (limit)) (vol) = (limit);	\
+#define XM_CLAMP_DOWN1F(vol, limit) do {                                \
+		if((vol) < (limit)) (vol) = (limit); \
 	} while(0)
 #define XM_CLAMP_DOWN(vol) XM_CLAMP_DOWN1F((vol), .0f)
 
-#define XM_CLAMP2F(vol, up, down) do {			\
-		if((vol) > (up)) (vol) = (up);			\
+#define XM_CLAMP2F(vol, up, down) do {                                  \
+		if((vol) > (up)) (vol) = (up); \
 		else if((vol) < (down)) (vol) = (down); \
 	} while(0)
 #define XM_CLAMP(vol) XM_CLAMP2F((vol), 1.f, .0f)
 
-#define XM_SLIDE_TOWARDS(val, goal, incr) do {		\
-		if((val) > (goal)) {						\
-			(val) -= (incr);						\
-			XM_CLAMP_DOWN1F((val), (goal));			\
-		} else if((val) < (goal)) {					\
-			(val) += (incr);						\
-			XM_CLAMP_UP1F((val), (goal));			\
-		}											\
-	} while(0)
-
 #define XM_LERP(u, v, t) ((u) + (t) * ((v) - (u)))
 #define XM_INVERSE_LERP(u, v, lerp) (((lerp) - (u)) / ((v) - (u)))
 
-#define HAS_TONE_PORTAMENTO(s) ((s)->effect_type == 3 \
-								 || (s)->effect_type == 5 \
-								 || ((s)->volume_column >> 4) == 0xF)
-#define HAS_ARPEGGIO(s) ((s)->effect_type == 0 \
-						  && (s)->effect_param != 0)
-#define HAS_VIBRATO(s) ((s)->effect_type == 4 \
-						 || (s)->effect_type == 6 \
-						 || ((s)->volume_column >> 4) == 0xB)
-#define NOTE_IS_VALID(n) ((n) > 0 && (n) < 97)
+static void XM_SLIDE_TOWARDS(float* val, float goal, float incr) {
+	if(*val > goal) {
+		*val -= incr;
+		XM_CLAMP_DOWN1F(*val, goal);
+	} else {
+		*val += incr;
+		XM_CLAMP_UP1F(*val, goal);
+	}
+}
+
+static bool HAS_TONE_PORTAMENTO(const xm_pattern_slot_t* s) {
+	return s->effect_type == 3 || s->effect_type == 5
+		|| s->volume_column >> 4 == 0xF;
+}
+
+static bool HAS_VIBRATO(const xm_pattern_slot_t* s) {
+	return s->effect_type == 4 || s->effect_type == 6
+		|| (s->volume_column >> 4) == 0xB;
+}
+
+static bool HAS_ARPEGGIO(const xm_pattern_slot_t* s) {
+	return s->effect_type == 0 && s->effect_param != 0;
+}
+
+static bool NOTE_IS_VALID(uint8_t n) {
+	return n > 0 && n < 97;
+}
 
 /* ----- Function definitions ----- */
 
@@ -141,12 +149,14 @@ static float xm_waveform(xm_waveform_type_t waveform, uint8_t step) {
 		/* Ramp up: -1.f when step = 0; 1.f when step = 0x40 */
 		return (float)(step - 0x20) / 0x20;
 
+	#if XM_DEFENSIVE
 	default:
-		break;
+		return 0.f;
+	#endif
 
 	}
 
-	return .0f;
+	__builtin_unreachable();
 }
 
 static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
@@ -189,17 +199,16 @@ static void xm_tremolo(xm_channel_context_t* ch, uint8_t param, uint16_t pos) {
 }
 
 static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, uint16_t tick) {
+	ch->arp_in_progress = true;
 	switch(tick % 3) {
 	case 0:
 		ch->arp_in_progress = false;
 		ch->arp_note_offset = 0;
 		break;
 	case 2:
-		ch->arp_in_progress = true;
 		ch->arp_note_offset = param >> 4;
 		break;
 	case 1:
-		ch->arp_in_progress = true;
 		ch->arp_note_offset = param & 0x0F;
 		break;
 	}
@@ -222,7 +231,7 @@ static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 	#endif
 
 	if(ch->period != ch->tone_portamento_target_period) {
-		XM_SLIDE_TOWARDS(ch->period,
+		XM_SLIDE_TOWARDS(&(ch->period),
 		                 ch->tone_portamento_target_period,
 		                 incr);
 		xm_update_frequency(ctx, ch);
@@ -425,7 +434,11 @@ static float xm_period(xm_context_t* ctx, float note) {
 	case XM_AMIGA_FREQUENCIES:
 		return xm_amiga_period(note);
 	}
-	return .0f;
+	#if XM_DEFENSIVE
+	return 0.f;
+	#else
+	__builtin_unreachable();
+	#endif
 }
 static float xm_frequency(xm_context_t* ctx, float period, float note_offset, float period_offset) {
 	switch(ctx->module.frequency_type) {
@@ -434,7 +447,11 @@ static float xm_frequency(xm_context_t* ctx, float period, float note_offset, fl
 	case XM_AMIGA_FREQUENCIES:
 		return xm_amiga_frequency(period, note_offset, period_offset);
 	}
-	return .0f;
+	#if XM_DEFENSIVE
+	return 0.f;
+	#else
+	__builtin_unreachable();
+	#endif
 }
 #endif
 
@@ -447,8 +464,9 @@ static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->step = ch->frequency / ctx->rate;
 }
 
-static void xm_handle_note_and_instrument(xm_context_t* ctx, xm_channel_context_t* ch,
-										  xm_pattern_slot_t* s) {
+static void xm_handle_note_and_instrument(xm_context_t* ctx,
+                                          xm_channel_context_t* ch,
+                                          xm_pattern_slot_t* s) {
 	if(s->instrument > 0) {
 		if(HAS_TONE_PORTAMENTO(ch->current) && ch->instrument != NULL && ch->sample != NULL) {
 			/* Tone portamento in effect, unclear stuff happens */
@@ -1042,40 +1060,32 @@ static void xm_tick(xm_context_t* ctx) {
 			xm_update_frequency(ctx, ch);
 		}
 
-		switch(ch->current->volume_column >> 4) {
+		if(ctx->current_tick > 0)
+                switch(ch->current->volume_column >> 4) {
 
 		case 0x6: /* Volume slide down */
-			if(ctx->current_tick == 0) break;
 			xm_volume_slide(ch, ch->current->volume_column & 0x0F);
 			break;
 
 		case 0x7: /* Volume slide up */
-			if(ctx->current_tick == 0) break;
 			xm_volume_slide(ch, ch->current->volume_column << 4);
 			break;
 
 		case 0xB: /* Vibrato */
-			if(ctx->current_tick == 0) break;
 			ch->vibrato_in_progress = false;
 			xm_vibrato(ctx, ch, ch->vibrato_param);
 			break;
 
 		case 0xD: /* Panning slide left */
-			if(ctx->current_tick == 0) break;
 			xm_panning_slide(ch, ch->current->volume_column & 0x0F);
 			break;
 
 		case 0xE: /* Panning slide right */
-			if(ctx->current_tick == 0) break;
 			xm_panning_slide(ch, ch->current->volume_column << 4);
 			break;
 
 		case 0xF: /* Tone portamento */
-			if(ctx->current_tick == 0) break;
 			xm_tone_portamento(ctx, ch);
-			break;
-
-		default:
 			break;
 
 		}
@@ -1243,15 +1253,13 @@ static void xm_tick(xm_context_t* ctx) {
 			);
 			break;
 
-		default:
-			break;
-
 		}
 
 		float panning, volume;
 
-		panning = ch->panning +
-			(ch->panning_envelope_panning - .5f) * (.5f - fabsf(ch->panning - .5f)) * 2.0f;
+		panning = ch->panning
+			+ (ch->panning_envelope_panning - .5f)
+			* (.5f - __builtin_fabsf(ch->panning - .5f)) * 2.0f;
 
 		if(ch->tremor_on) {
 		        volume = .0f;
@@ -1423,15 +1431,18 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 
 #if XM_RAMPING
 		ch->frame_count++;
-		XM_SLIDE_TOWARDS(ch->actual_volume[0], ch->target_volume[0], ctx->volume_ramp);
-		XM_SLIDE_TOWARDS(ch->actual_volume[1], ch->target_volume[1], ctx->volume_ramp);
+		XM_SLIDE_TOWARDS(&(ch->actual_volume[0]), ch->target_volume[0], ctx->volume_ramp);
+		XM_SLIDE_TOWARDS(&(ch->actual_volume[1]), ch->target_volume[1], ctx->volume_ramp);
 #endif
 	}
 
 	#if XM_DEBUG
 	/* catch obvious bugs, don't fail on potential clipping */
-	assert(fabs(*left) <= ctx->module.num_channels && fabs(*right) <= ctx->module.num_channels);
-        #endif
+	assert(*left <= ctx->module.num_channels);
+	assert(*left >= -ctx->module.num_channels);
+	assert(*right <= ctx->module.num_channels);
+	assert(*right >= -ctx->module.num_channels);
+	#endif
 
 	const float fgvol = ctx->global_volume * ctx->amplification;
 	*left *= fgvol;
