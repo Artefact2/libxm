@@ -131,7 +131,7 @@ typedef struct xm_pattern_slot_s xm_pattern_slot_t;
 
 struct xm_pattern_s {
 	/* ctx->pattern_slots[index..(index+num_rows)] */
-	uint16_t slots_index;
+	uint32_t slots_index;
 	uint16_t num_rows;
 };
 typedef struct xm_pattern_s xm_pattern_t;

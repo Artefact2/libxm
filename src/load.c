@@ -199,6 +199,8 @@ static uint32_t xm_load_module_header(xm_context_t* ctx,
 		if(mod->pattern_table[i] < mod->num_patterns) {
 			continue;
 		}
+		/* XXX: this will break looping, pattern jumps etc. just insert
+		   a blank pattern */
 		NOTICE("removing invalid pattern %d in pattern order table", mod->pattern_table[i]);
 		mod->length -= 1;
 		__builtin_memmove(mod->pattern_table + i,
@@ -237,7 +239,8 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
 	}
 
 	/* j counts bytes in the file, k counts pattern slots */
-	for(uint16_t j = 0, k = 0; j < packed_patterndata_size; ++k) {
+	uint16_t j, k;
+	for(j = 0, k = 0; j < packed_patterndata_size; ++k) {
 		uint8_t note = READ_U8(offset + j);
 		xm_pattern_slot_t* slot = slots + k;
 
@@ -285,6 +288,11 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
 		}
 	}
 
+	#if XM_DEFENSIVE
+	if(k != pat->num_rows * ctx->module.num_channels) {
+		NOTICE("incomplete packed pattern data for pattern %ld, expected %u slots, got %u", pat - ctx->patterns, pat->num_rows * ctx->module.num_channels, k);
+	}
+	#endif
 	return offset + packed_patterndata_size;
 }
 
