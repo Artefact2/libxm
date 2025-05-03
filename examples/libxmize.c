@@ -25,7 +25,7 @@ static void zero_waveforms(xm_context_t* ctx) {
 		for(uint16_t s = 0; s < xm_get_number_of_samples(ctx, i); ++s) {
 			sample_data = xm_get_sample_waveform(ctx, i, s, &sample_length);
 			if(sample_data == NULL) continue;
-			memset(sample_data, 0, sample_length);
+			memset(sample_data, 0, sample_length * sizeof(int16_t));
 			total_zeroed_bytes += sample_length * sizeof(int16_t);
 		}
 
