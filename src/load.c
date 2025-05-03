@@ -176,6 +176,11 @@ static uint32_t xm_load_module_header(xm_context_t* ctx,
 	mod->num_patterns = READ_U16(offset + 10);
 	mod->num_instruments = READ_U16(offset + 12);
 
+	if(mod->restart_position >= mod->length) {
+		NOTICE("invalid restart_position, resetting to zero");
+		mod->restart_position = 0;
+	}
+
 	if(mod->length > PATTERN_ORDER_TABLE_LENGTH) {
 		NOTICE("clamping module pot length %d to %d\n", mod->length, PATTERN_ORDER_TABLE_LENGTH);
 		mod->length = PATTERN_ORDER_TABLE_LENGTH;
