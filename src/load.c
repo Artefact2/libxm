@@ -533,7 +533,7 @@ static uint32_t xm_load_16b_sample_data(uint32_t length,
                                         uint32_t offset) {
 	int16_t v = 0;
 	for(uint32_t k = 0; k < length; ++k) {
-		v = v + (int8_t)READ_U16(offset + (k << 1));
+		v = v + (int16_t)READ_U16(offset + (k << 1));
 		out[k] = _Generic((xm_sample_point_t){},
 		                  int8_t: v >> 8, /* XXX: dither */
 		                  int16_t: v,
