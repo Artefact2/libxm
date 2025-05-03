@@ -204,6 +204,26 @@ const char* xm_get_tracker_name(xm_context_t*)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
+/** Get an instrument name as a NUL-terminated string.
+ *
+ * @note Instrument numbers go from 1 to xm_get_number_of_instruments(...).
+ *
+ * @returns pointer to a string, or NULL on invalid inputs */
+const char* xm_get_instrument_name(xm_context_t*, uint16_t)
+__attribute__((warn_unused_result))
+__attribute__((nonnull));
+
+/** Get a sample name as a NUL-terminated string.
+ *
+ * @note Instrument numbers go from 1 to xm_get_number_of_instruments(...).
+ *
+ * @note Sample numbers go from 0 to xm_get_number_of_samples(...)-1.
+ *
+ * @returns pointer to a string, or NULL on invalid inputs */
+const char* xm_get_sample_name(xm_context_t*, uint16_t i, uint16_t s)
+__attribute__((warn_unused_result))
+__attribute__((nonnull));
+
 
 
 /** Get the number of channels. */
