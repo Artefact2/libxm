@@ -71,9 +71,9 @@ struct xm_envelope_s {
 	uint8_t sustain_point;
 	uint8_t loop_start_point;
 	uint8_t loop_end_point;
-	bool enabled;
-	bool sustain_enabled;
-	bool loop_enabled;
+	bool enabled:1;
+	bool sustain_enabled:1;
+	bool loop_enabled:1;
 };
 typedef struct xm_envelope_s xm_envelope_t;
 
@@ -165,43 +165,44 @@ typedef struct xm_module_s xm_module_t;
 
 struct xm_channel_context_s {
 	uint64_t latest_trigger;
-	float note;
-	float orig_note; /* The original note before effect modifications, as read in the pattern. */
 	xm_instrument_t* instrument; /* Could be NULL */
 	xm_sample_t* sample; /* Could be NULL */
 	xm_pattern_slot_t* current;
 
+	float note;
+	float orig_note; /* The original note before effect modifications, as read in the pattern. */
+	float vibrato_note_offset;
+	float autovibrato_note_offset;
+
 	float sample_position;
 	float period;
+	float tone_portamento_target_period;
 	float frequency;
 	float step;
 
 	float volume; /* Ideally between 0 (muted) and 1 (loudest) */
 	float panning; /* Between 0 (left) and 1 (right); 0.5 is centered */
 	float actual_volume[2]; /* Multiplier for left/right channel */
+	float tremolo_volume;
 
 	#if XM_RAMPING
 	/* These values are updated at the end of each tick, to save
 	 * a couple of float operations on every generated sample. */
 	float target_volume[2];
 
-	unsigned long frame_count;
+	uint32_t frame_count; /* Gets reset after every note */
 	float end_of_previous_sample[RAMPING_POINTS];
 	#endif
 
-	uint16_t autovibrato_ticks;
-
-	bool ping; /* For ping-pong samples: true is -->, false is <-- */
-	bool sustained;
 	float fadeout_volume;
 	float volume_envelope_volume;
 	float panning_envelope_panning;
+
+	uint16_t vibrato_ticks; /* Position in the waveform */
+	uint16_t autovibrato_ticks;
 	uint16_t volume_envelope_frame_count;
 	uint16_t panning_envelope_frame_count;
 
-	float autovibrato_note_offset;
-
-	bool arp_in_progress;
 	uint8_t arp_note_offset;
 	uint8_t volume_slide_param;
 	uint8_t fine_volume_slide_param;
@@ -214,26 +215,28 @@ struct xm_channel_context_s {
 	uint8_t extra_fine_portamento_up_param;
 	uint8_t extra_fine_portamento_down_param;
 	uint8_t tone_portamento_param;
-	float tone_portamento_target_period;
 	uint8_t multi_retrig_param;
 	uint8_t note_delay_param;
 	uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
 	uint8_t pattern_loop_count; /* How many loop passes have been done */
-	bool vibrato_in_progress;
-	xm_waveform_type_t vibrato_waveform;
-	bool vibrato_waveform_retrigger; /* True if a new note retriggers the waveform */
 	uint8_t vibrato_param;
-	uint16_t vibrato_ticks; /* Position in the waveform */
-	float vibrato_note_offset;
-	xm_waveform_type_t tremolo_waveform;
-	bool tremolo_waveform_retrigger;
 	uint8_t tremolo_param;
 	uint8_t tremolo_ticks;
-	float tremolo_volume;
 	uint8_t tremor_param;
 	uint8_t sample_offset_param;
-	bool tremor_on;
+
+	xm_waveform_type_t vibrato_waveform;
+	xm_waveform_type_t tremolo_waveform;
+
+	bool ping; /* For ping-pong samples: true is -->, false is <-- */
+	bool sustained;
 	bool muted;
+	bool arp_in_progress;
+	bool vibrato_in_progress;
+	bool tremor_on;
+	/* True if a new note retriggers the waveform */
+	bool vibrato_waveform_retrigger;
+	bool tremolo_waveform_retrigger;
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
 
@@ -250,6 +253,7 @@ struct xm_context_s {
 
 	float global_volume;
 	float amplification;
+	uint64_t generated_samples;
 	uint32_t rate;
 	uint16_t tempo;
 	uint16_t bpm;
@@ -261,23 +265,23 @@ struct xm_context_s {
 	float volume_ramp;
 	#endif
 
+	float remaining_samples_in_tick;
+
+	/* Can go beyond 255, with high tempo and a pattern delay */
+	uint16_t current_tick;
+
+	/* Extra ticks to be played before going to the next row -
+	 * Used for EEy effect */
+	uint16_t extra_ticks;
+
 	uint8_t current_table_index;
 	uint8_t current_row;
-	uint16_t current_tick; /* Can go beyond 255, with high tempo and a pattern delay */
-	float remaining_samples_in_tick;
-	uint64_t generated_samples;
 
 	bool position_jump;
 	bool pattern_break;
 	uint8_t jump_dest;
 	uint8_t jump_row;
 
-	/* Extra ticks to be played before going to the next row -
-	 * Used for EEy effect */
-	uint16_t extra_ticks;
-
-
 	uint8_t loop_count;
 	uint8_t max_loop_count;
-
 };
