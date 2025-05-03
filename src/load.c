@@ -49,6 +49,7 @@ static void xm_fix_envelope(xm_envelope_t*);
 static uint32_t xm_load_sample_header(xm_context_t*, xm_sample_t*, bool*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_8b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
+static int8_t xm_dither_16b_8b(int16_t);
 
 #if XM_DEBUG
 static uint64_t xm_fnv1a(const char*, uint32_t);
@@ -424,7 +425,7 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 			if(_Generic((xm_sample_point_t){},
 			            int8_t: true,
 			            default: false)) {
-				NOTICE("instrument %ld, sample %u will be crushed from 16 to 8 bits", instr - ctx->instruments + 1, i);
+				NOTICE("instrument %ld, sample %u will be dithered from 16 to 8 bits", instr - ctx->instruments + 1, i);
 			}
 			offset = xm_load_16b_sample_data(s->length, ctx->samples_data + s->index, moddata, moddata_length, offset);
 		} else {
@@ -536,7 +537,7 @@ static uint32_t xm_load_8b_sample_data(uint32_t length,
 		v = v + (int8_t)READ_U8(offset + k);
 		out[k] = _Generic((xm_sample_point_t){},
 		                  int8_t: v,
-		                  int16_t: v << 8,
+		                  int16_t: (v * 256),
 		                  float: (float)v / (float)INT8_MAX);
 	}
 	return offset + length;
@@ -551,11 +552,19 @@ static uint32_t xm_load_16b_sample_data(uint32_t length,
 	for(uint32_t k = 0; k < length; ++k) {
 		v = v + (int16_t)READ_U16(offset + (k << 1));
 		out[k] = _Generic((xm_sample_point_t){},
-		                  int8_t: v >> 8, /* XXX: dither */
+		                  int8_t: xm_dither_16b_8b(v),
 		                  int16_t: v,
 		                  float: (float)v / (float)INT16_MAX);
 	}
 	return offset + (length << 1);
+}
+
+static int8_t xm_dither_16b_8b(int16_t x) {
+	static uint32_t next = 1;
+	next = next * 214013 + 2531011;
+	/* Not that this is perf critical, but this should compile to a cmovl
+	   (branchless) */
+	return (x >= 32512) ? 127 : (x + (next >> 16) % 256) / 256;
 }
 
 
