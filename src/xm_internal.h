@@ -28,11 +28,13 @@
 #define DEBUG(...)
 #endif
 
-#if XM_BIG_ENDIAN
-#error "Big endian platforms are not yet supported, sorry"
-/* Make sure the compiler stops, even if #error is ignored */
-extern int __fail[-1];
-#endif
+_Static_assert(!XM_BIG_ENDIAN, "Big endian support is still a WIP");
+_Static_assert(XM_FREQUENCY_TYPES >= 1 && XM_FREQUENCY_TYPES <= 3,
+               "Unsupported value of XM_FREQUENCY_TYPES");
+_Static_assert(_Generic((xm_sample_point_t){},
+                        int8_t: true, int16_t: true, float: true,
+                        default: false),
+               "Unsupported value of XM_SAMPLE_TYPE");
 
 /* ----- XM constants ----- */
 
@@ -242,7 +244,7 @@ struct xm_context_s {
 	xm_instrument_t* instruments; /* Instrument 1 has index 0,
 	                               * instrument 2 has index 1, etc. */
 	xm_sample_t* samples;
-	int16_t* samples_data;
+	xm_sample_point_t* samples_data;
 	xm_channel_context_t* channels;
 	uint8_t* row_loop_count;
 

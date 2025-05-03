@@ -1291,7 +1291,10 @@ static void xm_tick(xm_context_t* ctx) {
 }
 
 static float xm_sample_at(xm_context_t* ctx, xm_sample_t* sample, size_t k) {
-	return (float)ctx->samples_data[sample->index + k]  / 32768.f;
+	return _Generic((xm_sample_point_t){},
+	                int8_t: (float)ctx->samples_data[sample->index + k] / (float)INT8_MAX,
+	                int16_t: (float)ctx->samples_data[sample->index + k] / (float)INT16_MAX,
+	                float: ctx->samples_data[sample->index + k]);
 }
 
 static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {

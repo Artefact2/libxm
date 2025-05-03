@@ -22,7 +22,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **5080 bytes**.
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **5067 bytes**.
 
 If you are using libxm to play a single module (like in a demo/intro), disable
 features as suggested by `libxmize` to save a few more bytes.

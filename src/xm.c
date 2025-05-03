@@ -124,7 +124,7 @@ uint16_t xm_get_number_of_samples(xm_context_t* ctx, uint16_t i) {
 	return ctx->instruments[i-1].num_samples;
 }
 
-int16_t* xm_get_sample_waveform(xm_context_t* ctx, uint16_t instrument, uint16_t sample, uint32_t* length) {
+xm_sample_point_t* xm_get_sample_waveform(xm_context_t* ctx, uint16_t instrument, uint16_t sample, uint32_t* length) {
 	CHECK_SAMPLE(ctx, instrument, sample);
 	xm_sample_t* s = ctx->samples + ctx->instruments[instrument-1].samples_index + sample;
 	*length = s->length;

@@ -25,6 +25,9 @@ SET(XM_FREQUENCY_TYPES "3" CACHE STRING "Supported frequency types (1=Linear,2=A
 MARK_AS_ADVANCED(XM_FREQUENCY_TYPES)
 ADD_DEFINITIONS("-DXM_FREQUENCY_TYPES=${XM_FREQUENCY_TYPES}")
 
+SET(XM_SAMPLE_TYPE "float" CACHE STRING "Sample type (int8_t,int16_t,float)")
+MARK_AS_ADVANCED(XM_SAMPLE_TYPE)
+
 
 
 OPTION(XM_BUILD_SHARED_LIBS "Build shared library" "ON")
@@ -41,14 +44,19 @@ ENDIF()
 
 IF(XM_DEBUG)
 ADD_DEFINITIONS("-g -Og")
+ELSE()
+ADD_DEFINITIONS("-DNDEBUG")
 ENDIF()
 
 IF(XM_OPTIMISE_FOR_SIZE)
-ADD_DEFINITIONS("-DNDEBUG -Oz -ffast-math -fdata-sections -ffunction-sections -flto -fuse-linker-plugin -fvisibility=hidden")
-SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections,--build-id=none")
+ADD_DEFINITIONS("-DNDEBUG -Oz -flto -ffast-math")
+SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--build-id=none")
 ELSEIF(NOT XM_DEBUG)
-ADD_DEFINITIONS("-O2")
+ADD_DEFINITIONS("-O2 -flto")
 ENDIF()
+
+
+configure_file(${libxm_SOURCE_DIR}/include/xm.h.in ${libxm_SOURCE_DIR}/include/xm.h @ONLY)
 
 LIST(APPEND XM_INCLUDE_DIRS "${libxm_SOURCE_DIR}/include")
 LIST(APPEND XM_LIBRARIES "m")

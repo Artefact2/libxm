@@ -21,32 +21,48 @@ static char libxm_data[] = {
 
 static void gen_waveforms(void) {
 	size_t i;
-	int16_t* buf;
+	xm_sample_point_t* buf;
 	uint32_t len;
+
+	const xm_sample_point_t MAX = _Generic((xm_sample_point_t){},
+	                                       int8_t: INT8_MAX,
+	                                       int16_t: INT16_MAX,
+	                                       float: 1.f);
+	const xm_sample_point_t MIN = _Generic((xm_sample_point_t){},
+	                                       int8_t: INT8_MIN,
+	                                       int16_t: INT16_MIN,
+	                                       float: -1.f);
 
 	/* Square, large duty, half volume */
 	buf = xm_get_sample_waveform(ctx, 1, 0, &len);
-	for(i = 0x40; i < len; ++i) buf[i] = INT16_MAX;
-
-	/* Ramp */
-	buf = xm_get_sample_waveform(ctx, 2, 0, &len);
-	for(i = 0; i < len; ++i) buf[i] = (int16_t)((UINT16_MAX * i) / len);
+	for(i = 0x40; i < len; ++i) buf[i] = MAX;
 
 	/* Square, small duty */
 	buf = xm_get_sample_waveform(ctx, 4, 0, &len);
-	for(i = 0; i < 0x30; ++i) buf[i] = INT16_MAX;
-	for(; i < len; ++i) buf[i] = INT16_MIN;
+	for(i = 0; i < 0x30; ++i) buf[i] = MAX;
+	for(; i < len; ++i) buf[i] = MIN;
+
+	/* Ramp */
+	buf = xm_get_sample_waveform(ctx, 2, 0, &len);
+	for(i = 0; i < len; ++i)
+		buf[i] = _Generic((xm_sample_point_t){},
+		                  int8_t: (int8_t)((UINT8_MAX * i) / len),
+		                  int16_t: (int16_t)((UINT16_MAX * i) / len),
+		                  float: -1.f + 2.f * (float)i / (float)len);
 
 	/* XXX: Kick */
 	/* XXX: Pad */
 	/* XXX: Drum */
 
-	/* Noise */
+	/* Noise (simple linear congruence generator) */
 	buf = xm_get_sample_waveform(ctx, 8, 0, &len);
-	unsigned int next = 1;
+	uint32_t next = 1;
 	for(i = 0; i < len; ++i) {
-		next = next * 8127 + 1; /* A very simple linear congruence generator, see rand(3) */
-		buf[i] = next >> 16;
+		next = next * 214013 + 2531011;
+		buf[i] = _Generic((xm_sample_point_t){},
+		                  int8_t: next >> 16,
+		                  int16_t: next >> 16,
+		                  float: -1.f + (float)(next >> 16) / (float)INT16_MAX);
 	}
 }
 

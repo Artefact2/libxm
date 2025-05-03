@@ -46,7 +46,8 @@ static uint32_t xm_load_pattern(xm_context_t*, xm_pattern_t*, const char*, uint3
 static uint32_t xm_load_instrument(xm_context_t*, xm_instrument_t*, const char*, uint32_t, uint32_t);
 static void xm_fix_envelope(xm_envelope_t*);
 static uint32_t xm_load_sample_header(xm_context_t*, xm_sample_t*, bool*, const char*, uint32_t, uint32_t);
-static uint32_t xm_load_sample_data(bool, uint32_t, int16_t*, const char*, uint32_t, uint32_t);
+static uint32_t xm_load_8b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
+static uint32_t xm_load_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 
 #if XM_DEBUG
 static uint64_t xm_fnv1a(const char*, uint32_t);
@@ -399,7 +400,16 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 	/* Read sample data */
 	for(uint16_t i = 0; i < instr->num_samples; ++i) {
 		xm_sample_t* s = ctx->samples + instr->samples_index + i;
-		offset = xm_load_sample_data(samples_16bit[i], s->length, ctx->samples_data + s->index, moddata, moddata_length, offset);
+		if(samples_16bit[i]) {
+			if(_Generic((xm_sample_point_t){},
+			            int8_t: true,
+			            default: false)) {
+				NOTICE("instrument %ld, sample %u will be crushed from 16 to 8 bits", instr - ctx->instruments + 1, i);
+			}
+			offset = xm_load_16b_sample_data(s->length, ctx->samples_data + s->index, moddata, moddata_length, offset);
+		} else {
+			offset = xm_load_8b_sample_data(s->length, ctx->samples_data + s->index, moddata, moddata_length, offset);
+		}
 	}
 
 	return offset;
@@ -495,29 +505,36 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 	return offset + SAMPLE_HEADER_SIZE;
 }
 
-static uint32_t xm_load_sample_data(bool is_16bit,
-                                  uint32_t length,
-                                  int16_t* out,
-                                  const char* moddata,
-                                  uint32_t moddata_length,
-                                  uint32_t offset) {
-	int16_t v = 0;
-
-	if(is_16bit) {
-		for(uint32_t k = 0; k < length; ++k) {
-			v = v + (int16_t)READ_U16(offset + (k << 1));
-			out[k] = v;
-		}
-		offset += length << 1;
-	} else {
-		for(uint32_t k = 0; k < length; ++k) {
-			v = v + (int16_t)READ_U8(offset + k);
-			out[k] = (v << 8);
-		}
-		offset += length;
+static uint32_t xm_load_8b_sample_data(uint32_t length,
+                                       xm_sample_point_t* out,
+                                       const char* moddata,
+                                       uint32_t moddata_length,
+                                       uint32_t offset) {
+	int8_t v = 0;
+	for(uint32_t k = 0; k < length; ++k) {
+		v = v + (int8_t)READ_U8(offset + k);
+		out[k] = _Generic((xm_sample_point_t){},
+		                  int8_t: v,
+		                  int16_t: v << 8,
+		                  float: (float)v / (float)INT8_MAX);
 	}
+	return offset + length;
+}
 
-	return offset;
+static uint32_t xm_load_16b_sample_data(uint32_t length,
+                                        xm_sample_point_t* out,
+                                        const char* moddata,
+                                        uint32_t moddata_length,
+                                        uint32_t offset) {
+	int16_t v = 0;
+	for(uint32_t k = 0; k < length; ++k) {
+		v = v + (int8_t)READ_U16(offset + (k << 1));
+		out[k] = _Generic((xm_sample_point_t){},
+		                  int8_t: v >> 8, /* XXX: dither */
+		                  int16_t: v,
+		                  float: (float)v / (float)INT16_MAX);
+	}
+	return offset + (length << 1);
 }
 
 
@@ -528,7 +545,7 @@ uint32_t xm_size_for_context(const xm_prescan_data_t* p) {
 		+ sizeof(xm_pattern_slot_t) * p->num_rows * p->num_channels
 		+ sizeof(xm_instrument_t) * p->num_instruments
 		+ sizeof(xm_sample_t) * p->num_samples
-		+ sizeof(int16_t) * p->samples_data_length
+		+ sizeof(xm_sample_point_t) * p->samples_data_length
 		+ sizeof(xm_channel_context_t) * p->num_channels
 		+ sizeof(uint8_t) * MAX_ROWS_PER_PATTERN * p->pot_length;
 }
@@ -553,8 +570,8 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 	mempool += sizeof(xm_instrument_t) * p->num_instruments;
 	ctx->samples = (xm_sample_t*)mempool;
 	mempool += sizeof(xm_sample_t) * p->num_samples;
-	ctx->samples_data = (int16_t*)mempool;
-	mempool += sizeof(int16_t) * p->samples_data_length;
+	ctx->samples_data = (xm_sample_point_t*)mempool;
+	mempool += sizeof(xm_sample_point_t) * p->samples_data_length;
 	ctx->channels = (xm_channel_context_t*)mempool;
 	mempool += sizeof(xm_channel_context_t) * p->num_channels;
 	ctx->row_loop_count = (uint8_t*)mempool;

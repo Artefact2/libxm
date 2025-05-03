@@ -24,6 +24,19 @@ struct xm_prescan_data_s;
 typedef struct xm_prescan_data_s xm_prescan_data_t;
 extern const unsigned int XM_PRESCAN_DATA_SIZE;
 
+/** xm_sample_type_t could be int8_t, int16_t or float: you can use _Generic()
+ * to cover all possibilities at compile-time:
+ *
+ * xm_sample_point_t foo = _Generic(
+ *     (xm_sample_point_t){},
+ *     int8_t: ... ,
+ *     int16_t: ... ,
+ *     float: ...
+ * );
+ *
+ * Do not use sizeof(), unsigned types or int32 might be eventually added. */
+typedef @XM_SAMPLE_TYPE@ xm_sample_point_t;
+
 
 
 /** Pre-load key information from the module file.
@@ -244,7 +257,7 @@ __attribute__((nonnull));
  *
  * @returns pointer to sample data, or NULL on error
  */
-int16_t* xm_get_sample_waveform(xm_context_t*, uint16_t instr,
+xm_sample_point_t* xm_get_sample_waveform(xm_context_t*, uint16_t instr,
                                 uint16_t sample, uint32_t* out_length)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
