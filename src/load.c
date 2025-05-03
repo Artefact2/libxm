@@ -9,6 +9,7 @@
 
 #include "xm_internal.h"
 
+#define EMPTY_PATTERN_NUM_ROWS 64
 #define SAMPLE_HEADER_SIZE 40
 
 /* .xm files are little-endian. */
@@ -98,10 +99,35 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 
 	/* Read pattern headers */
 	for(uint16_t i = 0; i < out->num_patterns; ++i) {
-		out->num_rows += READ_U16(offset + 5);
+		uint16_t num_rows = READ_U16(offset + 5);
+		uint16_t packed_size = READ_U16(offset + 7);
+		if(packed_size == 0 && num_rows != EMPTY_PATTERN_NUM_ROWS) {
+			NOTICE("pattern has zero size but non-default number of rows, overriding: %d -> %d rows", num_rows, EMPTY_PATTERN_NUM_ROWS);
+			num_rows = EMPTY_PATTERN_NUM_ROWS;
+		}
+
+		out->num_rows += num_rows;
 
 		/* Pattern header length + packed pattern data size */
 		offset += READ_U32(offset) + READ_U16(offset + 7);
+	}
+
+	/* Maybe add space for an empty pattern */
+	if(out->pot_length > PATTERN_ORDER_TABLE_LENGTH) {
+		out->pot_length = PATTERN_ORDER_TABLE_LENGTH;
+	}
+	char pot[PATTERN_ORDER_TABLE_LENGTH];
+	READ_MEMCPY(pot, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
+	for(uint16_t i = 0; i < out->pot_length; ++i) {
+		if(pot[i] >= out->num_patterns) {
+			NOTICE("replacing invalid pattern %d in pattern order table with empty pattern", pot[i]);
+			out->num_rows += EMPTY_PATTERN_NUM_ROWS;
+			out->num_patterns += 1;
+			/* All invalid patterns will share the same empty
+			   pattern. Loop can safely stop after finding at least
+			   one. */
+			break;
+		}
 	}
 
 	/* Read instrument headers */
@@ -199,20 +225,7 @@ static uint32_t xm_load_module_header(xm_context_t* ctx,
 	ctx->tempo = READ_U16(offset + 16);
 	ctx->bpm = READ_U16(offset + 18);
 
-	/* Read POT and delete invalid patterns */
 	READ_MEMCPY(mod->pattern_table, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
-	for(uint16_t i = 0; i < mod->length; ++i) {
-		if(mod->pattern_table[i] < mod->num_patterns) {
-			continue;
-		}
-		/* XXX: this will break looping, pattern jumps etc. just insert
-		   a blank pattern */
-		NOTICE("removing invalid pattern %d in pattern order table", mod->pattern_table[i]);
-		mod->length -= 1;
-		__builtin_memmove(mod->pattern_table + i,
-		                  mod->pattern_table + i + 1,
-		                  mod->length - i);
-	}
 
 	return offset + header_size;
 }
@@ -239,8 +252,10 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
 	offset += READ_U32(offset);
 
 	if(packed_patterndata_size == 0) {
-		/* No pattern data is present */
-		/* NB: pattern slot data is already zeroed */
+		/* Assume empty pattern */
+		ctx->module.num_rows -= pat->num_rows;
+		pat->num_rows = EMPTY_PATTERN_NUM_ROWS;
+		ctx->module.num_rows += pat->num_rows;
 		return offset;
 	}
 
@@ -462,7 +477,8 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 	switch(flags & 0b00000011) {
 	#if XM_DEFENSIVE
 	default:
-		NOTICE("unknown loop type (%d) in sample", flags & 3);
+		NOTICE("unknown loop type (%d) in sample, disabling looping",
+		       flags & 3);
 		__attribute__((fallthrough));
 	#endif
 	case 0:
@@ -587,16 +603,33 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 	ctx->global_volume = 1.f;
 	ctx->amplification = .25f; /* XXX: some bad modules may still clip. Find out something better. */
 
-#if XM_RAMPING
+	#if XM_RAMPING
 	ctx->volume_ramp = (1.f / 128.f);
-#endif
+	#endif
 
 	/* Read module header */
 	uint32_t offset = xm_load_module_header(ctx, moddata, moddata_length);
 
 	/* Read pattern headers + slots */
-	for(uint16_t i = 0; i < p->num_patterns; ++i) {
+	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
 		offset = xm_load_pattern(ctx, ctx->patterns + i, moddata, moddata_length, offset);
+	}
+
+	/* Scan for invalid patterns and replace by empty pattern */
+	bool has_invalid_patterns = false;
+	for(uint16_t i = 0; i < ctx->module.length; ++i) {
+		if(ctx->module.pattern_table[i] >= ctx->module.num_patterns) {
+			has_invalid_patterns = true;
+			break;
+		}
+	}
+	if(has_invalid_patterns) {
+		for(uint16_t i = 0; i < ctx->module.length; ++i) {
+			if(ctx->module.pattern_table[i] < ctx->module.num_patterns) continue;
+			ctx->module.pattern_table[i] = ctx->module.num_patterns;
+		}
+		ctx->module.num_patterns += 1;
+		ctx->module.num_rows += EMPTY_PATTERN_NUM_ROWS;
 	}
 
 	/* Read instruments, samples and sample data */
