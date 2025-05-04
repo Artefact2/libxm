@@ -1,68 +1,27 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.21)
-PROJECT(libxm C)
-SET(CMAKE_C_STANDARD 23)
+cmake_minimum_required(VERSION 3.21)
 
-FUNCTION(OPTION_AND_DEFINE name description default_value)
-OPTION(${name} ${description} ${default_value})
-IF(${name})
-ADD_DEFINITIONS(-D${name}=1)
-ELSE()
-ADD_DEFINITIONS(-D${name}=0)
-ENDIF()
-ENDFUNCTION()
+project(libxm LANGUAGES C)
+set(CMAKE_C_STANDARD 23)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE) # use LTO everywhere
 
-OPTION_AND_DEFINE(XM_DEBUG "Enable debug symbols and print debugging messages to stderr" "ON")
-OPTION_AND_DEFINE(XM_DEFENSIVE "Defensively check XM data for errors/inconsistencies (do not play unknown files with this OFF)" "ON")
+option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
+option(XM_BUILD_EXAMPLES "Build example programs" ON)
 
-OPTION_AND_DEFINE(XM_LINEAR_INTERPOLATION "Use linear interpolation (CPU hungry)" "ON")
-OPTION_AND_DEFINE(XM_RAMPING "Enable ramping (smooth volume/panning transitions, CPU hungry)" "ON")
-OPTION_AND_DEFINE(XM_STRINGS "Store module, instrument and sample names in context" "ON")
+# XXX: not portable, check for gcc?
+add_compile_options(
+        "$<$<CONFIG:MinSizeRel>:-Oz>"
+	"$<$<CONFIG:MinSizeRel>:-fshort-enums>"
+	"$<$<CONFIG:MinSizeRel>:-ffast-math>"
+	-Wall -Wextra -Wpadded -Wdouble-promotion -Wpedantic
+)
+add_link_options(
+	"$<$<CONFIG:MinSizeRel>:-z>"
+	"$<$<CONFIG:MinSizeRel>:norelro>"
+	"$<$<CONFIG:MinSizeRel>:-Wl,--build-id=none>"
+)
 
-OPTION_AND_DEFINE(XM_LIBXM_DELTA_SAMPLES "Delta-code samples in libxm format (may improve compressibility, but adds some code size)" "ON")
-MARK_AS_ADVANCED(XM_LIBXM_DELTA_SAMPLES)
+add_subdirectory(src)
 
-SET(XM_FREQUENCY_TYPES "3" CACHE STRING "Supported frequency types (1=Linear,2=Amiga,3=Both)")
-MARK_AS_ADVANCED(XM_FREQUENCY_TYPES)
-ADD_DEFINITIONS("-DXM_FREQUENCY_TYPES=${XM_FREQUENCY_TYPES}")
-
-SET(XM_SAMPLE_TYPE "float" CACHE STRING "Sample type (int8_t,int16_t,float)")
-MARK_AS_ADVANCED(XM_SAMPLE_TYPE)
-
-
-
-OPTION(XM_BUILD_SHARED_LIBS "Build shared library" "ON")
-OPTION(XM_BUILD_EXAMPLES "Build example programs" "ON")
-OPTION(XM_OPTIMISE_FOR_SIZE "Optimize for size (for static linking)" "OFF")
-
-ADD_DEFINITIONS("-Wall -Wextra -Wpadded -Wdouble-promotion -Wpedantic -fshort-enums")
-
-IF(CMAKE_C_BYTE_ORDER STREQUAL "BIG")
-ADD_DEFINITIONS("-DXM_BIG_ENDIAN=1")
-ELSE()
-ADD_DEFINITIONS("-DXM_BIG_ENDIAN=0")
-ENDIF()
-
-IF(XM_DEBUG)
-ADD_DEFINITIONS("-g -Og")
-ELSE()
-ADD_DEFINITIONS("-DNDEBUG")
-ENDIF()
-
-IF(XM_OPTIMISE_FOR_SIZE)
-ADD_DEFINITIONS("-DNDEBUG -Oz -flto -ffast-math")
-SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--build-id=none")
-ELSEIF(NOT XM_DEBUG)
-ADD_DEFINITIONS("-O2 -flto")
-ENDIF()
-
-
-configure_file(${libxm_SOURCE_DIR}/include/xm.h.in ${libxm_SOURCE_DIR}/include/xm.h @ONLY)
-
-LIST(APPEND XM_INCLUDE_DIRS "${libxm_SOURCE_DIR}/include")
-LIST(APPEND XM_LIBRARIES "m")
-
-ADD_SUBDIRECTORY(src)
-
-IF(XM_BUILD_EXAMPLES)
-ADD_SUBDIRECTORY(examples)
-ENDIF()
+if(XM_BUILD_EXAMPLES)
+	add_subdirectory(examples)
+endif()

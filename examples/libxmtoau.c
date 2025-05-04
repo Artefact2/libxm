@@ -35,12 +35,7 @@ static void byteswap32(uint32_t* i) {
 		| (*i >> 24);
 }
 
-#if XM_DEBUG
-int main(void)
-#else
-void _start(void)
-#endif
-{
+int ENTRY(void) {
 	static float buffer[128];
 	xm_context_t* ctx;
 	char* stdin_data = NULL;
@@ -64,7 +59,7 @@ void _start(void)
 
 	while(!xm_get_loop_count(ctx)) {
 		xm_generate_samples(ctx, buffer, sizeof(buffer) / (2 * sizeof(float)));
-		if(!XM_BIG_ENDIAN) {
+		if(LITTLE_ENDIAN) {
 			for(size_t k = 0; k < sizeof(buffer) / sizeof(float); ++k) {
 				byteswap32((uint32_t*)&(buffer[k]));
 			}

@@ -25,13 +25,23 @@ Size
 [crushed](https://gitlab.com/artefact2/xzcrush) to about **5036 bytes** (Linux
 x86_64).
 
+~~~
+mkdir build
+cmake -B build -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_DEFENSIVE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF .
+make -C build libxmtoau
+strip -R .eh_frame_hdr -R .eh_frame build/examples/libxmtoau
+xzcrush build/examples/libxmtoau
+~~~
+
 If you are using libxm to play a single module (like in a demo/intro), disable
 features as suggested by `libxmize` to save a few more bytes.
 
 Examples
 ========
 
-Some example programs are provided.
+Some example programs are provided in `examples/`. They can also help you
+understand how to use libxm in your program (`include/xm.h` is also a great
+place to start).)
 
 * [libxm.js](https://artefact2.github.io/libxm.js/) is a very simple
   XM player/visualiser that runs in a browser (emscripten port).

@@ -1,3 +1,2 @@
 include/xm.h
-build-debug
-build-prod
+build*

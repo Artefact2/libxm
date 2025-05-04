@@ -89,7 +89,7 @@ int main() {
 	/* child  */
 	dup2(pipe_fd[0], STDIN_FILENO);
 	execlp("aplay", "aplay", "-traw", "-fdat",
-	       XM_BIG_ENDIAN ? "-fFLOAT_BE" : "-fFLOAT_LE",
+	       LITTLE_ENDIAN ? "-fFLOAT_LE" : "-fFLOAT_BE",
 	       NULL);
 	__builtin_unreachable();
 }

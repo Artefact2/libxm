@@ -1,15 +1,15 @@
-INCLUDE_DIRECTORIES(${XM_INCLUDE_DIRS})
+add_executable(libxmize libxmize.c)
+target_link_libraries(libxmize PRIVATE xm)
 
-ADD_EXECUTABLE(libxmize libxmize.c)
-TARGET_LINK_LIBRARIES(libxmize ${XM_LIBRARIES} xms)
+add_executable(libxmtoau libxmtoau.c)
+target_link_libraries(libxmtoau PRIVATE xm)
+target_compile_definitions(libxmtoau PRIVATE
+	LITTLE_ENDIAN=$<STREQUAL:${CMAKE_C_BYTE_ORDER},LITTLE_ENDIAN>
+	ENTRY=$<IF:$<CONFIG:MinSizeRel>,_start,main>
+)
+target_link_options(libxmtoau PRIVATE
+	$<$<CONFIG:MinSizeRel>:-nostartfiles>
+)
 
-ADD_EXECUTABLE(libxmtoau libxmtoau.c)
-TARGET_LINK_LIBRARIES(libxmtoau ${XM_LIBRARIES} xms)
-target_link_options(libxmtoau PRIVATE -z norelro)
-if(NOT XM_DEBUG)
-target_link_options(libxmtoau PRIVATE -nostartfiles)
-endif()
-
-
-ADD_SUBDIRECTORY(xmprocdemo)
-ADD_SUBDIRECTORY(xmgl)
+add_subdirectory(xmgl)
+add_subdirectory(xmprocdemo)
