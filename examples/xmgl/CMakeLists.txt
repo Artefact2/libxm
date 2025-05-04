@@ -1,14 +1,16 @@
-set(OpenGL_GL_PREFERENCE LEGACY)
-find_package(OpenGL)
-find_package(PkgConfig)
-if(${PKG_CONFIG_FOUND})
-	pkg_search_module(JACK IMPORTED_TARGET jack)
-	pkg_search_module(GLFW IMPORTED_TARGET glfw3)
-endif()
+cmake_minimum_required(VERSION 3.21)
+project(xmprocdemo LANGUAGES C)
 
-if(${GLFW_FOUND} AND ${JACK_FOUND} AND ${OPENGL_FOUND})
-	add_executable(xmgl xmgl.c)
-        target_link_libraries(xmgl PRIVATE xm OpenGL::GL PkgConfig::JACK PkgConfig::GLFW)
-else()
-	message(NOTICE "Will not build xmgl, some dependencies were not found")
-endif()
+include(../../common.cmake)
+add_subdirectory(../../src xm_build)
+
+set(OpenGL_GL_PREFERENCE LEGACY)
+find_package(OpenGL REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_search_module(JACK REQUIRED IMPORTED_TARGET jack)
+pkg_search_module(GLFW REQUIRED IMPORTED_TARGET glfw3)
+
+add_executable(xmgl xmgl.c)
+target_link_libraries(xmgl
+	PRIVATE xm OpenGL::GL PkgConfig::JACK PkgConfig::GLFW
+)

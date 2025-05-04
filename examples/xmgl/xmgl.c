@@ -9,11 +9,12 @@
 #define _DEFAULT_SOURCE
 #define GL_GLEXT_PROTOTYPES
 
-#include "../testprog.h"
+#include <xm.h>
 #include <jack/jack.h>
 #include <GLFW/glfw3.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <math.h>
 #include <assert.h>
 
@@ -131,12 +132,19 @@ static jack_nframes_t glf_last = 0;
 static uint64_t gl_framecount = 0;
 static uint64_t gl_latency = 0;
 
-void usage(char* progname) {
-	FATAL("Usage:\n" "\t%s\n"
-		  "\t\tShow this message.\n"
-	      "\t%s [--fullscreen] [--width 1024] [--height 1024] [--interval 1] [--no-autoconnect] [--paused] [--loop] [--program 0] [--] <filename>\n"
-		  "\t\tPlay this module.\n\nKey bindings:\n\t<ESC>/q quit\n\t<Space> play/pause\n\tL toggle looping\n\t</> change programs\n",
-		  progname, progname);
+static void usage(const char* progname) {
+	fprintf(stderr,
+	        "Usage:\n" "\t%s\n"
+	        "\t\tShow this message.\n"
+	        "\t%s [--fullscreen] [--width 1024] [--height 1024]"
+	        " [--interval 1] [--no-autoconnect] [--paused] "
+	        "[--loop] [--program 0] [--] <filename>\n"
+	        "\t\tPlay this module.\n\nKey bindings:\n"
+	        "\t<ESC>/q quit\n"
+	        "\t<Space> play/pause\n"
+	        "\tL toggle looping\n"
+	        "\t</> change programs\n",
+	        progname, progname);
 }
 
 static void generate_timing_frame(float* lbuf, float* rbuf, jack_nframes_t tframes) {
@@ -219,7 +227,7 @@ void jack_latency_callback(jack_latency_callback_mode_t mode, __attribute__((unu
 	jack_latency = range.max;
 }
 
-void switch_program(void) {
+static void switch_program(void) {
 	xmgu = glGetUniformLocation(programs[curprog], "xmg");
 	xmdatau = glGetUniformLocation(programs[curprog], "xmdata");
 	xmciu = glGetUniformLocation(programs[curprog], "xmci");
@@ -256,7 +264,51 @@ void charfun(GLFWwindow* window, unsigned int codepoint) {
 	}
 }
 
-void setup(int argc, char** argv) {
+static xm_context_t* create_context_from_file(uint32_t rate, const char* filename) {
+	xm_context_t* ctx = NULL;
+	char* xm_data = NULL;
+	FILE* xmfile = NULL;
+	char prescan_data[XM_PRESCAN_DATA_SIZE];
+	long size;
+
+	xmfile = fopen(filename, "rb");
+	if(xmfile == NULL) {
+		perror("fopen");
+		goto end;
+	}
+
+	if(fseek(xmfile, 0, SEEK_END)) {
+		perror("fseek");
+		goto end;
+	}
+
+	xm_data = malloc(size = ftell(xmfile));
+	if(xm_data == NULL) goto end;
+
+	rewind(xmfile);
+	if(!fread(xm_data, size, 1, xmfile)) {
+		perror("fread");
+		goto end;
+	}
+
+	xm_prescan_data_t* p = (xm_prescan_data_t*)prescan_data;
+	if(xm_prescan_module(xm_data, size, p) == false) {
+		fprintf(stderr, "xm_prescan_module() failed\n");
+		goto end;
+	}
+
+	uint32_t ctx_size = xm_size_for_context(p);
+	char* ctx_data = malloc(ctx_size);
+	if(ctx_data == NULL) goto end;
+	ctx = xm_create_context(ctx_data, p, xm_data, size, rate);
+
+ end:
+	if(xm_data) free(xm_data);
+	if(xmfile) fclose(xmfile);
+	return ctx;
+}
+
+static void setup(int argc, char** argv) {
 	int filenameidx = 1;
 
 	for(int i = 1; i < argc; ++i) {
@@ -266,21 +318,30 @@ void setup(int argc, char** argv) {
 		}
 
 		if(!strcmp(argv[i], "--width")) {
-			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
+			if(argc == i+1) {
+				fprintf(stderr, "%s: expected argument after %s\n", argv[0], argv[i]);
+				exit(1);
+			}
 			width = strtoul(argv[i+1], NULL, 0);
 			++i;
 			continue;
 		}
 
 		if(!strcmp(argv[i], "--height")) {
-			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
+			if(argc == i+1) {
+				fprintf(stderr, "%s: expected argument after %s\n", argv[0], argv[i]);
+				exit(1);
+			}
 			height = strtoul(argv[i+1], NULL, 0);
 			++i;
 			continue;
 		}
 
 		if(!strcmp(argv[i], "--interval")) {
-			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
+			if(argc == i+1) {
+				fprintf(stderr, "%s: expected argument after %s\n", argv[0], argv[i]);
+				exit(1);
+			}
 			interval = strtoul(argv[i+1], NULL, 0);
 			++i;
 			continue;
@@ -307,7 +368,10 @@ void setup(int argc, char** argv) {
 		}
 
 		if(!strcmp(argv[i], "--program")) {
-			if(argc == i+1) FATAL("%s: expected argument after %s\n", argv[0], argv[i]);
+			if(argc == i+1) {
+				fprintf(stderr, "%s: expected argument after %s\n", argv[0], argv[i]);
+				exit(1);
+			}
 			curprog = strtoul(argv[i+1], NULL, 0);
 			curprog %= sizeof(programs) / sizeof(programs[0]);
 			++i;
@@ -362,7 +426,8 @@ void setup(int argc, char** argv) {
 
 	client = jack_client_open("xmgl", JackNullOption, NULL);
 	if(client == NULL) {
-		FATAL("jack_client_open() returned NULL\n");
+		fprintf(stderr, "jack_client_open() returned NULL\n");
+		exit(1);
 	}
 	printf("JACK client name: %s\n", jack_get_client_name(client));
 	printf("JACK buffer size: %d frames\n", jack_get_buffer_size(client));
@@ -379,7 +444,6 @@ void setup(int argc, char** argv) {
 	if(xmctx == NULL) exit(1);
 	channels = xm_get_number_of_channels(xmctx);
 	instruments = xm_get_number_of_instruments(xmctx);
-
 	mti.latest_cti_idx = NUM_TIMING - 1;
 
 	jack_activate(client);
@@ -406,14 +470,13 @@ void setup(int argc, char** argv) {
 	memset(glf_times, 0, GL_FRAMES_AVG_COUNT * sizeof(jack_nframes_t));
 }
 
-void teardown(void) {
+static void teardown(void) {
 	jack_client_close(client);
-	munmap(xmctx, xm_context_size(xmctx));
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
 
-void render(void) {
+static void render(void) {
 	int width, height, active;
 
 	glfwGetFramebufferSize(window, &width, &height);

@@ -1,3 +1,8 @@
+cmake_minimum_required(VERSION 3.21)
+project(libxm LANGUAGES C)
+
+include(../common.cmake)
+
 add_library(xm xm.c load.c play.c)
 
 # Bump this when breaking public ABI

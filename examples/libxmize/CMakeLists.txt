@@ -1,3 +1,9 @@
+cmake_minimum_required(VERSION 3.21)
+project(libxmize LANGUAGES C)
+
+include(../../common.cmake)
+add_subdirectory(../../src xm_build)
+
 add_executable(libxmize libxmize.c)
 target_link_libraries(libxmize PRIVATE xm)
 
@@ -8,8 +14,5 @@ target_compile_definitions(libxmtoau PRIVATE
 	ENTRY=$<IF:$<CONFIG:MinSizeRel>,_start,main>
 )
 target_link_options(libxmtoau PRIVATE
-	$<$<CONFIG:MinSizeRel>:-nostartfiles>
+       $<$<CONFIG:MinSizeRel>:-nostartfiles>
 )
-
-add_subdirectory(xmgl)
-add_subdirectory(xmprocdemo)
