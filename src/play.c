@@ -226,7 +226,7 @@ static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(ch->tone_portamento_target_period == 0.f) return;
 
 	float incr = ch->tone_portamento_param;
-	#if XM_FREQUENCY_TYPES == 2
+	#if XM_FREQUENCY_TYPES == 1
 	incr *= 4.f;
 	#elif XM_FREQUENCY_TYPES == 3
 	if(ctx->module.frequency_type == XM_LINEAR_FREQUENCIES) {
@@ -245,7 +245,7 @@ static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch, float period_offset) {
 	/* Don't ask about the 4.f coefficient. I found mention of it
 	 * nowhere. Found by ear™. */
-	#if XM_FREQUENCY_TYPES == 2
+	#if XM_FREQUENCY_TYPES == 1
 	period_offset *= 4.f;
 	#elif XM_FREQUENCY_TYPES == 3
 	if(ctx->module.frequency_type == XM_LINEAR_FREQUENCIES) {
