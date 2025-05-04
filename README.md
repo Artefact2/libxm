@@ -50,8 +50,10 @@ place to start).
   precise audio synchronisation. See a demo here:
   <https://www.youtube.com/watch?v=SR-fSa7J698>
 
-* `xmprocdemo`: a simple non-interactive demo that plays back (using ALSA) a
-  single module with procedurally generated samples.
+* `xmprocdemo`: a simple non-interactive demo that plays back a single module
+  with procedurally generated samples. Somewhat optimized for size. ([Dream
+  Candy](https://modarchive.org/module.php?178565) by Drozerix, public domain.
+  Thank you Drozerix for the great music!)
 
 * `libxmize` converts a `.xm` module to the libxm format. It is highly
   non-portable and is meant for static linking and sizecoding (loading code is
