@@ -112,6 +112,7 @@ struct channel_timing_info {
 	float panning;
 	uint16_t instrument;
 	bool active;
+	char __pad[1];
 };
 
 struct module_timing_info {

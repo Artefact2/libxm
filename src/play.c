@@ -1299,12 +1299,12 @@ static float xm_sample_at(xm_context_t* ctx, xm_sample_t* sample, size_t k) {
 
 static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
-#if XM_RAMPING
+		#if XM_RAMPING
 		if(ch->frame_count < RAMPING_POINTS) {
 			return XM_LERP(ch->end_of_previous_sample[ch->frame_count], .0f,
 			               (float)ch->frame_count / (float)RAMPING_POINTS);
 		}
-#endif
+		#endif
 		return .0f;
 	}
 	if(ch->sample->length == 0) {
@@ -1394,13 +1394,13 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	float endval = (XM_LINEAR_INTERPOLATION ? XM_LERP(u, v, t) : u);
 
-#if XM_RAMPING
+	#if XM_RAMPING
 	if(ch->frame_count < RAMPING_POINTS) {
 		/* Smoothly transition between old and new sample. */
 		return XM_LERP(ch->end_of_previous_sample[ch->frame_count], endval,
 		               (float)ch->frame_count / (float)RAMPING_POINTS);
 	}
-#endif
+	#endif
 
 	return endval;
 }

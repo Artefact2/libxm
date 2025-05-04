@@ -74,6 +74,7 @@ struct xm_envelope_s {
 	bool enabled:1;
 	bool sustain_enabled:1;
 	bool loop_enabled:1;
+	uint16_t __pad:13;
 };
 typedef struct xm_envelope_s xm_envelope_t;
 
@@ -97,6 +98,8 @@ struct xm_sample_s {
 
 	#if XM_STRINGS
 	char name[SAMPLE_NAME_LENGTH + 1];
+	#else
+	char __pad[1];
 	#endif
 };
 typedef struct xm_sample_s xm_sample_t;
@@ -118,6 +121,8 @@ struct xm_instrument_s {
 
 	#if XM_STRINGS
 	char name[INSTRUMENT_NAME_LENGTH + 1];
+	#else
+	char __pad[1];
 	#endif
 };
 typedef struct xm_instrument_s xm_instrument_t;
@@ -135,6 +140,7 @@ struct xm_pattern_s {
 	/* ctx->pattern_slots[index..(index+num_rows)] */
 	uint32_t slots_index;
 	uint16_t num_rows;
+	char __pad[2];
 };
 typedef struct xm_pattern_s xm_pattern_t;
 
@@ -159,6 +165,8 @@ struct xm_module_s {
 	#if XM_STRINGS
 	char name[MODULE_NAME_LENGTH + 1];
 	char trackername[TRACKER_NAME_LENGTH + 1];
+	#elif XM_FREQUENCY_TYPES == 3
+	char __pad[3];
 	#endif
 };
 typedef struct xm_module_s xm_module_t;
@@ -184,6 +192,9 @@ struct xm_channel_context_s {
 	float panning; /* Between 0 (left) and 1 (right); 0.5 is centered */
 	float actual_volume[2]; /* Multiplier for left/right channel */
 	float tremolo_volume;
+	float fadeout_volume;
+	float volume_envelope_volume;
+	float panning_envelope_panning;
 
 	#if XM_RAMPING
 	/* These values are updated at the end of each tick, to save
@@ -193,10 +204,6 @@ struct xm_channel_context_s {
 	uint32_t frame_count; /* Gets reset after every note */
 	float end_of_previous_sample[RAMPING_POINTS];
 	#endif
-
-	float fadeout_volume;
-	float volume_envelope_volume;
-	float panning_envelope_panning;
 
 	uint16_t vibrato_ticks; /* Position in the waveform */
 	uint16_t autovibrato_ticks;
