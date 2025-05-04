@@ -259,10 +259,12 @@ static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch, float pe
 static void xm_panning_slide(xm_channel_context_t* ch, uint8_t rawval) {
 	float f;
 
+	#if XM_DEFENSIVE
 	if((rawval & 0xF0) && (rawval & 0x0F)) {
 		/* Illegal state */
 		return;
 	}
+	#endif
 
 	if(rawval & 0xF0) {
 		/* Slide right */
@@ -280,10 +282,12 @@ static void xm_panning_slide(xm_channel_context_t* ch, uint8_t rawval) {
 static void xm_volume_slide(xm_channel_context_t* ch, uint8_t rawval) {
 	float f;
 
+	#if XM_DEFENSIVE
 	if((rawval & 0xF0) && (rawval & 0x0F)) {
 		/* Illegal state */
 		return;
 	}
+	#endif
 
 	if(rawval & 0xF0) {
 		/* Slide up */
@@ -434,11 +438,7 @@ static float xm_period(xm_context_t* ctx, float note) {
 	case XM_AMIGA_FREQUENCIES:
 		return xm_amiga_period(note);
 	}
-	#if XM_DEFENSIVE
-	return 0.f;
-	#else
 	__builtin_unreachable();
-	#endif
 }
 static float xm_frequency(xm_context_t* ctx, float period, float note_offset, float period_offset) {
 	switch(ctx->module.frequency_type) {
@@ -447,11 +447,7 @@ static float xm_frequency(xm_context_t* ctx, float period, float note_offset, fl
 	case XM_AMIGA_FREQUENCIES:
 		return xm_amiga_frequency(period, note_offset, period_offset);
 	}
-	#if XM_DEFENSIVE
-	return 0.f;
-	#else
 	__builtin_unreachable();
-	#endif
 }
 #endif
 
@@ -485,7 +481,13 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 		}
 	}
 
-	if(NOTE_IS_VALID(s->note)) {
+	if(s->note == 97) {
+		/* Key Off */
+		xm_key_off(ch);
+	} else if(s->note) {
+		/* Non-zero note, also not key off. Assume note is valid, since
+		   invalid notes are deleted in load.c. */
+
 		/* Yes, the real note number is s->note -1. Try finding
 		 * THAT in any of the specs! :-) */
 
@@ -521,9 +523,6 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 				xm_cut_note(ch);
 			}
 		}
-	} else if(s->note == 97) {
-		/* Key Off */
-		xm_key_off(ch);
 	}
 
 	switch(s->volume_column >> 4) {
@@ -565,9 +564,6 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 			ch->tone_portamento_param = ((s->volume_column & 0x0F) << 4)
 				| (s->volume_column & 0x0F);
 		}
-		break;
-
-	default:
 		break;
 
 	}
@@ -765,9 +761,6 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 			ctx->extra_ticks = (ch->current->effect_param & 0x0F) * ctx->tempo;
 			break;
 
-		default:
-			break;
-
 		}
 		break;
 
@@ -839,13 +832,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 			xm_pitch_slide(ctx, ch, ch->extra_fine_portamento_down_param);
 			break;
 
-		default:
-			break;
-
 		}
-		break;
-
-	default:
 		break;
 
 	}
@@ -1094,7 +1081,7 @@ static void xm_tick(xm_context_t* ctx) {
 
 		case 0: /* 0xy: Arpeggio */
 			if(ch->current->effect_param == 0) break;
-			char arp_offset = ctx->tempo % 3;
+			uint8_t arp_offset = ctx->tempo % 3;
 			switch(arp_offset) {
 			case 2: /* 0 -> x -> 0 -> y -> x -> … */
 				if(ctx->current_tick == 1) {
@@ -1114,8 +1101,6 @@ static void xm_tick(xm_context_t* ctx) {
 				__attribute__((fallthrough));
 			case 0: /* 0 -> y -> x -> … */
 				xm_arpeggio(ctx, ch, ch->current->effect_param, ctx->current_tick - arp_offset);
-			default:
-				break;
 			}
 			break;
 
@@ -1186,9 +1171,6 @@ static void xm_tick(xm_context_t* ctx) {
 					xm_handle_note_and_instrument(ctx, ch, ch->current);
 					xm_envelopes(ch);
 				}
-				break;
-
-			default:
 				break;
 
 			}
@@ -1388,8 +1370,8 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	default:
-		v = .0f;
-		break;
+		/* Invalid loop types are deleted in load.c */
+		__builtin_unreachable();
 	}
 
 	float endval = (XM_LINEAR_INTERPOLATION ? XM_LERP(u, v, t) : u);

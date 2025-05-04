@@ -22,7 +22,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **4971 bytes** (Linux
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **4956 bytes** (Linux
 x86_64).
 
 ~~~
@@ -41,7 +41,7 @@ Examples
 
 Some example programs are provided in `examples/`. They can also help you
 understand how to use libxm in your program (`include/xm.h` is also a great
-place to start).)
+place to start).
 
 * [libxm.js](https://artefact2.github.io/libxm.js/) is a very simple
   XM player/visualiser that runs in a browser (emscripten port).
