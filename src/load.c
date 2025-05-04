@@ -314,6 +314,8 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
 			NOTICE("pattern %u slot %u: deleting invalid note %d",
 			       pat - ctx->patterns, slot - slots, slot->note);
 			slot->note = 0;
+		} else if(slot->note == 97) {
+			slot->note = KEY_OFF_NOTE;
 		}
 	}
 

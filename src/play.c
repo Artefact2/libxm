@@ -115,7 +115,11 @@ static bool HAS_ARPEGGIO(const xm_pattern_slot_t* s) {
 }
 
 static bool NOTE_IS_VALID(uint8_t n) {
-	return n > 0 && n < 97;
+	return n & ~KEY_OFF_NOTE;
+}
+
+static bool NOTE_IS_KEY_OFF(uint8_t n) {
+	return n & KEY_OFF_NOTE;
 }
 
 /* ----- Function definitions ----- */
@@ -481,7 +485,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 		}
 	}
 
-	if(s->note == 97) {
+	if(NOTE_IS_KEY_OFF(s->note)) {
 		/* Key Off */
 		xm_key_off(ch);
 	} else if(s->note) {

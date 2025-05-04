@@ -48,6 +48,10 @@ _Static_assert(_Generic((xm_sample_point_t){},
 #define MAX_ROWS_PER_PATTERN 256
 #define RAMPING_POINTS 0x20
 
+/* Not the original key off (97), this is the value used by libxm once a ctx
+   has been loaded */
+#define KEY_OFF_NOTE 128
+
 /* ----- Data types ----- */
 
 enum xm_waveform_type_e {
@@ -128,8 +132,8 @@ struct xm_instrument_s {
 typedef struct xm_instrument_s xm_instrument_t;
 
 struct xm_pattern_slot_s {
-	uint8_t note; /* 1-96, 97 = Key Off note */
-	uint8_t instrument; /* 1-128 */
+	uint8_t note; /* 1..=96 = Notes 0..=95, KEY_OFF_NOTE = Key Off */
+	uint8_t instrument; /* 1..=128 */
 	uint8_t volume_column;
 	uint8_t effect_type;
 	uint8_t effect_param;
