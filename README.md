@@ -18,6 +18,38 @@ features:
 
 Written in C23 and released under the WTFPL license, version 2.
 
+Building
+========
+
+* Build the library:
+
+  ~~~
+  mkdir build
+  cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -B build src
+  make -C build
+  ~~~
+
+* Build a specific example:
+
+  ~~~
+  mkdir build-FOO
+  cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -B build examples/FOO
+  make -C build-FOO
+  ~~~
+
+* To build a shared library and link dynamically, use
+  `cmake -DBUILD_SHARED_LIBS=ON`.
+
+* To see a list of build options, use `cmake -L` or `cmake-gui`.
+
+* To use libxm in your program, put these lines in the `CMakeLists.txt` of your  project, then `#include <xm.h>`:
+
+  ~~~
+  add_subdirectory(/path/to/libxm/src libxm_build)
+  target_link_libraries(my_stuff PRIVATE xm)
+  ~~~
+
+
 Size
 ====
 
@@ -38,10 +70,6 @@ features as suggested by `libxmize` to save a few more bytes.
 
 Examples
 ========
-
-Some example programs are provided in `examples/`. They can also help you
-understand how to use libxm in your program (`include/xm.h` is also a great
-place to start).
 
 * [libxm.js](https://artefact2.github.io/libxm.js/) is a very simple
   XM player/visualiser that runs in a browser (emscripten port).
@@ -74,73 +102,6 @@ accuracy):
 * [Raina - Slumberjack](http://modarchive.org/module.php?148721)
 * [Strobe - One for all](http://modarchive.org/module.php?161246)
 * [Strobe - Paralysicical death](http://modarchive.org/module.php?65817)
-
-Status
-======
-
-Effects
--------
-
-~~~
- Status |##| Eff | Info | Description
---------+--+-----+------+------------------------------
-DONE    |00|  0  |      | Arpeggio
-DONE    |01|  1  |  (*) | Porta up
-DONE    |02|  2  |  (*) | Porta down
-DONE    |03|  3  |  (*) | Tone porta
-DONE    |04|  4  |  (*) | Vibrato
-DONE    |05|  5  |  (*) | Tone porta+Volume slide
-DONE    |06|  6  |  (*) | Vibrato+Volume slide
-DONE    |07|  7  |  (*) | Tremolo
-DONE    |08|  8  |      | Set panning
-DONE    |09|  9  |      | Sample offset
-DONE    |10|  A  |  (*) | Volume slide
-DONE    |11|  B  |      | Position jump
-DONE    |12|  C  |      | Set volume
-DONE    |13|  D  |      | Pattern break
-DONE    |14|  E1 |  (*) | Fine porta up
-DONE    |--|  E2 |  (*) | Fine porta down
-        |--|  E3 |      | Set gliss control
-DONE    |--|  E4 |      | Set vibrato control
-DONE    |--|  E5 |      | Set finetune
-DONE    |--|  E6 |      | Set loop begin/loop
-UNTESTED|--|  E7 |      | Set tremolo control
-DONE    |--|  E9 |      | Retrig note
-DONE    |--|  EA |  (*) | Fine volume slide up
-DONE    |--|  EB |  (*) | Fine volume slide down
-DONE    |--|  EC |      | Note cut
-DONE    |--|  ED |      | Note delay
-DONE    |--|  EE |      | Pattern delay
-DONE    |15|  F  |      | Set tempo/BPM
-DONE    |16|  G  |      | Set global volume
-DONE    |17|  H  |  (*) | Global volume slide
-DONE    |20|  K  |      | Key off              (Also note number 97)
-DONE    |21|  L  |      | Set envelope position
-DONE    |25|  P  |  (*) | Panning slide
-DONE    |27|  R  |  (*) | Multi retrig note
-DONE    |29|  T  |  (*) | Tremor
-DONE    |33|  X1 |  (*) | Extra fine porta up
-DONE    |--|  X2 |  (*) | Extra fine porta down
-~~~
-
-Volume effects
---------------
-
-~~~
- Status |  Value  | Meaning
---------+---------+-----------------------------
-DONE    | $10-$50 | Set volume (Value-$10)
-DONE    | $60-$6f | Volume slide down
-DONE    | $70-$7f | Volume slide up
-DONE    | $80-$8f | Fine volume slide down
-DONE    | $90-$9f | Fine volume slide up
-DONE    | $a0-$af | Set vibrato speed
-DONE    | $b0-$bf | Vibrato
-DONE    | $c0-$cf | Set panning
-DONE    | $d0-$df | Panning slide left
-DONE    | $e0-$ef | Panning slide right
-DONE    | $f0-$ff | Tone porta
-~~~
 
 Known issues
 ------------
