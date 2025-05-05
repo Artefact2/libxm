@@ -12,5 +12,5 @@ pkg_search_module(GLFW REQUIRED IMPORTED_TARGET glfw3)
 
 add_executable(xmgl xmgl.c)
 target_link_libraries(xmgl
-	PRIVATE xm OpenGL::GL PkgConfig::JACK PkgConfig::GLFW
+	PRIVATE xm m OpenGL::GL PkgConfig::JACK PkgConfig::GLFW
 )

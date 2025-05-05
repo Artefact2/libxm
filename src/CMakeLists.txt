@@ -11,7 +11,7 @@ set_target_properties(xm PROPERTIES SOVERSION 4)
 find_library(MATH_LIBRARY m REQUIRED)
 target_include_directories(xm SYSTEM PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/../include")
 target_compile_options(xm PRIVATE -fshort-enums)
-target_link_libraries(xm PUBLIC ${MATH_LIBRARY})
+target_link_libraries(xm PRIVATE ${MATH_LIBRARY})
 target_compile_definitions(xm PRIVATE
 	XM_BIG_ENDIAN=$<STREQUAL:${CMAKE_C_BYTE_ORDER},BIG_ENDIAN>
 	XM_DEBUG=$<BOOL:$<CONFIG:Debug>>
