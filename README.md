@@ -13,8 +13,8 @@ features:
 * Samples can be loaded and altered at run-time, making it possible to
   use libxm with softsynths or other real-time signal processors.
 
-* Should be fairly portable (only dependency is `libm`). The example programs
-  mostly target Linux.
+* Should be fairly portable (only dependency is `libm`). Big-endian compatible
+  (tested on s390x). The example programs mostly target Linux.
 
 Written in C23 and released under the WTFPL license, version 2.
 

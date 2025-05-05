@@ -12,9 +12,7 @@
 #define EMPTY_PATTERN_NUM_ROWS 64
 #define SAMPLE_HEADER_SIZE 40
 
-/* .xm files are little-endian. */
-
-/* Bounded reader macros.
+/* Bounded reader macros (assume little-endian, .XM files always are).
  * If we attempt to read the buffer out-of-bounds, pretend that the buffer is
  * infinitely padded with zeroes.
  */

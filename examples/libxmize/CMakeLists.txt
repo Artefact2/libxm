@@ -10,7 +10,7 @@ target_link_libraries(libxmize PRIVATE xm)
 add_executable(libxmtoau libxmtoau.c)
 target_link_libraries(libxmtoau PRIVATE xm)
 target_compile_definitions(libxmtoau PRIVATE
-	LITTLE_ENDIAN=$<STREQUAL:${CMAKE_C_BYTE_ORDER},LITTLE_ENDIAN>
+	XM_LITTLE_ENDIAN=$<STREQUAL:${CMAKE_C_BYTE_ORDER},LITTLE_ENDIAN>
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang)$")

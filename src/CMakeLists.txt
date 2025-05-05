@@ -13,7 +13,6 @@ target_include_directories(xm SYSTEM PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/../incl
 target_compile_options(xm PRIVATE -fshort-enums)
 target_link_libraries(xm PRIVATE ${MATH_LIBRARY})
 target_compile_definitions(xm PRIVATE
-	XM_BIG_ENDIAN=$<STREQUAL:${CMAKE_C_BYTE_ORDER},BIG_ENDIAN>
 	XM_DEBUG=$<BOOL:$<CONFIG:Debug>>
 )
 

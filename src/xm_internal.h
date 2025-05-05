@@ -28,7 +28,6 @@
 #define DEBUG(...)
 #endif
 
-_Static_assert(!XM_BIG_ENDIAN, "Big endian support is still a WIP");
 _Static_assert(XM_FREQUENCY_TYPES >= 1 && XM_FREQUENCY_TYPES <= 3,
                "Unsupported value of XM_FREQUENCY_TYPES");
 _Static_assert(_Generic((xm_sample_point_t){},

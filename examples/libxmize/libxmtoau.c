@@ -21,12 +21,13 @@ static const unsigned char header[] = {
 	'.', 's', 'n', 'd', /* .snd magic */
 	0, 0, 0, 28, /* header size */
 	255, 255, 255, 255, /* data size (unknown) */
-	0, 0, 0, 6, /* encoding (ieee float32) */
+	0, 0, 0, 6, /* encoding (float32be) */
 	0, 0, 187, 128, /* sample rate (48000) */
 	0, 0, 0, 2, /* channels */
 	0, 0, 0, 0, /* description string (min 4 bytes) */
 };
 
+#if XM_LITTLE_ENDIAN
 static void byteswap32(uint32_t* i) {
 	/* (optimised into single bswap instruction) */
 	*i = (*i << 24)
@@ -34,6 +35,7 @@ static void byteswap32(uint32_t* i) {
 		| (*i >> 8 & 0xFF00)
 		| (*i >> 24);
 }
+#endif
 
 int ENTRY(void) {
 	static float buffer[128];
@@ -59,11 +61,11 @@ int ENTRY(void) {
 
 	while(!xm_get_loop_count(ctx)) {
 		xm_generate_samples(ctx, buffer, sizeof(buffer) / (2 * sizeof(float)));
-		if(LITTLE_ENDIAN) {
-			for(size_t k = 0; k < sizeof(buffer) / sizeof(float); ++k) {
-				byteswap32((uint32_t*)&(buffer[k]));
-			}
+		#if XM_LITTLE_ENDIAN
+		for(size_t k = 0; k < sizeof(buffer) / sizeof(float); ++k) {
+			byteswap32((uint32_t*)&(buffer[k]));
 		}
+		#endif
 		maybe_assert_eq(write(STDOUT_FILENO, buffer, sizeof(buffer)), (ssize_t)sizeof(buffer));
 	}
 
