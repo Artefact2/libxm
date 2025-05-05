@@ -35,6 +35,11 @@ _Static_assert(_Generic((xm_sample_point_t){},
                         int8_t: true, int16_t: true, float: true,
                         default: false),
                "Unsupported value of XM_SAMPLE_TYPE");
+_Static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
+                                                    float: true,
+                                                    default: false)),
+               "XM_LIBXM_DELTA_SAMPLES cannot be used "
+               "with XM_SAMPLE_TYPE=float");
 
 /* ----- XM constants ----- */
 

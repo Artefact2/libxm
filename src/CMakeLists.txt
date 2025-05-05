@@ -42,7 +42,7 @@ option_and_define(XM_LIBXM_DELTA_SAMPLES
 	"Delta-code samples in libxm format (may improve compressibility, but adds some code size)"
 	"ON")
 
-set(XM_SAMPLE_TYPE "float" CACHE STRING
+set(XM_SAMPLE_TYPE "int16_t" CACHE STRING
 	"Sample type of internal samples (int8_t,int16_t,float)")
 
 option_and_define(XM_STRINGS
