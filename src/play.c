@@ -531,13 +531,13 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 
 	case 0x5:
 		if(s->volume_column > 0x50) break;
-		__attribute__((fallthrough));
+		[[fallthrough]];
 	case 0x1:
-		__attribute__((fallthrough));
+		[[fallthrough]];
 	case 0x2:
-		__attribute__((fallthrough));
+		[[fallthrough]];
 	case 0x3:
-		__attribute__((fallthrough));
+		[[fallthrough]];
 	case 0x4:
 		/* Set volume */
 		ch->volume = (float)(s->volume_column - 0x10) / (float)0x40;
@@ -1092,7 +1092,7 @@ static void xm_tick(xm_context_t* ctx) {
 					xm_update_frequency(ctx, ch);
 					break;
 				}
-				__attribute__((fallthrough));
+				[[fallthrough]];
 			case 1: /* 0 -> 0 -> y -> x -> … */
 				if(ctx->current_tick == 0) {
 					ch->arp_in_progress = false;
@@ -1100,7 +1100,7 @@ static void xm_tick(xm_context_t* ctx) {
 					xm_update_frequency(ctx, ch);
 					break;
 				}
-				__attribute__((fallthrough));
+				[[fallthrough]];
 			case 0: /* 0 -> y -> x -> … */
 				xm_arpeggio(ctx, ch, ch->current->effect_param, ctx->current_tick - arp_offset);
 			}
