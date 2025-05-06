@@ -142,6 +142,18 @@ __attribute__((nonnull));
 void xm_generate_samples(xm_context_t*, float* output, uint16_t numsamples)
 __attribute__((nonnull(1)));
 
+/** Same as xm_generate_samples(), but does not mix down the channels. For
+ * instance, for a 4-channel module, one audio frame is 8 floats (LRLRLRLR).
+ *
+ * @param output[.2*numsamples*num_channels] buffer of
+ * 2*xm_get_number_of_channels(ctx)*numsamples elements
+ *
+ * @param numsamples number of samples to generate
+ */
+void xm_generate_samples_unmixed(xm_context_t*, float* output,
+                                 uint16_t numsamples)
+__attribute__((nonnull(1)));
+
 
 
 /** Set the maximum number of times a module can loop. After the

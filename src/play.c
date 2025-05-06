@@ -46,9 +46,11 @@ static void xm_post_pattern_change(xm_context_t*) __attribute__((nonnull));
 static void xm_row(xm_context_t*) __attribute__((nonnull));
 static void xm_tick(xm_context_t*) __attribute__((nonnull));
 
-static float xm_sample_at(xm_context_t*, xm_sample_t*, size_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static float xm_sample_at(const xm_context_t*, const xm_sample_t*, size_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static float xm_next_of_sample(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static void xm_sample(xm_context_t*, float*, float*) __attribute__((nonnull));
+static void xm_next_of_channel(xm_context_t*, xm_channel_context_t*, float*) __attribute__((nonnull));
+static void xm_sample_unmixed(xm_context_t*, float*) __attribute__((nonnull));
+static void xm_sample(xm_context_t*, float*) __attribute__((nonnull));
 
 /* ----- Other oddities ----- */
 
@@ -1274,13 +1276,15 @@ static void xm_tick(xm_context_t* ctx) {
 	ctx->remaining_samples_in_tick += (float)ctx->rate / ((float)ctx->bpm * 0.4f);
 }
 
-static float xm_sample_at(xm_context_t* ctx, xm_sample_t* sample, size_t k) {
+static float xm_sample_at(const xm_context_t* ctx,
+                          const xm_sample_t* sample, size_t k) {
 	return _Generic((xm_sample_point_t){},
 	                int8_t: (float)ctx->samples_data[sample->index + k] / (float)INT8_MAX,
 	                int16_t: (float)ctx->samples_data[sample->index + k] / (float)INT16_MAX,
 	                float: ctx->samples_data[sample->index + k]);
 }
 
+/* XXX: rename me or merge with xm_next_of_channel */
 static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
 		#if XM_RAMPING
@@ -1389,53 +1393,76 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	return endval;
 }
 
-static void xm_sample(xm_context_t* ctx, float* left, float* right) {
+static void xm_next_of_channel(xm_context_t* ctx, xm_channel_context_t* ch,
+                               float* out_lr) {
+	out_lr[0] = 0.f;
+	out_lr[1] = 0.f;
+	const float fval = xm_next_of_sample(ctx, ch)
+		* ctx->global_volume * ctx->amplification;
+
+	if(ch->muted || (ch->instrument != NULL && ch->instrument->muted)
+	   || (ctx->max_loop_count > 0
+	       && ctx->loop_count >= ctx->max_loop_count)) {
+		return;
+	}
+
+	out_lr[0] = fval * ch->actual_volume[0];
+	out_lr[1] = fval * ch->actual_volume[1];
+
+	#if XM_RAMPING
+	ch->frame_count++;
+	XM_SLIDE_TOWARDS(&(ch->actual_volume[0]),
+	                 ch->target_volume[0], ctx->volume_ramp);
+	XM_SLIDE_TOWARDS(&(ch->actual_volume[1]),
+	                 ch->target_volume[1], ctx->volume_ramp);
+	#endif
+}
+
+static void xm_sample_unmixed(xm_context_t* ctx, float* out_lr) {
 	if(ctx->remaining_samples_in_tick <= 0) {
 		xm_tick(ctx);
 	}
 	ctx->remaining_samples_in_tick--;
 
-	*left = 0.f;
-	*right = 0.f;
+	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
+		xm_next_of_channel(ctx, ctx->channels + i, out_lr + 2*i);
 
-	if(ctx->max_loop_count > 0 && ctx->loop_count >= ctx->max_loop_count) {
-		return;
+		assert(out_lr[2*i] <= 1.f);
+		assert(out_lr[2*i] >= -1.f);
+		assert(out_lr[2*i+1] <= 1.f);
+		assert(out_lr[2*i+1] >= -1.f);
+
+		#if XM_DEFENSIVE
+		XM_CLAMP2F(out_lr[2*i], 1.f, -1.f);
+		XM_CLAMP2F(out_lr[2*i+1], 1.f, -1.f);
+		#endif
 	}
+}
+
+static void xm_sample(xm_context_t* ctx, float* out_lr) {
+	if(ctx->remaining_samples_in_tick <= 0) {
+		xm_tick(ctx);
+	}
+	ctx->remaining_samples_in_tick--;
+
+	out_lr[0] = 0.f;
+	out_lr[1] = 0.f;
+	float out_ch[2];
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
-		xm_channel_context_t* ch = ctx->channels + i;
-
-		if(ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
-			continue;
-		}
-
-		const float fval = xm_next_of_sample(ctx, ch);
-
-		if(!ch->muted && !ch->instrument->muted) {
-			*left += fval * ch->actual_volume[0];
-			*right += fval * ch->actual_volume[1];
-		}
-
-#if XM_RAMPING
-		ch->frame_count++;
-		XM_SLIDE_TOWARDS(&(ch->actual_volume[0]), ch->target_volume[0], ctx->volume_ramp);
-		XM_SLIDE_TOWARDS(&(ch->actual_volume[1]), ch->target_volume[1], ctx->volume_ramp);
-#endif
+		xm_next_of_channel(ctx, ctx->channels + i, out_ch);
+		out_lr[0] += out_ch[0];
+		out_lr[1] += out_ch[1];
 	}
 
-	/* catch obvious bugs, don't fail on potential clipping */
-	assert(*left <= ctx->module.num_channels);
-	assert(*left >= -ctx->module.num_channels);
-	assert(*right <= ctx->module.num_channels);
-	assert(*right >= -ctx->module.num_channels);
-
-	const float fgvol = ctx->global_volume * ctx->amplification;
-	*left *= fgvol;
-	*right *= fgvol;
+	assert(out_lr[0] <= ctx->module.num_channels);
+	assert(out_lr[0] >= -ctx->module.num_channels);
+	assert(out_lr[1] <= ctx->module.num_channels);
+	assert(out_lr[1] >= -ctx->module.num_channels);
 
 	#if XM_DEFENSIVE
-	XM_CLAMP2F(*left, 1.f, -1.f);
-	XM_CLAMP2F(*right, 1.f, -1.f);
+	XM_CLAMP2F(out_lr[0], 1.f, -1.f);
+	XM_CLAMP2F(out_lr[1], 1.f, -1.f);
 	#endif
 }
 
@@ -1443,8 +1470,17 @@ void xm_generate_samples(xm_context_t* ctx,
                          float* output,
                          uint16_t numsamples) {
 	ctx->generated_samples += numsamples;
-	for(uint16_t i = 0; i < numsamples; i++) {
-		xm_sample(ctx, output, output + 1);
-		output += 2;
+	for(uint16_t i = 0; i < numsamples; i++, output += 2) {
+		xm_sample(ctx, output);
+	}
+}
+
+void xm_generate_samples_unmixed(xm_context_t* ctx,
+                                 float* out,
+                                 uint16_t numsamples) {
+	ctx->generated_samples += numsamples;
+	for(uint16_t i = 0; i < numsamples;
+	    ++i, out += ctx->module.num_channels * 2) {
+		xm_sample_unmixed(ctx, out);
 	}
 }
