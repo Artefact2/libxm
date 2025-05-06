@@ -10,7 +10,6 @@ set_target_properties(xm PROPERTIES SOVERSION 4)
 
 find_library(MATH_LIBRARY m REQUIRED)
 target_include_directories(xm SYSTEM PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/../include")
-target_compile_options(xm PRIVATE -fshort-enums)
 target_link_libraries(xm PRIVATE ${MATH_LIBRARY})
 
 function(option_and_define name description default_value)

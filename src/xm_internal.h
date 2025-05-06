@@ -58,7 +58,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 
 /* ----- Data types ----- */
 
-enum xm_waveform_type_e {
+enum xm_waveform_type_e: uint8_t {
 	XM_SINE_WAVEFORM = 0,
 	XM_RAMP_DOWN_WAVEFORM = 1,
 	XM_SQUARE_WAVEFORM = 2,
@@ -96,7 +96,7 @@ struct xm_sample_s {
 	uint32_t loop_end;
 	float volume;
 	float panning;
-	enum {
+	enum: uint8_t {
 		XM_NO_LOOP,
 		XM_FORWARD_LOOP,
 		XM_PING_PONG_LOOP,
@@ -164,7 +164,7 @@ struct xm_module_s {
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 
 	#if XM_FREQUENCY_TYPES == 3
-	enum {
+	enum: uint8_t {
 		XM_LINEAR_FREQUENCIES,
 		XM_AMIGA_FREQUENCIES,
 	} frequency_type;
