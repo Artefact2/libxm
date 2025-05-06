@@ -12,7 +12,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang)$")
 	add_compile_options(
 		"$<$<CONFIG:MinSizeRel>:-Oz>"
 		"$<$<CONFIG:MinSizeRel>:-ffast-math>"
-		-Wall -Wextra -Wpadded -Wdouble-promotion -Wpedantic
+		-Wall -Wextra -Wpedantic -Wpadded -Wdouble-promotion -Wvla
 	)
 	add_link_options(
 		"$<$<CONFIG:MinSizeRel>:-z>"

@@ -97,9 +97,9 @@ struct xm_sample_s {
 	float volume;
 	float panning;
 	enum: uint8_t {
-		XM_NO_LOOP,
-		XM_FORWARD_LOOP,
-		XM_PING_PONG_LOOP,
+		XM_NO_LOOP = 0,
+		XM_FORWARD_LOOP = 1,
+		XM_PING_PONG_LOOP = 2,
 	} loop_type;
 	int8_t finetune;
 	int8_t relative_note;
@@ -165,8 +165,8 @@ struct xm_module_s {
 
 	#if XM_FREQUENCY_TYPES == 3
 	enum: uint8_t {
-		XM_LINEAR_FREQUENCIES,
-		XM_AMIGA_FREQUENCIES,
+		XM_LINEAR_FREQUENCIES = 0,
+		XM_AMIGA_FREQUENCIES = 1,
 	} frequency_type;
 	#endif
 

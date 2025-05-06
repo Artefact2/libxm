@@ -211,9 +211,10 @@ static uint32_t xm_load_module_header(xm_context_t* ctx,
 		mod->length = PATTERN_ORDER_TABLE_LENGTH;
 	}
 
-	uint16_t flags = READ_U32(offset + 14);
+	[[maybe_unused]] uint16_t flags = READ_U32(offset + 14);
 	#if XM_FREQUENCY_TYPES == 3
-	mod->frequency_type = (flags & 1) ? XM_LINEAR_FREQUENCIES : XM_AMIGA_FREQUENCIES;
+	mod->frequency_type = (flags & 1) ?
+		XM_LINEAR_FREQUENCIES : XM_AMIGA_FREQUENCIES;
 	#endif
 	#if XM_DEFENSIVE
 	if(flags & 0b11111110) {
@@ -419,15 +420,21 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 	/* Read sample headers */
 	instr->samples_index = ctx->module.num_samples;
 	ctx->module.num_samples += instr->num_samples;
-	bool samples_16bit[instr->num_samples]; /* true => 16 bit sample */
 	for(uint16_t i = 0; i < instr->num_samples; ++i) {
-		offset = xm_load_sample_header(ctx, ctx->samples + instr->samples_index + i, samples_16bit + i, moddata, moddata_length, offset);
+		bool is_16bit;
+		offset = xm_load_sample_header(ctx, ctx->samples + instr->samples_index + i, &is_16bit, moddata, moddata_length, offset);
+		if(is_16bit) {
+			/* Find some free bit in the struct to pack the
+			   16bitness */
+			ctx->samples[instr->samples_index+i].loop_type |= 128;
+		}
 	}
 
 	/* Read sample data */
 	for(uint16_t i = 0; i < instr->num_samples; ++i) {
 		xm_sample_t* s = ctx->samples + instr->samples_index + i;
-		if(samples_16bit[i]) {
+		if(s->loop_type & 128) {
+			s->loop_type &= ~128;
 			if(_Generic((xm_sample_point_t){},
 			            int8_t: true,
 			            default: false)) {
@@ -486,7 +493,7 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 	default:
 		NOTICE("unknown loop type (%d) in sample, disabling looping",
 		       flags & 3);
-		__attribute__((fallthrough));
+		[[fallthrough]];
 	#endif
 	case 0:
 		sample->loop_type = XM_NO_LOOP;
