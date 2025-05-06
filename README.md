@@ -59,7 +59,7 @@ x86_64).
 
 ~~~
 mkdir build-libxmize
-cmake -B build-libxmize -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_DEFENSIVE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF examples/libxmize
+cmake -B build-libxmize -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_DEFENSIVE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF -DXM_SAMPLE_TYPE=float examples/libxmize
 make -C build-libxmize libxmtoau
 strip -R .eh_frame_hdr -R .eh_frame build-libxmize/libxmtoau
 xzcrush build-libxmize/libxmtoau

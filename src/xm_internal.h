@@ -12,7 +12,7 @@
 #include <string.h>
 #include <assert.h>
 
-#if XM_DEBUG || XM_DEFENSIVE
+#if XM_DEFENSIVE
 #include <stdio.h>
 #define NOTICE(fmt, ...) do {                                           \
 		fprintf(stderr, "%s(): " fmt "\n", __func__ __VA_OPT__(,) __VA_ARGS__); \
@@ -22,19 +22,19 @@
 #define NOTICE(...)
 #endif
 
-#if XM_DEBUG
-#define DEBUG NOTICE
+#if NDEBUG || !XM_DEFENSIVE
+#define UNREACHABLE() __builtin_unreachable()
 #else
-#define DEBUG(...)
+#define UNREACHABLE() assert(0)
 #endif
 
-_Static_assert(XM_FREQUENCY_TYPES >= 1 && XM_FREQUENCY_TYPES <= 3,
+static_assert(XM_FREQUENCY_TYPES >= 1 && XM_FREQUENCY_TYPES <= 3,
                "Unsupported value of XM_FREQUENCY_TYPES");
-_Static_assert(_Generic((xm_sample_point_t){},
+static_assert(_Generic((xm_sample_point_t){},
                         int8_t: true, int16_t: true, float: true,
                         default: false),
                "Unsupported value of XM_SAMPLE_TYPE");
-_Static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
+static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
                                                     float: true,
                                                     default: false)),
                "XM_LIBXM_DELTA_SAMPLES cannot be used "

@@ -50,9 +50,7 @@ static uint32_t xm_load_8b_sample_data(uint32_t, xm_sample_point_t*, const char*
 static uint32_t xm_load_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 static int8_t xm_dither_16b_8b(int16_t);
 
-#if XM_DEBUG
 static uint64_t xm_fnv1a(const char*, uint32_t);
-#endif
 
 /* ----- Function definitions ----- */
 
@@ -172,7 +170,8 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 		offset += inst_samples_bytes;
 	}
 
-	DEBUG("read %d patterns, %d channels, %d rows, %d instruments, %d samples, %d sample frames, %d pot length",
+	NOTICE("read %d patterns, %d channels, %d rows, %d instruments, "
+	       "%d samples, %d sample frames, %d pot length",
 	      out->num_patterns, out->num_channels, out->num_rows,
 	      out->num_instruments, out->num_samples,
 	      out->samples_data_length, out->pot_length);
@@ -309,7 +308,7 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
 		}
 
 		if(slot->note > 97) {
-			NOTICE("pattern %u slot %u: deleting invalid note %d",
+			NOTICE("pattern %lu slot %lu: deleting invalid note %d",
 			       pat - ctx->patterns, slot - slots, slot->note);
 			slot->note = 0;
 		} else if(slot->note == 97) {
@@ -676,7 +675,6 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 		(dest) = (void*)((intptr_t)(dest) + (intptr_t)(orig)); \
 	} while(0)
 
-#if XM_DEBUG
 static uint64_t xm_fnv1a(const char* data, uint32_t length) {
 	uint64_t h = 14695981039346656037UL;
 	for(uint32_t i = 0; i < length; ++i) {
@@ -685,7 +683,6 @@ static uint64_t xm_fnv1a(const char* data, uint32_t length) {
 	}
 	return h;
 }
-#endif
 
 void xm_context_to_libxm(xm_context_t* ctx, char* out) {
 	/* Reset internal pointers and playback position to 0 (normally not
@@ -703,9 +700,7 @@ void xm_context_to_libxm(xm_context_t* ctx, char* out) {
 	/* (*) Everything done after this should be deterministically
 	   reversible */
 	uint32_t ctx_size = xm_context_size(ctx);
-	#if XM_DEBUG
-	uint64_t old_hash = xm_fnv1a((void*)ctx, ctx_size);
-	#endif
+	[[maybe_unused]] uint64_t old_hash = xm_fnv1a((void*)ctx, ctx_size);
 
 	uint32_t old_rate = ctx->rate;
 	ctx->rate = 0;
@@ -729,11 +724,7 @@ void xm_context_to_libxm(xm_context_t* ctx, char* out) {
 	/* Restore the context back to the state marked (*) */
 	ctx = xm_create_context_from_libxm((void*)ctx, old_rate);
 
-	#if XM_DEBUG
-	if(xm_fnv1a((void*)ctx, ctx_size) != old_hash) {
-		DEBUG("old and new hashes should match, but don't");
-	}
-	#endif
+	assert(xm_fnv1a((void*)ctx, ctx_size) == old_hash);
 }
 
 xm_context_t* xm_create_context_from_libxm(char* data, uint32_t rate) {

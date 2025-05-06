@@ -153,14 +153,9 @@ static float xm_waveform(xm_waveform_type_t waveform, uint8_t step) {
 		/* Ramp up: -1.f when step = 0; 1.f when step = 0x40 */
 		return (float)(step - 0x20) / 0x20;
 
-	#if XM_DEFENSIVE
-	default:
-		return 0.f;
-	#endif
-
 	}
 
-	__builtin_unreachable();
+	UNREACHABLE();
 }
 
 static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
@@ -419,19 +414,22 @@ static float xm_amiga_frequency(float period, float note_offset, float period_of
 #endif
 
 #if XM_FREQUENCY_TYPES == 1
-static float xm_period(__attribute__((unused)) xm_context_t* ctx, float note) {
+static float xm_period([[maybe_unused]] xm_context_t* ctx, float note) {
 	return xm_linear_period(note);
 
 }
-static float xm_frequency(__attribute__((unused)) xm_context_t* ctx, float period, float note_offset, float period_offset) {
+static float xm_frequency([[maybe_unused]] xm_context_t* ctx,
+                          float period, float note_offset,
+                          float period_offset) {
 	return xm_linear_frequency(period, note_offset, period_offset);
 }
 #elif XM_FREQUENCY_TYPES == 2
-static float xm_period(__attribute__((unused)) xm_context_t* ctx, float note) {
+static float xm_period([[maybe_unused]] xm_context_t* ctx, float note) {
 	return xm_amiga_period(note);
 
 }
-static float xm_frequency(__attribute__((unused)) xm_context_t* ctx, float period, float note_offset, float period_offset) {
+static float xm_frequency([[maybe_unused]] xm_context_t* ctx, float period,
+                          float note_offset, float period_offset) {
 	return xm_amiga_frequency(period, note_offset, period_offset);
 }
 #else
@@ -442,7 +440,7 @@ static float xm_period(xm_context_t* ctx, float note) {
 	case XM_AMIGA_FREQUENCIES:
 		return xm_amiga_period(note);
 	}
-	__builtin_unreachable();
+	UNREACHABLE();
 }
 static float xm_frequency(xm_context_t* ctx, float period, float note_offset, float period_offset) {
 	switch(ctx->module.frequency_type) {
@@ -451,7 +449,7 @@ static float xm_frequency(xm_context_t* ctx, float period, float note_offset, fl
 	case XM_AMIGA_FREQUENCIES:
 		return xm_amiga_frequency(period, note_offset, period_offset);
 	}
-	__builtin_unreachable();
+	UNREACHABLE();
 }
 #endif
 
@@ -1375,7 +1373,7 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	default:
 		/* Invalid loop types are deleted in load.c */
-		__builtin_unreachable();
+		UNREACHABLE();
 	}
 
 	float endval = (XM_LINEAR_INTERPOLATION ? XM_LERP(u, v, t) : u);
@@ -1425,13 +1423,11 @@ static void xm_sample(xm_context_t* ctx, float* left, float* right) {
 #endif
 	}
 
-	#if XM_DEBUG
 	/* catch obvious bugs, don't fail on potential clipping */
 	assert(*left <= ctx->module.num_channels);
 	assert(*left >= -ctx->module.num_channels);
 	assert(*right <= ctx->module.num_channels);
 	assert(*right >= -ctx->module.num_channels);
-	#endif
 
 	const float fgvol = ctx->global_volume * ctx->amplification;
 	*left *= fgvol;

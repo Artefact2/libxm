@@ -98,23 +98,23 @@ const char* xm_get_sample_name(xm_context_t* ctx, uint16_t i, uint16_t s) {
 	return ctx->samples[ctx->instruments[i-1].samples_index + s].name;
 }
 #else
-const char* xm_get_module_name(__attribute__((unused)) xm_context_t* ctx) {
+const char* xm_get_module_name([[maybe_unused]] xm_context_t* ctx) {
 	return "";
 }
 
-const char* xm_get_tracker_name(__attribute__((unused)) xm_context_t* ctx) {
+const char* xm_get_tracker_name([[maybe_unused]] xm_context_t* ctx) {
 	return "";
 }
 
-const char* xm_get_instrument_name(__attribute__((unused)) xm_context_t* ctx,
-                                   __attribute__((unused)) uint16_t i) {
+const char* xm_get_instrument_name([[maybe_unused]] xm_context_t* ctx,
+                                   [[maybe_unused]] uint16_t i) {
 	CHECK_INSTRUMENT(ctx, i);
 	return "";
 }
 
-const char* xm_get_sample_name(__attribute__((unused)) xm_context_t* ctx,
-                               __attribute__((unused)) uint16_t i,
-                               __attribute__((unused)) uint16_t s) {
+const char* xm_get_sample_name([[maybe_unused]] xm_context_t* ctx,
+                               [[maybe_unused]] uint16_t i,
+                               [[maybe_unused]] uint16_t s) {
 	CHECK_INSTRUMENT(ctx, i);
 	CHECK_SAMPLE(ctx, i, s);
 	return "";
