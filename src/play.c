@@ -631,11 +631,12 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 		break;
 
 	case 9: /* 9xx: Sample offset */
-		if(s->effect_param > 0) {
-			ch->sample_offset_param = s->effect_param;
-		}
 		if(ch->sample == NULL || !NOTE_IS_VALID(s->note))
 			break;
+		if(s->effect_param > 0) {
+			/* 9xx is ignored unless we have a note */
+			ch->sample_offset_param = s->effect_param;
+		}
 		ch->sample_position += ch->sample_offset_param * 256;
 		if(ch->sample_position >= ch->sample->length) {
 			/* Pretend the sample dosen't loop and is done playing */

@@ -518,7 +518,9 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 	}
 	#endif
 
-	sample->panning = (float)READ_U8(offset + 15) / (float)0xFF;
+	/* Panning range is 0(-128)..128(0)..255(127), 100% right panning is
+	   impossible */
+	sample->panning = (float)(READ_U8(offset + 15)) / 256.f;
 	sample->relative_note = (int8_t)READ_U8(offset + 16);
 
 	#if XM_STRINGS

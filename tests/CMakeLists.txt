@@ -8,5 +8,7 @@ add_subdirectory(../src xm_build)
 add_executable(test-libxm test-libxm.c)
 target_link_libraries(test-libxm PRIVATE xm)
 
+set(XM_RAMPING OFF CACHE BOOL "" FORCE)
+
 add_test(NAME test_sample_offset
 	COMMAND test-libxm channelpairs_eq ${CMAKE_SOURCE_DIR}/sample-offset.xm)

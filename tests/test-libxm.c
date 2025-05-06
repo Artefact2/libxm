@@ -82,6 +82,9 @@ static int channelpairs_eq(xm_context_t* ctx) {
 		for(unsigned int i = 0; i < 256; i += 4) {
 			if(frames[i] == frames[i+2]
 			   && frames[i+1] == frames[i+3]) continue;
+			fprintf(stderr, "Channel mismatch, LRLR=%f %f %f %f\n",
+			        (double)frames[i], (double)frames[i+1],
+			        (double)frames[i+2], (double)frames[i+3]);
 			print_position(ctx);
 			return 1;
 		}
