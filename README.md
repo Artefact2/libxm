@@ -24,16 +24,14 @@ Building
 * Build the library:
 
   ~~~
-  mkdir build
-  cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -B build src
+  cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -Bbuild -Ssrc
   make -C build
   ~~~
 
 * Build a specific example:
 
   ~~~
-  mkdir build-FOO
-  cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -B build examples/FOO
+  cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -Bbuild -Sexamples/FOO
   make -C build-FOO
   ~~~
 
@@ -58,8 +56,7 @@ Size
 x86_64).
 
 ~~~
-mkdir build-libxmize
-cmake -B build-libxmize -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_DEFENSIVE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF -DXM_SAMPLE_TYPE=float examples/libxmize
+cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_DEFENSIVE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF -DXM_SAMPLE_TYPE=float -Bbuild-libxmize -Sexamples/libxmize
 make -C build-libxmize libxmtoau
 strip -R .eh_frame_hdr -R .eh_frame build-libxmize/libxmtoau
 xzcrush build-libxmize/libxmtoau
