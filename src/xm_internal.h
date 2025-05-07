@@ -11,6 +11,7 @@
 #include <math.h>
 #include <string.h>
 #include <assert.h>
+#include <stdckdint.h>
 
 #if XM_DEFENSIVE
 #include <stdio.h>
@@ -51,6 +52,11 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define MAX_ENVELOPE_POINTS 12
 #define MAX_ROWS_PER_PATTERN 256
 #define RAMPING_POINTS 0x20
+#define MAX_VOLUME 64
+#define MAX_FADEOUT_VOLUME 65535
+#define MAX_PANNING 255
+#define PAN_CENTER 128
+#define PAN_ENVELOPE_CENTER 32
 
 /* Not the original key off (97), this is the value used by libxm once a ctx
    has been loaded */
@@ -69,7 +75,7 @@ typedef enum xm_waveform_type_e xm_waveform_type_t;
 
 struct xm_envelope_point_s {
 	uint16_t frame;
-	uint16_t value;
+	uint16_t value; /* 0..64, including panning envelopes */
 };
 typedef struct xm_envelope_point_s xm_envelope_point_t;
 
@@ -94,8 +100,8 @@ struct xm_sample_s {
 	uint32_t loop_start;
 	uint32_t loop_length;
 	uint32_t loop_end;
-	float volume;
-	float panning;
+	uint8_t volume; /* 0..64  */
+	uint8_t panning; /* 0..255, 128=center */
 	enum: uint8_t {
 		XM_NO_LOOP = 0,
 		XM_FORWARD_LOOP = 1,
@@ -107,7 +113,7 @@ struct xm_sample_s {
 	#if XM_STRINGS
 	char name[SAMPLE_NAME_LENGTH + 1];
 	#else
-	char __pad[1];
+	char __pad[7];
 	#endif
 };
 typedef struct xm_sample_s xm_sample_t;
@@ -196,13 +202,10 @@ struct xm_channel_context_s {
 	float frequency;
 	float step;
 
-	float volume; /* Ideally between 0 (muted) and 1 (loudest) */
-	float panning; /* Between 0 (left) and 1 (right); 0.5 is centered */
 	float actual_volume[2]; /* Multiplier for left/right channel */
 	float tremolo_volume;
-	float fadeout_volume;
-	float volume_envelope_volume;
-	float panning_envelope_panning;
+	uint16_t fadeout_volume;
+
 
 	#if XM_RAMPING
 	/* These values are updated at the end of each tick, to save
@@ -217,6 +220,11 @@ struct xm_channel_context_s {
 	uint16_t autovibrato_ticks;
 	uint16_t volume_envelope_frame_count;
 	uint16_t panning_envelope_frame_count;
+	uint16_t volume_envelope_volume;
+	uint16_t panning_envelope_panning;
+
+	uint8_t volume;
+	uint8_t panning;
 
 	uint8_t arp_note_offset;
 	uint8_t volume_slide_param;
@@ -266,9 +274,8 @@ struct xm_context_s {
 	xm_channel_context_t* channels;
 	uint8_t* row_loop_count;
 
-	float global_volume;
-	float amplification;
 	uint64_t generated_samples;
+	float amplification;
 	uint32_t rate;
 	uint16_t tempo;
 	uint16_t bpm;
@@ -289,6 +296,7 @@ struct xm_context_s {
 	 * Used for EEy effect */
 	uint16_t extra_ticks;
 
+	uint8_t global_volume;
 	uint8_t current_table_index;
 	uint8_t current_row;
 

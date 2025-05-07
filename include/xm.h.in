@@ -99,7 +99,7 @@ __attribute__((nonnull));
 
 /** Returns the number of bytes used by the context. Functionally equivalent to
  * xm_size_for_context(), but for already loaded contexts. */
-uint32_t xm_context_size(xm_context_t*)
+uint32_t xm_context_size(const xm_context_t*)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -169,7 +169,7 @@ __attribute__((nonnull));
 /** Get the loop count of the currently playing module. This value is
  * 0 when the module is still playing, 1 when the module has looped
  * once, etc. */
-uint8_t xm_get_loop_count(xm_context_t*)
+uint8_t xm_get_loop_count(const xm_context_t*)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -207,12 +207,12 @@ __attribute__((nonnull));
 
 
 /** Get the module name as a NUL-terminated string. */
-const char* xm_get_module_name(xm_context_t*)
+const char* xm_get_module_name(const xm_context_t*)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
 /** Get the tracker name as a NUL-terminated string. */
-const char* xm_get_tracker_name(xm_context_t*)
+const char* xm_get_tracker_name(const xm_context_t*)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -221,7 +221,7 @@ __attribute__((nonnull));
  * @note Instrument numbers go from 1 to xm_get_number_of_instruments(...).
  *
  * @returns pointer to a string, or NULL on invalid inputs */
-const char* xm_get_instrument_name(xm_context_t*, uint16_t)
+const char* xm_get_instrument_name(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -232,24 +232,24 @@ __attribute__((nonnull));
  * @note Sample numbers go from 0 to xm_get_number_of_samples(...)-1.
  *
  * @returns pointer to a string, or NULL on invalid inputs */
-const char* xm_get_sample_name(xm_context_t*, uint16_t i, uint16_t s)
+const char* xm_get_sample_name(const xm_context_t*, uint16_t i, uint16_t s)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
 
 
 /** Get the number of channels. */
-uint16_t xm_get_number_of_channels(xm_context_t*)
+uint16_t xm_get_number_of_channels(const xm_context_t*)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
 /** Get the module length (in patterns). */
-uint16_t xm_get_module_length(xm_context_t*)
+uint16_t xm_get_module_length(const xm_context_t*)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
 /** Get the number of patterns. */
-uint16_t xm_get_number_of_patterns(xm_context_t*)
+uint16_t xm_get_number_of_patterns(const xm_context_t*)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -258,12 +258,12 @@ __attribute__((nonnull));
  * @note Pattern numbers go from 0 to
  * xm_get_number_of_patterns(...)-1.
  */
-uint16_t xm_get_number_of_rows(xm_context_t*, uint16_t)
+uint16_t xm_get_number_of_rows(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
 /** Get the number of instruments. */
-uint16_t xm_get_number_of_instruments(xm_context_t*)
+uint16_t xm_get_number_of_instruments(const xm_context_t*)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -272,7 +272,7 @@ __attribute__((nonnull));
  * @note Instrument numbers go from 1 to
  * xm_get_number_of_instruments(...).
  */
-uint16_t xm_get_number_of_samples(xm_context_t*, uint16_t)
+uint16_t xm_get_number_of_samples(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -301,7 +301,7 @@ __attribute__((nonnull));
  * @param bpm will receive the current BPM if not NULL
  * @param tempo will receive the current tempo (ticks per line) if not NULL
  */
-void xm_get_playing_speed(xm_context_t*, uint16_t* bpm, uint16_t* tempo)
+void xm_get_playing_speed(const xm_context_t*, uint16_t* bpm, uint16_t* tempo)
 __attribute__((nonnull(1)));
 
 /** Get the current position in the module being played.
@@ -317,7 +317,7 @@ __attribute__((nonnull(1)));
  * generated samples (divide by sample rate to get seconds of
  * generated audio)
  */
-void xm_get_position(xm_context_t*, uint8_t* pattern_index,
+void xm_get_position(const xm_context_t*, uint8_t* pattern_index,
                      uint8_t* pattern, uint8_t* row, uint64_t* samples)
 __attribute__((nonnull(1)));
 
@@ -327,7 +327,7 @@ __attribute__((nonnull(1)));
  * @note Instrument numbers go from 1 to
  * xm_get_number_of_instruments(...).
  */
-uint64_t xm_get_latest_trigger_of_instrument(xm_context_t*, uint16_t)
+uint64_t xm_get_latest_trigger_of_instrument(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -340,7 +340,7 @@ __attribute__((nonnull));
  * @note Sample numbers go from 0 to
  * xm_get_nubmer_of_samples(...,instr)-1.
  */
-uint64_t xm_get_latest_trigger_of_sample(xm_context_t*, uint16_t instr,
+uint64_t xm_get_latest_trigger_of_sample(const xm_context_t*, uint16_t instr,
                                          uint16_t sample)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
@@ -350,7 +350,7 @@ __attribute__((nonnull));
  *
  * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
  */
-uint64_t xm_get_latest_trigger_of_channel(xm_context_t*, uint16_t)
+uint64_t xm_get_latest_trigger_of_channel(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -358,7 +358,7 @@ __attribute__((nonnull));
  *
  * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
  */
-bool xm_is_channel_active(xm_context_t*, uint16_t)
+bool xm_is_channel_active(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -371,7 +371,7 @@ __attribute__((nonnull));
  * @note Instrument numbers go from 1 to
  * xm_get_number_of_instruments(...).
  */
-uint16_t xm_get_instrument_of_channel(xm_context_t*, uint16_t)
+uint16_t xm_get_instrument_of_channel(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -382,7 +382,7 @@ __attribute__((nonnull));
  *
  * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
  */
-float xm_get_frequency_of_channel(xm_context_t*, uint16_t)
+float xm_get_frequency_of_channel(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -394,7 +394,7 @@ __attribute__((nonnull));
  *
  * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
  */
-float xm_get_volume_of_channel(xm_context_t*, uint16_t)
+float xm_get_volume_of_channel(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -406,7 +406,7 @@ __attribute__((nonnull));
  *
  * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
  */
-float xm_get_panning_of_channel(xm_context_t*, uint16_t)
+float xm_get_panning_of_channel(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 

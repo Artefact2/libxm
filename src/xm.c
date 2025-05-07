@@ -47,7 +47,7 @@ void xm_set_max_loop_count(xm_context_t* context, uint8_t loopcnt) {
 	context->max_loop_count = loopcnt;
 }
 
-uint8_t xm_get_loop_count(xm_context_t* context) {
+uint8_t xm_get_loop_count(const xm_context_t* context) {
 	return context->loop_count;
 }
 
@@ -79,40 +79,40 @@ bool xm_mute_instrument(xm_context_t* ctx, uint16_t instr, bool mute) {
 
 
 #if XM_STRINGS
-const char* xm_get_module_name(xm_context_t* ctx) {
+const char* xm_get_module_name(const xm_context_t* ctx) {
 	return ctx->module.name;
 }
 
-const char* xm_get_tracker_name(xm_context_t* ctx) {
+const char* xm_get_tracker_name(const xm_context_t* ctx) {
 	return ctx->module.trackername;
 }
 
-const char* xm_get_instrument_name(xm_context_t* ctx, uint16_t i) {
+const char* xm_get_instrument_name(const xm_context_t* ctx, uint16_t i) {
 	CHECK_INSTRUMENT(ctx, i);
 	return ctx->instruments[i-1].name;
 }
 
-const char* xm_get_sample_name(xm_context_t* ctx, uint16_t i, uint16_t s) {
+const char* xm_get_sample_name(const xm_context_t* ctx, uint16_t i, uint16_t s) {
 	CHECK_INSTRUMENT(ctx, i);
 	CHECK_SAMPLE(ctx, i, s);
 	return ctx->samples[ctx->instruments[i-1].samples_index + s].name;
 }
 #else
-const char* xm_get_module_name([[maybe_unused]] xm_context_t* ctx) {
+const char* xm_get_module_name([[maybe_unused]] const xm_context_t* ctx) {
 	return "";
 }
 
-const char* xm_get_tracker_name([[maybe_unused]] xm_context_t* ctx) {
+const char* xm_get_tracker_name([[maybe_unused]] const xm_context_t* ctx) {
 	return "";
 }
 
-const char* xm_get_instrument_name([[maybe_unused]] xm_context_t* ctx,
+const char* xm_get_instrument_name([[maybe_unused]] const xm_context_t* ctx,
                                    [[maybe_unused]] uint16_t i) {
 	CHECK_INSTRUMENT(ctx, i);
 	return "";
 }
 
-const char* xm_get_sample_name([[maybe_unused]] xm_context_t* ctx,
+const char* xm_get_sample_name([[maybe_unused]] const xm_context_t* ctx,
                                [[maybe_unused]] uint16_t i,
                                [[maybe_unused]] uint16_t s) {
 	CHECK_INSTRUMENT(ctx, i);
@@ -123,33 +123,35 @@ const char* xm_get_sample_name([[maybe_unused]] xm_context_t* ctx,
 
 
 
-uint16_t xm_get_number_of_channels(xm_context_t* ctx) {
+uint16_t xm_get_number_of_channels(const xm_context_t* ctx) {
 	return ctx->module.num_channels;
 }
 
-uint16_t xm_get_module_length(xm_context_t* ctx) {
+uint16_t xm_get_module_length(const xm_context_t* ctx) {
 	return ctx->module.length;
 }
 
-uint16_t xm_get_number_of_patterns(xm_context_t* ctx) {
+uint16_t xm_get_number_of_patterns(const xm_context_t* ctx) {
 	return ctx->module.num_patterns;
 }
 
-uint16_t xm_get_number_of_rows(xm_context_t* ctx, uint16_t pattern) {
+uint16_t xm_get_number_of_rows(const xm_context_t* ctx, uint16_t pattern) {
 	CHECK_PATTERN(ctx, pattern);
 	return ctx->patterns[pattern].num_rows;
 }
 
-uint16_t xm_get_number_of_instruments(xm_context_t* ctx) {
+uint16_t xm_get_number_of_instruments(const xm_context_t* ctx) {
 	return ctx->module.num_instruments;
 }
 
-uint16_t xm_get_number_of_samples(xm_context_t* ctx, uint16_t i) {
+uint16_t xm_get_number_of_samples(const xm_context_t* ctx, uint16_t i) {
 	CHECK_INSTRUMENT(ctx, i);
 	return ctx->instruments[i-1].num_samples;
 }
 
-xm_sample_point_t* xm_get_sample_waveform(xm_context_t* ctx, uint16_t instrument, uint16_t sample, uint32_t* length) {
+xm_sample_point_t* xm_get_sample_waveform(xm_context_t* ctx,
+                                          uint16_t instrument,
+                                          uint16_t sample, uint32_t* length) {
 	CHECK_SAMPLE(ctx, instrument, sample);
 	xm_sample_t* s = ctx->samples + ctx->instruments[instrument-1].samples_index + sample;
 	*length = s->length;
@@ -158,57 +160,70 @@ xm_sample_point_t* xm_get_sample_waveform(xm_context_t* ctx, uint16_t instrument
 
 
 
-void xm_get_playing_speed(xm_context_t* ctx, uint16_t* bpm, uint16_t* tempo) {
+void xm_get_playing_speed(const xm_context_t* ctx,
+                          uint16_t* bpm, uint16_t* tempo) {
 	if(bpm) *bpm = ctx->bpm;
 	if(tempo) *tempo = ctx->tempo;
 }
 
-void xm_get_position(xm_context_t* ctx, uint8_t* pattern_index, uint8_t* pattern, uint8_t* row, uint64_t* samples) {
+void xm_get_position(const xm_context_t* ctx, uint8_t* pattern_index,
+                     uint8_t* pattern, uint8_t* row, uint64_t* samples) {
 	if(pattern_index) *pattern_index = ctx->current_table_index;
 	if(pattern) *pattern = ctx->module.pattern_table[ctx->current_table_index];
 	if(row) *row = ctx->current_row;
 	if(samples) *samples = ctx->generated_samples;
 }
 
-uint64_t xm_get_latest_trigger_of_instrument(xm_context_t* ctx, uint16_t instr) {
+uint64_t xm_get_latest_trigger_of_instrument(const xm_context_t* ctx,
+                                             uint16_t instr) {
 	CHECK_INSTRUMENT(ctx, instr);
 	return ctx->instruments[instr-1].latest_trigger;
 }
 
-uint64_t xm_get_latest_trigger_of_sample(xm_context_t* ctx, uint16_t instr, uint16_t sample) {
+uint64_t xm_get_latest_trigger_of_sample(const xm_context_t* ctx,
+                                         uint16_t instr, uint16_t sample) {
 	CHECK_SAMPLE(ctx, instr, sample);
 	return ctx->samples[ctx->instruments[instr-1].samples_index + sample].latest_trigger;
 }
 
-uint64_t xm_get_latest_trigger_of_channel(xm_context_t* ctx, uint16_t chn) {
+uint64_t xm_get_latest_trigger_of_channel(const xm_context_t* ctx,
+                                          uint16_t chn) {
 	CHECK_CHANNEL(ctx, chn);
 	return ctx->channels[chn - 1].latest_trigger;
 }
 
-bool xm_is_channel_active(xm_context_t* ctx, uint16_t chn) {
+bool xm_is_channel_active(const xm_context_t* ctx, uint16_t chn) {
 	CHECK_CHANNEL(ctx, chn);
-	xm_channel_context_t* ch = ctx->channels + (chn - 1);
+	const xm_channel_context_t* ch = ctx->channels + (chn - 1);
 	return ch->instrument != NULL && ch->sample != NULL && ch->sample_position >= 0;
 }
 
-float xm_get_frequency_of_channel(xm_context_t* ctx, uint16_t chn) {
+float xm_get_frequency_of_channel(const xm_context_t* ctx, uint16_t chn) {
 	CHECK_CHANNEL(ctx, chn);
 	return ctx->channels[chn - 1].frequency;
 }
 
-float xm_get_volume_of_channel(xm_context_t* ctx, uint16_t chn) {
+float xm_get_volume_of_channel(const xm_context_t* ctx, uint16_t chn) {
 	CHECK_CHANNEL(ctx, chn);
-	return ctx->channels[chn - 1].volume * ctx->global_volume;
+	/* Instead of duplicating the panning and volume formulas, just
+	   reciprocate the panning math from cached computed volumes */
+	float x = ctx->channels[chn-1].actual_volume[0];
+	float y = ctx->channels[chn-1].actual_volume[1];
+	return sqrtf(x*x + y*y);
 }
 
-float xm_get_panning_of_channel(xm_context_t* ctx, uint16_t chn) {
+float xm_get_panning_of_channel(const xm_context_t* ctx, uint16_t chn) {
 	CHECK_CHANNEL(ctx, chn);
-	return ctx->channels[chn - 1].panning;
+	float x = ctx->channels[chn-1].actual_volume[0];
+	float y = ctx->channels[chn-1].actual_volume[1];
+	x *= x;
+	y *= y;
+	return y / (x + y);
 }
 
-uint16_t xm_get_instrument_of_channel(xm_context_t* ctx, uint16_t chn) {
+uint16_t xm_get_instrument_of_channel(const xm_context_t* ctx, uint16_t chn) {
 	CHECK_CHANNEL(ctx, chn);
-	xm_channel_context_t* ch = ctx->channels + (chn - 1);
+	const xm_channel_context_t* ch = ctx->channels + (chn - 1);
 	if(ch->instrument == NULL) return 0;
 	return 1 + (ch->instrument - ctx->instruments);
 }

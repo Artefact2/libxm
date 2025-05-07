@@ -44,7 +44,7 @@ static void memcpy_pad(void*, size_t, const void*, size_t, size_t);
 static uint32_t xm_load_module_header(xm_context_t*, const char*, uint32_t);
 static uint32_t xm_load_pattern(xm_context_t*, xm_pattern_t*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_instrument(xm_context_t*, xm_instrument_t*, const char*, uint32_t, uint32_t);
-static void xm_fix_envelope(xm_envelope_t*);
+static void xm_check_and_fix_envelope(xm_envelope_t*);
 static uint32_t xm_load_sample_header(xm_context_t*, xm_sample_t*, bool*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_8b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
@@ -364,34 +364,13 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 	READ_MEMCPY(instr->panning_envelope.points, offset + 177, 48);
 
 	instr->volume_envelope.num_points = READ_U8(offset + 225);
-	if (instr->volume_envelope.num_points > MAX_ENVELOPE_POINTS) {
-		NOTICE("clamping volume envelope num_points (%d -> %d) for instrument %ld",
-		       instr->volume_envelope.num_points,
-		       MAX_ENVELOPE_POINTS,
-		       (instr - ctx->instruments) + 1);
-		instr->volume_envelope.num_points = MAX_ENVELOPE_POINTS;
-	}
-
 	instr->panning_envelope.num_points = READ_U8(offset + 226);
-	if (instr->panning_envelope.num_points > MAX_ENVELOPE_POINTS) {
-		NOTICE("clamping panning envelope num_points (%d -> %d) for instrument %ld",
-		       instr->panning_envelope.num_points,
-		       MAX_ENVELOPE_POINTS,
-		       (instr - ctx->instruments) + 1);
-		instr->panning_envelope.num_points = MAX_ENVELOPE_POINTS;
-	}
-
 	instr->volume_envelope.sustain_point = READ_U8(offset + 227);
 	instr->volume_envelope.loop_start_point = READ_U8(offset + 228);
 	instr->volume_envelope.loop_end_point = READ_U8(offset + 229);
-
 	instr->panning_envelope.sustain_point = READ_U8(offset + 230);
 	instr->panning_envelope.loop_start_point = READ_U8(offset + 231);
 	instr->panning_envelope.loop_end_point = READ_U8(offset + 232);
-
-	// Fix broken modules with loop points outside of defined points
-	xm_fix_envelope(&(instr->volume_envelope));
-	xm_fix_envelope(&(instr->panning_envelope));
 
 	uint8_t flags = READ_U8(offset + 233);
 	instr->volume_envelope.enabled = flags & (1 << 0);
@@ -402,6 +381,9 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 	instr->panning_envelope.enabled = flags & (1 << 0);
 	instr->panning_envelope.sustain_enabled = flags & (1 << 1);
 	instr->panning_envelope.loop_enabled = flags & (1 << 2);
+
+	xm_check_and_fix_envelope(&(instr->volume_envelope));
+	xm_check_and_fix_envelope(&(instr->panning_envelope));
 
 	instr->vibrato_type = READ_U8(offset + 235);
 	if(instr->vibrato_type == 2) {
@@ -449,17 +431,40 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 	return offset;
 }
 
-static void xm_fix_envelope(xm_envelope_t* env) {
-	if (env->num_points > 0) {
-		if(env->loop_start_point >= env->num_points) {
-			NOTICE("clamped invalid envelope loop start point");
-			env->loop_start_point = env->num_points - 1;
-		}
-		if(env->loop_end_point >= env->num_points) {
-			NOTICE("clamped invalid envelope loop end point");
-			env->loop_end_point = env->num_points - 1;
-		}
+static void xm_check_and_fix_envelope(xm_envelope_t* env) {
+	if(env->enabled == false) return;
+	if(env->num_points == 0) {
+		NOTICE("disabled invalid envelope without points");
+		env->enabled = false;
+		return;
 	}
+	if(env->num_points > MAX_ENVELOPE_POINTS) {
+		NOTICE("clamped invalid envelope num_points (%u -> %u)",
+		       env->num_points, MAX_ENVELOPE_POINTS);
+		env->num_points = MAX_ENVELOPE_POINTS;
+	}
+	if(env->loop_enabled && env->loop_start_point >= env->num_points) {
+		NOTICE("clamped invalid envelope loop start point (%u -> %u)",
+		       env->loop_start_point, env->num_points - 1);
+		env->loop_start_point = env->num_points - 1;
+	}
+	if(env->loop_enabled && env->loop_end_point >= env->num_points) {
+		NOTICE("clamped invalid envelope loop end point (%u -> %u)",
+		       env->loop_end_point, env->num_points - 1);
+		env->loop_end_point = env->num_points - 1;
+	}
+	if(env->sustain_enabled && env->sustain_point >= env->num_points) {
+		NOTICE("clamped invalid envelope sustain point (%u -> %u)",
+		       env->sustain_point, env->num_points - 1);
+		env->sustain_point = env->num_points - 1;
+	}
+	for(uint8_t i = 0; i < env->num_points; ++i) {
+		if(env->points[i].value <= MAX_VOLUME) continue;
+		NOTICE("clamped invalid envelope point value (%u -> %u)",
+		       env->points[i].value, MAX_VOLUME);
+		env->points[i].value = MAX_VOLUME;
+	}
+	/* XXX: check that points frames are strictly monotonically increasing */
 }
 
 static uint32_t xm_load_sample_header(xm_context_t* ctx,
@@ -472,8 +477,13 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 	sample->loop_start = READ_U32(offset + 4);
 	sample->loop_length = READ_U32(offset + 8);
 	sample->loop_end = sample->loop_start + sample->loop_length;
-	sample->volume = (float)READ_U8(offset + 12) / (float)0x40;
+	sample->volume = READ_U8(offset + 12);
 	sample->finetune = (int8_t)READ_U8(offset + 13);
+
+	if(sample->volume > MAX_VOLUME) {
+		NOTICE("fixing invalid sample volume");
+		sample->volume = MAX_VOLUME;
+	}
 
 	/* Fix invalid loop definitions */
 	if (sample->loop_start > sample->length) {
@@ -518,9 +528,7 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 	}
 	#endif
 
-	/* Panning range is 0(-128)..128(0)..255(127), 100% right panning is
-	   impossible */
-	sample->panning = (float)(READ_U8(offset + 15)) / 256.f;
+	sample->panning = READ_U8(offset + 15);
 	sample->relative_note = (int8_t)READ_U8(offset + 16);
 
 	#if XM_STRINGS
@@ -595,7 +603,7 @@ uint32_t xm_size_for_context(const xm_prescan_data_t* p) {
 		+ sizeof(uint8_t) * MAX_ROWS_PER_PATTERN * p->pot_length;
 }
 
-uint32_t xm_context_size(xm_context_t* ctx) {
+uint32_t xm_context_size(const xm_context_t* ctx) {
 	return (char*)ctx->row_loop_count - (char*)ctx
 		+ sizeof(uint8_t) * MAX_ROWS_PER_PATTERN * ctx->module.length;
 }
@@ -624,7 +632,7 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 	assert(mempool - (char*)ctx == ctx_size);
 
 	ctx->rate = rate;
-	ctx->global_volume = 1.f;
+	ctx->global_volume = MAX_VOLUME;
 	ctx->amplification = .25f; /* XXX: some bad modules may still clip. Find out something better. */
 
 	#if XM_RAMPING
@@ -664,12 +672,9 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 	/* Initialise non-zero initial fields of channel ctx */
 	for(uint8_t i = 0; i < p->num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
-
 		ch->ping = true;
 		ch->vibrato_waveform_retrigger = true;
 		ch->tremolo_waveform_retrigger = true;
-		ch->volume = ch->volume_envelope_volume = ch->fadeout_volume = 1.0f;
-		ch->panning = ch->panning_envelope_panning = .5f;
 	}
 
 	assert(xm_context_size(ctx) == ctx_size);

@@ -13,12 +13,13 @@
 
 static void print_position(xm_context_t*);
 
-/* Checks that channel1==channel2, channel3==channel4, etc. */
-static int channelpairs_eq(xm_context_t*);
+/* Checks that channel1==channel2, channel3==channel4, etc. If swap_lr is true,
+   swaps LR channels of each odd channel before comparing. */
+static int channelpairs_eq(xm_context_t*, bool swap_lr);
 
 int main(int argc, char** argv) {
 	if(argc != 3) {
-		fprintf(stderr, "Usage: %s channelpairs_eq file.xm\n", argv[0]);
+		fprintf(stderr, "Usage: %s <method> <file.xm>\n", argv[0]);
 	}
 
 	/* Read xm file contents to a buffer */
@@ -53,7 +54,9 @@ int main(int argc, char** argv) {
 
 	/* Perform the test */
 	if(strcmp(argv[1], "channelpairs_eq") == 0) {
-		return channelpairs_eq(ctx);
+		return channelpairs_eq(ctx, false);
+	} else if(strcmp(argv[1], "channelpairs_lreqrl") == 0) {
+		return channelpairs_eq(ctx, true);
 	}
 
 	fprintf(stderr, "Invalid 1st argument\n");
@@ -69,7 +72,7 @@ static void print_position(xm_context_t* ctx) {
 	        pot, pat, row);
 }
 
-static int channelpairs_eq(xm_context_t* ctx) {
+static int channelpairs_eq(xm_context_t* ctx, bool swap_lr) {
 	float frames[256];
 	uint16_t chans = xm_get_number_of_channels(ctx);
 	/* Make sure our buffer can at least fit one frame of unmixed data */
@@ -80,8 +83,10 @@ static int channelpairs_eq(xm_context_t* ctx) {
 		xm_generate_samples_unmixed(ctx, frames, 128 / chans);
 		/* Read LRLR of a channel pair */
 		for(unsigned int i = 0; i < 256; i += 4) {
-			if(frames[i] == frames[i+2]
+			if(!swap_lr && frames[i] == frames[i+2]
 			   && frames[i+1] == frames[i+3]) continue;
+			if(swap_lr && frames[i] == frames[i+3]
+			   && frames[i+1] == frames[i+2]) continue;
 			fprintf(stderr, "Channel mismatch, LRLR=%f %f %f %f\n",
 			        (double)frames[i], (double)frames[i+1],
 			        (double)frames[i+2], (double)frames[i+3]);
