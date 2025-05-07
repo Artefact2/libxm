@@ -295,8 +295,9 @@ static uint16_t xm_envelope_lerp(const xm_envelope_point_t* restrict a,
                                  const xm_envelope_point_t* restrict b,
                                  uint16_t pos) {
 	/* Linear interpolation between two envelope points */
-	assert(pos >= a->frame && pos <= b->frame);
+	assert(pos >= a->frame);
 	assert(a->frame < b->frame);
+	if(pos >= b->frame) return b->value;
 	return (b->value * (pos - a->frame) + a->value * (b->frame - pos))
 		/ (b->frame - a->frame);
 }
@@ -967,17 +968,10 @@ static void xm_envelope_tick(xm_channel_context_t* ch,
 		return;
 	}
 
-	if(env->num_points == 1) {
-		/* XXX */
-		*outval = env->points[0].value;
-		return;
-	}
-
 	if(env->loop_enabled) {
 		uint16_t loop_start = env->points[env->loop_start_point].frame;
 		uint16_t loop_end = env->points[env->loop_end_point].frame;
 		uint16_t loop_length = loop_end - loop_start;
-		assert(loop_length > 0);
 
 		if(*counter >= loop_end) {
 			*counter -= loop_length;
@@ -985,14 +979,13 @@ static void xm_envelope_tick(xm_channel_context_t* ch,
 	}
 
 	/* Find points left and right of current envelope position */
-	for(uint8_t j = 1; j < env->num_points; ++j) {
-		if(*counter > env->points[j].frame) continue;
+	assert(env->num_points >= 2);
+	for(uint8_t j = env->num_points - 1; j > 0; --j) {
+		if(*counter < env->points[j-1].frame) continue;
 		*outval = xm_envelope_lerp(env->points + j - 1,
 		                           env->points + j,
 		                           *counter);
-		/* Don't advance past the end of the envelope */
-		if(j < env->num_points - 1 || *counter < env->points[j].frame)
-			(*counter)++;
+		(*counter)++;
 		return;
 	}
 

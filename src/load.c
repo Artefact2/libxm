@@ -433,8 +433,8 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 
 static void xm_check_and_fix_envelope(xm_envelope_t* env) {
 	if(env->enabled == false) return;
-	if(env->num_points == 0) {
-		NOTICE("disabled invalid envelope without points");
+	if(env->num_points < 2) {
+		NOTICE("disabled invalid envelope (needs 2 point at least, got %u)", env->num_points);
 		env->enabled = false;
 		return;
 	}
