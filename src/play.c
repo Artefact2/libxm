@@ -171,9 +171,9 @@ static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
 static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param) {
 	ch->vibrato_ticks += (param >> 4);
 	ch->vibrato_note_offset =
-		-2.f
+		8.f
 		* xm_waveform(ch->vibrato_waveform, ch->vibrato_ticks)
-		* (float)(param & 0x0F) / (float)0xF;
+		* (float)(param & 0x0F) / (float)0x0F;
 	xm_update_frequency(ctx, ch);
 }
 
