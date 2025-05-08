@@ -432,16 +432,29 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 }
 
 static void xm_check_and_fix_envelope(xm_envelope_t* env) {
-	if(env->enabled == false) return;
-	if(env->num_points < 2) {
-		NOTICE("disabled invalid envelope (needs 2 point at least, got %u)", env->num_points);
-		env->enabled = false;
-		return;
-	}
+	/* Check this even for disabled envelopes, because this can potentially
+	   lead to out of bounds accesses in the future */
 	if(env->num_points > MAX_ENVELOPE_POINTS) {
 		NOTICE("clamped invalid envelope num_points (%u -> %u)",
 		       env->num_points, MAX_ENVELOPE_POINTS);
 		env->num_points = MAX_ENVELOPE_POINTS;
+	}
+	if(env->enabled == false) return;
+	if(env->num_points < 2) {
+		NOTICE("discarding invalid envelope data "
+		       "(needs 2 point at least, got %u)",
+		       env->num_points);
+		env->enabled = false;
+		return;
+	}
+	for(uint8_t i = 1; i < env->num_points; ++i) {
+		if(env->points[i-1].frame < env->points[i].frame) continue;
+		NOTICE("discarding invalid envelope data "
+		       "(point %u frame %X -> point %u frame %X)",
+		       i-1, env->points[i-1].frame,
+		       i, env->points[i].frame);
+		env->enabled = false;
+		return;
 	}
 	if(env->loop_enabled && env->loop_start_point >= env->num_points) {
 		NOTICE("clamped invalid envelope loop start point (%u -> %u)",
@@ -459,12 +472,11 @@ static void xm_check_and_fix_envelope(xm_envelope_t* env) {
 		env->sustain_point = env->num_points - 1;
 	}
 	for(uint8_t i = 0; i < env->num_points; ++i) {
-		if(env->points[i].value <= MAX_VOLUME) continue;
+		if(env->points[i].value <= MAX_ENVELOPE_VALUE) continue;
 		NOTICE("clamped invalid envelope point value (%u -> %u)",
-		       env->points[i].value, MAX_VOLUME);
-		env->points[i].value = MAX_VOLUME;
+		       env->points[i].value, MAX_ENVELOPE_VALUE);
+		env->points[i].value = MAX_ENVELOPE_VALUE;
 	}
-	/* XXX: check that points frames are strictly monotonically increasing */
 }
 
 static uint32_t xm_load_sample_header(xm_context_t* ctx,

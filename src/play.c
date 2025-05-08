@@ -19,7 +19,7 @@ static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribu
 static void xm_arpeggio(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t) __attribute__((nonnull));
 static void xm_tone_portamento(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_pitch_slide(xm_context_t*, xm_channel_context_t*, float) __attribute__((nonnull));
-static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
+static void xm_param_slide(uint8_t*, uint8_t, uint16_t) __attribute__((nonnull));
 
 static uint16_t xm_envelope_lerp(const xm_envelope_point_t*, const xm_envelope_point_t*, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static void xm_envelope_tick(xm_channel_context_t*, const xm_envelope_t*, uint16_t*, uint16_t*) __attribute__((nonnull));
@@ -277,7 +277,7 @@ static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch, float pe
 	xm_update_frequency(ctx, ch);
 }
 
-static void xm_param_slide(uint8_t* param, uint8_t rawval, uint8_t max) {
+static void xm_param_slide(uint8_t* param, uint8_t rawval, uint16_t max) {
 	if(rawval & 0xF0) {
 		/* Slide up */
 		if(ckd_add(param, *param, rawval >> 4) || *param > max) {
@@ -855,8 +855,9 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 		ch->sustained = true;
 		ch->fadeout_volume = MAX_FADEOUT_VOLUME;
 		ch->volume_envelope_volume = MAX_VOLUME;
-		ch->panning_envelope_panning = PAN_ENVELOPE_CENTER;
-		ch->volume_envelope_frame_count = ch->panning_envelope_frame_count = 0;
+		ch->panning_envelope_panning = MAX_ENVELOPE_VALUE/2;
+		ch->volume_envelope_frame_count = 0;
+		ch->panning_envelope_frame_count = 0;
 	}
 	ch->vibrato_note_offset = 0.f;
 	ch->tremolo_volume = 0.f;
@@ -1222,9 +1223,10 @@ static void xm_tick(xm_context_t* ctx) {
 		float volume;
 
 		panning = ch->panning
-			+ (ch->panning_envelope_panning - 32)
-			* (PAN_CENTER - __builtin_abs(ch->panning
-			                              - PAN_CENTER))/32;
+			+ (ch->panning_envelope_panning - MAX_ENVELOPE_VALUE/2)
+			* (MAX_PANNING/2
+			   - __builtin_abs(ch->panning - MAX_PANNING/2))
+			/ (MAX_ENVELOPE_VALUE/2);
 
 		if(ch->tremor_on) {
 		        volume = .0f;
@@ -1240,12 +1242,16 @@ static void xm_tick(xm_context_t* ctx) {
 		/* See https://modarchive.org/forums/index.php?topic=3517.0
 		 * and https://github.com/Artefact2/libxm/pull/16 */
 		ch->target_volume[0] = volume
-			* sqrtf((float)(256 - panning) / 256.f);
-		ch->target_volume[1] = volume * sqrtf((float)panning / 256.f);
+			* sqrtf((float)(MAX_PANNING - panning)
+			        / (float)MAX_PANNING);
+		ch->target_volume[1] = volume
+			* sqrtf((float)panning / (float)MAX_PANNING);
 #else
 		ch->actual_volume[0] = volume
-			* sqrtf((float)(256 - panning) / 256.f);
-		ch->actual_volume[1] = volume * sqrtf((float)panning / 256.f);
+			* sqrtf((float)(MAX_PANNING - panning)
+			        / (float)MAX_PANNING);
+		ch->actual_volume[1] = volume * sqrtf((float)panning
+		                                      / (float)MAX_PANNING);
 #endif
 	}
 

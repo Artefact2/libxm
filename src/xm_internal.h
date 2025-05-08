@@ -54,9 +54,9 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define RAMPING_POINTS 0x20
 #define MAX_VOLUME 64
 #define MAX_FADEOUT_VOLUME 65535
-#define MAX_PANNING 255
-#define PAN_CENTER 128
-#define PAN_ENVELOPE_CENTER 32
+#define MAX_PANNING 256 /* cannot be stored in a uint8_t, this is ft2
+                           behaviour */
+#define MAX_ENVELOPE_VALUE 64
 
 /* Not the original key off (97), this is the value used by libxm once a ctx
    has been loaded */
@@ -75,7 +75,7 @@ typedef enum xm_waveform_type_e xm_waveform_type_t;
 
 struct xm_envelope_point_s {
 	uint16_t frame;
-	uint16_t value; /* 0..64, including panning envelopes */
+	uint16_t value; /* 0..=MAX_ENVELOPE_VALUE */
 };
 typedef struct xm_envelope_point_s xm_envelope_point_t;
 
@@ -100,8 +100,8 @@ struct xm_sample_s {
 	uint32_t loop_start;
 	uint32_t loop_length;
 	uint32_t loop_end;
-	uint8_t volume; /* 0..64  */
-	uint8_t panning; /* 0..255, 128=center */
+	uint8_t volume; /* 0..=MAX_VOLUME  */
+	uint8_t panning; /* 0..MAX_PANNING */
 	enum: uint8_t {
 		XM_NO_LOOP = 0,
 		XM_FORWARD_LOOP = 1,
@@ -192,7 +192,8 @@ struct xm_channel_context_s {
 	xm_pattern_slot_t* current;
 
 	float note;
-	float orig_note; /* The original note before effect modifications, as read in the pattern. */
+	float orig_note; /* The original note before effect modifications, as
+	                    read in the pattern. */
 	float vibrato_note_offset;
 	float autovibrato_note_offset;
 
@@ -204,7 +205,7 @@ struct xm_channel_context_s {
 
 	float actual_volume[2]; /* Multiplier for left/right channel */
 	float tremolo_volume;
-	uint16_t fadeout_volume;
+	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
 
 
 	#if XM_RAMPING
@@ -220,11 +221,11 @@ struct xm_channel_context_s {
 	uint16_t autovibrato_ticks;
 	uint16_t volume_envelope_frame_count;
 	uint16_t panning_envelope_frame_count;
-	uint16_t volume_envelope_volume;
-	uint16_t panning_envelope_panning;
+	uint16_t volume_envelope_volume; /* 0..=MAX_ENVELOPE_VALUE  */
+	uint16_t panning_envelope_panning; /* 0..=MAX_ENVELOPE_VALUE */
 
-	uint8_t volume;
-	uint8_t panning;
+	uint8_t volume; /* 0..=MAX_VOLUME  */
+	uint8_t panning; /* 0..MAX_PANNING  */
 
 	uint8_t arp_note_offset;
 	uint8_t volume_slide_param;
@@ -296,8 +297,8 @@ struct xm_context_s {
 	 * Used for EEy effect */
 	uint16_t extra_ticks;
 
-	uint8_t global_volume;
-	uint8_t current_table_index;
+	uint8_t global_volume; /* 0..=MAX_VOLUME */
+	uint8_t current_table_index; /* 0..(module.length) */
 	uint8_t current_row;
 
 	bool position_jump;
