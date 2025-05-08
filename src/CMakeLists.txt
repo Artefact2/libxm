@@ -4,12 +4,14 @@ project(libxm LANGUAGES C)
 include(../common.cmake)
 
 add_library(xm xm.c load.c play.c)
+set_target_properties(xm PROPERTIES
+	PUBLIC_HEADER ${CMAKE_CURRENT_BINARY_DIR}/xm.h)
 
 # Bump this when breaking public ABI
 set_target_properties(xm PROPERTIES SOVERSION 4)
 
 find_library(MATH_LIBRARY m REQUIRED)
-target_include_directories(xm SYSTEM PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/../include")
+target_include_directories(xm SYSTEM PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(xm PRIVATE ${MATH_LIBRARY})
 
 function(option_and_define name description default_value)
@@ -47,8 +49,4 @@ set(XM_FREQUENCY_TYPES "3" CACHE STRING
 	"Supported frequency types (1=Linear,2=Amiga,3=Both)")
 target_compile_definitions(xm PRIVATE XM_FREQUENCY_TYPES=${XM_FREQUENCY_TYPES})
 
-configure_file(
-	../include/xm.h.in
-	../include/xm.h
-	@ONLY
-)
+configure_file(xm.h.in xm.h @ONLY)
