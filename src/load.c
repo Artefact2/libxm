@@ -11,6 +11,7 @@
 
 #define EMPTY_PATTERN_NUM_ROWS 64
 #define SAMPLE_HEADER_SIZE 40
+#define SAMPLE_FLAG_16B 0b00010000
 
 /* Bounded reader macros (assume little-endian, .XM files always are).
  * If we attempt to read the buffer out-of-bounds, pretend that the buffer is
@@ -152,7 +153,7 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 
 		for(uint16_t j = 0; j < num_samples; ++j) {
 			uint32_t sample_length = READ_U32(offset);
-			if(READ_U8(offset + 14) & 64) {
+			if(READ_U8(offset + 14) & SAMPLE_FLAG_16B) {
 				/* 16-bit sample data */
 				#if XM_DEFENSIVE
 				if(sample_length % 2) {
@@ -549,7 +550,7 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 	sample->name[SAMPLE_NAME_LENGTH] = 0;
 	#endif
 
-	*is_16bit = flags & 0b00010000;
+	*is_16bit = flags & SAMPLE_FLAG_16B;
 	if(*is_16bit) {
 		sample->loop_start >>= 1;
 		sample->loop_length >>= 1;
