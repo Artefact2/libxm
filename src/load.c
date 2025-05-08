@@ -92,6 +92,9 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 	out->num_rows = 0;
 	out->samples_data_length = 0;
 
+	uint8_t pot[PATTERN_ORDER_TABLE_LENGTH];
+	READ_MEMCPY(pot, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
+
 	/* Header size */
 	offset += READ_U32(offset);
 
@@ -114,8 +117,6 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 	if(out->pot_length > PATTERN_ORDER_TABLE_LENGTH) {
 		out->pot_length = PATTERN_ORDER_TABLE_LENGTH;
 	}
-	char pot[PATTERN_ORDER_TABLE_LENGTH];
-	READ_MEMCPY(pot, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
 	for(uint16_t i = 0; i < out->pot_length; ++i) {
 		if(pot[i] >= out->num_patterns) {
 			NOTICE("replacing invalid pattern %d in pattern order table with empty pattern", pot[i]);
@@ -653,10 +654,13 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 
 	/* Read module header */
 	uint32_t offset = xm_load_module_header(ctx, moddata, moddata_length);
+	assert(ctx->module.num_channels == p->num_channels);
+	assert(ctx->module.length == p->pot_length);
 
 	/* Read pattern headers + slots */
 	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
-		offset = xm_load_pattern(ctx, ctx->patterns + i, moddata, moddata_length, offset);
+		offset = xm_load_pattern(ctx, ctx->patterns + i,
+		                         moddata, moddata_length, offset);
 	}
 
 	/* Scan for invalid patterns and replace by empty pattern */
@@ -672,14 +676,23 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 			if(ctx->module.pattern_table[i] < ctx->module.num_patterns) continue;
 			ctx->module.pattern_table[i] = ctx->module.num_patterns;
 		}
+		ctx->patterns[ctx->module.num_patterns].num_rows
+			= EMPTY_PATTERN_NUM_ROWS;
+		ctx->patterns[ctx->module.num_patterns].slots_index
+			= ctx->module.num_rows * ctx->module.num_channels;
 		ctx->module.num_patterns += 1;
 		ctx->module.num_rows += EMPTY_PATTERN_NUM_ROWS;
 	}
+	assert(ctx->module.num_patterns == p->num_patterns);
+	assert(ctx->module.num_rows == p->num_rows);
 
 	/* Read instruments, samples and sample data */
 	for(uint16_t i = 0; i < p->num_instruments; ++i) {
 		offset = xm_load_instrument(ctx, ctx->instruments + i, moddata, moddata_length, offset);
 	}
+	assert(ctx->module.num_instruments == p->num_instruments);
+	assert(ctx->module.num_samples == p->num_samples);
+	assert(ctx->module.samples_data_length == p->samples_data_length);
 
 	/* Initialise non-zero initial fields of channel ctx */
 	for(uint8_t i = 0; i < p->num_channels; ++i) {
