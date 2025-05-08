@@ -973,7 +973,9 @@ static void xm_envelope_tick(xm_channel_context_t* ch,
 		uint16_t loop_end = env->points[env->loop_end_point].frame;
 		uint16_t loop_length = loop_end - loop_start;
 
-		if(*counter >= loop_end) {
+		/* Don't loop if we moved beyond the end point, with eg a
+		   Lxx effect */
+		if(*counter == loop_end) {
 			*counter -= loop_length;
 		}
 	}

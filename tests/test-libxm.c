@@ -68,7 +68,7 @@ static void print_position(xm_context_t* ctx) {
 	uint8_t pat;
 	uint8_t row;
 	xm_get_position(ctx, &pot, &pat, &row, nullptr);
-	fprintf(stderr, "At position %u in pot, pattern %u, row %u\n",
+	fprintf(stderr, "At position %X in pot, pattern %X, row %X\n",
 	        pot, pat, row);
 }
 
