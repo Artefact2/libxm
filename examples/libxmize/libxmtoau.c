@@ -22,7 +22,7 @@ static const unsigned char header[] = {
 	0, 0, 0, 28, /* header size */
 	255, 255, 255, 255, /* data size (unknown) */
 	0, 0, 0, 6, /* encoding (float32be) */
-	0, 0, 187, 128, /* sample rate (48000) */
+	0, 0, 172, 68, /* sample rate (44100) */
 	0, 0, 0, 2, /* channels */
 	0, 0, 0, 0, /* description string (min 4 bytes) */
 };
@@ -38,35 +38,35 @@ static void byteswap32(uint32_t* i) {
 #endif
 
 int ENTRY(void) {
-	static float buffer[128];
+	static float buffer[4096];
+	/* Don't do this in real programs. We are just assuming a realistically
+	   high upper bound for stdin, and also that the kernel only actually
+	   allocates memory on first access (Linux does) to save a few bytes of
+	   boilerplate. */
+	char* buf = malloc(128*1024*1024);
 	xm_context_t* ctx;
-	char* stdin_data = NULL;
-	uint32_t stdin_alloc_length = 0, stdin_data_idx = 0;
+	uint32_t buf_idx = 0;
 	ssize_t r_ret;
 
 	do {
-		if(stdin_data_idx == stdin_alloc_length) {
-			stdin_alloc_length += 1048576;
-			stdin_data = realloc(stdin_data, stdin_alloc_length);
-		}
-		r_ret = read(STDIN_FILENO,
-		             stdin_data + stdin_data_idx,
-		             stdin_alloc_length - stdin_data_idx);
-		stdin_data_idx += r_ret;
+		buf_idx += (uint32_t)(r_ret = read(STDIN_FILENO,
+		                                   buf + buf_idx, 4096));
 	} while(r_ret > 0);
 
-	ctx = xm_create_context_from_libxm(stdin_data, 48000);
-
-	maybe_assert_eq(write(STDOUT_FILENO, header, sizeof(header)), (ssize_t)sizeof(header));
+	ctx = xm_create_context_from_libxm(buf, 44100);
+	maybe_assert_eq(write(STDOUT_FILENO, header, sizeof(header)),
+	                (ssize_t)sizeof(header));
 
 	while(!xm_get_loop_count(ctx)) {
-		xm_generate_samples(ctx, buffer, sizeof(buffer) / (2 * sizeof(float)));
+		xm_generate_samples(ctx, buffer, sizeof(buffer)
+		                    / (2 * sizeof(float)));
 		#if XM_LITTLE_ENDIAN
 		for(size_t k = 0; k < sizeof(buffer) / sizeof(float); ++k) {
 			byteswap32((uint32_t*)&(buffer[k]));
 		}
 		#endif
-		maybe_assert_eq(write(STDOUT_FILENO, buffer, sizeof(buffer)), (ssize_t)sizeof(buffer));
+		maybe_assert_eq(write(STDOUT_FILENO, buffer, sizeof(buffer)),
+		                (ssize_t)sizeof(buffer));
 	}
 
 	exit(0);

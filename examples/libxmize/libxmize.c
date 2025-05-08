@@ -23,10 +23,13 @@ static void zero_waveforms(xm_context_t* ctx) {
 	uint32_t sample_length;
 	for(uint16_t i = 1; i <= xm_get_number_of_instruments(ctx); ++i) {
 		for(uint16_t s = 0; s < xm_get_number_of_samples(ctx, i); ++s) {
-			sample_data = xm_get_sample_waveform(ctx, i, s, &sample_length);
+			sample_data = xm_get_sample_waveform(ctx, i, s,
+			                                     &sample_length);
 			if(sample_data == NULL) continue;
-			memset(sample_data, 0, sample_length * sizeof(xm_sample_point_t));
-			total_zeroed_bytes += sample_length * sizeof(xm_sample_point_t);
+			memset(sample_data, 0, sample_length
+			       * sizeof(xm_sample_point_t));
+			total_zeroed_bytes += sample_length
+				* (uint32_t)sizeof(xm_sample_point_t);
 		}
 
 	}
@@ -66,21 +69,29 @@ int main(int argc, char** argv) {
 		exit(1);
 	}
 
-	size_t in_length = ftell(in);
-	char* xmdata = malloc(in_length);
+	long in_length = ftell(in);
+	if(in_length == -1) {
+		perror("ftell");
+		exit(1);
+	}
+	if(in_length > UINT32_MAX) {
+		fprintf(stderr, "Input file too large\n");
+		exit(1);
+	}
+	char* xmdata = malloc((size_t)in_length);
 	if(xmdata == NULL) {
 		perror("malloc");
 		exit(1);
 	}
 	rewind(in);
 
-	if(!fread(xmdata, in_length, 1, in)) {
+	if(!fread(xmdata, (size_t)in_length, 1, in)) {
 		perror("fread");
 		exit(1);
 	}
 
 	xm_prescan_data_t* p = alloca(XM_PRESCAN_DATA_SIZE);
-	if(!xm_prescan_module(xmdata, in_length, p)) {
+	if(!xm_prescan_module(xmdata, (uint32_t)in_length, p)) {
 		NOTICE("xm_prescan_module() failed");
 		exit(1);
 	}
@@ -90,7 +101,7 @@ int main(int argc, char** argv) {
 	char* libxmized = buf + ctx_size;
 
 	xm_context_t* ctx = xm_create_context(buf, p, xmdata,
-	                                      in_length, 48000);
+	                                      (uint32_t)in_length, 48000);
 	//analyze(argv[0], ctx);
 
 	if(!strcmp("--zero-all-waveforms", argv[1])) {
