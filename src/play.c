@@ -11,18 +11,18 @@
 
 /* ----- Static functions ----- */
 
-static float xm_waveform(xm_waveform_type_t, uint8_t) __attribute__((warn_unused_result));
+static int8_t xm_waveform(uint8_t, uint8_t) __attribute__((warn_unused_result));
 static void xm_autovibrato(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
-static void xm_vibrato(xm_context_t*, xm_channel_context_t*, uint8_t) __attribute__((nonnull));
-static void xm_tremolo(xm_channel_context_t*, uint8_t, uint16_t) __attribute__((nonnull));
+static void xm_vibrato(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+static void xm_tremolo(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_arpeggio(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t) __attribute__((nonnull));
 static void xm_tone_portamento(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_pitch_slide(xm_context_t*, xm_channel_context_t*, float) __attribute__((nonnull));
 static void xm_param_slide(uint8_t*, uint8_t, uint16_t) __attribute__((nonnull));
 
-static uint16_t xm_envelope_lerp(const xm_envelope_point_t*, const xm_envelope_point_t*, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static void xm_envelope_tick(xm_channel_context_t*, const xm_envelope_t*, uint16_t*, uint16_t*) __attribute__((nonnull));
+static uint8_t xm_envelope_lerp(const xm_envelope_point_t*, const xm_envelope_point_t*, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static void xm_envelope_tick(xm_channel_context_t*, const xm_envelope_t*, uint16_t*, uint8_t*) __attribute__((nonnull));
 static void xm_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
 #if XM_FREQUENCY_TYPES & 1
@@ -112,34 +112,33 @@ static bool NOTE_IS_KEY_OFF(uint8_t n) {
 
 /* ----- Function definitions ----- */
 
-static float xm_waveform(xm_waveform_type_t waveform, uint8_t step) {
-	static unsigned int next_rand = 24492;
+static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
+	static uint32_t next_rand = 24492;
+	static const int8_t sin_lut[] = {
+		/* 128*sinf(2πx/64) for x in 0..16 */
+		0, 12, 24, 37, 48, 60, 71, 81,
+		90, 98, 106, 112, 118, 122, 125, 127,
+	};
+
 	step %= 0x40;
 
-	switch(waveform) {
+	switch(waveform & 3) {
 
-	case XM_SINE_WAVEFORM:
-		/* Why not use a table? For saving space, and because there's
-		 * very very little actual performance gain. */
-		return -sinf(2.f * 3.141592f * (float)step / (float)0x40);
+	case 2: /* Square */
+		return (step < 0x20) ? INT8_MIN : INT8_MAX;
 
-	case XM_RAMP_DOWN_WAVEFORM:
-		/* Ramp down: 1.0f when step = 0; -1.0f when step = 0x40 */
-		return (float)(0x20 - step) / 0x20;
+	case 0: /* Sine */
+		uint8_t idx = step & 0x10 ? 0xF - (step & 0xF) : (step & 0xF);
+		return (step < 0x20) ? -sin_lut[idx] : sin_lut[idx];
 
-	case XM_SQUARE_WAVEFORM:
-		/* Square with a 50% duty */
-		return (step >= 0x20) ? 1.f : -1.f;
+	case 1: /* Ramp down */
+		return INT8_MAX - step * 4;
 
-	case XM_RANDOM_WAVEFORM:
+	case 3: /* Random */
 		/* Use the POSIX.1-2001 example, just to be deterministic
 		 * across different machines */
 		next_rand = next_rand * 1103515245 + 12345;
-		return (float)((next_rand >> 16) & 0x7FFF) / (float)0x4000 - 1.f;
-
-	case XM_RAMP_UP_WAVEFORM:
-		/* Ramp up: -1.f when step = 0; 1.f when step = 0x40 */
-		return (float)(step - 0x20) / 0x20;
+		return (int8_t)((next_rand >> 16) & 0xFF);
 
 	}
 
@@ -147,43 +146,40 @@ static float xm_waveform(xm_waveform_type_t waveform, uint8_t step) {
 }
 
 static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
-	if(ch->instrument == NULL || ch->instrument->vibrato_depth == 0){
-		if (ch->autovibrato_note_offset){
-			ch->autovibrato_note_offset = 0.f;
-			xm_update_frequency(ctx, ch);
-		}
+	if(ch->instrument == NULL) {
 		return;
 	}
+
 	xm_instrument_t* instr = ch->instrument;
-	float sweep = 1.f;
 
-	if(ch->autovibrato_ticks < instr->vibrato_sweep) {
-		/* No idea if this is correct, but it sounds close enough… */
-		sweep = XM_LERP(0.f, 1.f, (float)ch->autovibrato_ticks / (float)instr->vibrato_sweep);
-	}
+	uint8_t sweep = (ch->autovibrato_ticks < instr->vibrato_sweep) ?
+		ch->autovibrato_ticks : UINT8_MAX;
 
-	unsigned int step = ((ch->autovibrato_ticks++) * instr->vibrato_rate) >> 2;
-	ch->autovibrato_note_offset = .25f * xm_waveform(instr->vibrato_type, step)
-		* (float)instr->vibrato_depth / (float)0xF * sweep;
+	ch->autovibrato_ticks += instr->vibrato_rate;
+	ch->autovibrato_note_offset =
+		xm_waveform(instr->vibrato_type, ch->autovibrato_ticks >> 2)
+		* instr->vibrato_depth * sweep / (16*256);
 	xm_update_frequency(ctx, ch);
 }
 
-static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param) {
-	ch->vibrato_ticks += (param >> 4);
+static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
+	ch->vibrato_ticks += (ch->vibrato_param >> 4);
 	ch->vibrato_note_offset =
-		8.f
-		* xm_waveform(ch->vibrato_waveform, ch->vibrato_ticks)
-		* (float)(param & 0x0F) / (float)0x0F;
+		xm_waveform(ch->vibrato_control_param, ch->vibrato_ticks)
+		* (ch->vibrato_param & 0x0F) / 0x0F;
 	xm_update_frequency(ctx, ch);
 }
 
-/* XXX: directly affect ch->volume? */
-static void xm_tremolo(xm_channel_context_t* ch, uint8_t param, uint16_t pos) {
-	unsigned int step = pos * (param >> 4);
-	/* Not so sure about this, it sounds correct by ear compared with
-	 * MilkyTracker, but it could come from other bugs */
-	ch->tremolo_volume = -1.f * xm_waveform(ch->tremolo_waveform, step)
-		* (float)(param & 0x0F) / (float)0xF;
+static void xm_tremolo(xm_channel_context_t* ch) {
+	/* Additive volume effect based on a waveform. Depth 8 is plus or minus
+	   32 volume. Works in the opposite direction of vibrato (ie, ramp down
+	   means pitch goes down with vibrato, but volume goes up with
+	   tremolo.). Tremolo, like vibrato, is not applied on 1st tick of every
+	   row (has no effect on Spd=1). */
+	ch->tremolo_ticks += (ch->tremolo_param >> 4);
+	ch->tremolo_volume_offset =
+		-xm_waveform(ch->tremolo_control_param, ch->tremolo_ticks)
+		* (ch->tremolo_param & 0x0F) * 4 / 128;
 }
 
 static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
@@ -291,12 +287,13 @@ static void xm_param_slide(uint8_t* param, uint8_t rawval, uint16_t max) {
 	}
 }
 
-static uint16_t xm_envelope_lerp(const xm_envelope_point_t* restrict a,
-                                 const xm_envelope_point_t* restrict b,
-                                 uint16_t pos) {
+static uint8_t xm_envelope_lerp(const xm_envelope_point_t* restrict a,
+                                const xm_envelope_point_t* restrict b,
+                                uint16_t pos) {
 	/* Linear interpolation between two envelope points */
 	assert(pos >= a->frame);
 	assert(a->frame < b->frame);
+	static_assert(MAX_ENVELOPE_VALUE <= UINT8_MAX);
 	if(pos >= b->frame) return b->value;
 	return (b->value * (pos - a->frame) + a->value * (b->frame - pos))
 		/ (b->frame - a->frame);
@@ -448,7 +445,7 @@ static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->frequency = xm_frequency(
 		ctx, ch->period,
 		ch->arp_note_offset,
-		ch->vibrato_note_offset + ch->autovibrato_note_offset
+		(float)(8*ch->vibrato_note_offset + ch->autovibrato_note_offset) / 128.f
 	);
 	ch->step = ch->frequency / ctx->rate;
 }
@@ -534,26 +531,26 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 		ch->volume = s->volume_column - 0x10;
 		break;
 
-	case 0x8: /* Fine volume slide down */
+	case 0x8: /* ▼x: Fine volume slide down */
 		xm_param_slide(&ch->volume, s->volume_column & 0x0F,
 		               MAX_VOLUME);
 		break;
 
-	case 0x9: /* Fine volume slide up */
+	case 0x9: /* ▲x: Fine volume slide up */
 		xm_param_slide(&ch->volume, s->volume_column << 4,
 		               MAX_VOLUME);
 		break;
 
-	case 0xA: /* Set vibrato speed */
+	case 0xA: /* Sx: Set vibrato speed */
 		ch->vibrato_param = (ch->vibrato_param & 0x0F)
 			| ((s->volume_column & 0x0F) << 4);
 		break;
 
-	case 0xC: /* Set panning */
+	case 0xC: /* Px: Set panning */
 		ch->panning = (s->volume_column & 0x0F) * 0x11;
 		break;
 
-	case 0xF: /* Tone portamento */
+	case 0xF: /* Mx: Tone portamento */
 		if(s->volume_column & 0x0F) {
 			ch->tone_portamento_param =
 				(s->volume_column & 0x0F) * 0x11;
@@ -608,11 +605,13 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 	case 7: /* 7xy: Tremolo */
 		if(s->effect_param & 0x0F) {
 			/* Set tremolo depth */
-			ch->tremolo_param = (ch->tremolo_param & 0xF0) | (s->effect_param & 0x0F);
+			ch->tremolo_param = (ch->tremolo_param & 0xF0)
+				| (s->effect_param & 0x0F);
 		}
 		if(s->effect_param >> 4) {
 			/* Set tremolo speed */
-			ch->tremolo_param = (s->effect_param & 0xF0) | (ch->tremolo_param & 0x0F);
+			ch->tremolo_param = (s->effect_param & 0xF0)
+				| (ch->tremolo_param & 0x0F);
 		}
 		break;
 
@@ -677,8 +676,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 			break;
 
 		case 4: /* E4y: Set vibrato control */
-			ch->vibrato_waveform = s->effect_param & 3;
-			ch->vibrato_waveform_retrigger = !((s->effect_param >> 2) & 1);
+			ch->vibrato_control_param = s->effect_param;
 			break;
 
 		case 5: /* E5y: Set finetune */
@@ -712,8 +710,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 			break;
 
 		case 7: /* E7y: Set tremolo control */
-			ch->tremolo_waveform = s->effect_param & 3;
-			ch->tremolo_waveform_retrigger = !((s->effect_param >> 2) & 1);
+			ch->tremolo_control_param = s->effect_param;
 			break;
 
 		case 0xA: /* EAy: Fine volume slide up */
@@ -853,23 +850,23 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 
 	if(!(flags & XM_TRIGGER_KEEP_ENVELOPE)) {
 		ch->sustained = true;
-		ch->fadeout_volume = MAX_FADEOUT_VOLUME;
+		ch->fadeout_volume = MAX_FADEOUT_VOLUME-1;
 		ch->volume_envelope_volume = MAX_VOLUME;
 		ch->panning_envelope_panning = MAX_ENVELOPE_VALUE/2;
 		ch->volume_envelope_frame_count = 0;
 		ch->panning_envelope_frame_count = 0;
 	}
-	ch->vibrato_note_offset = 0.f;
-	ch->tremolo_volume = 0.f;
-	ch->tremor_on = false;
 
+	ch->tremolo_volume_offset = 0;
+	ch->tremor_on = false;
+	ch->vibrato_note_offset = 0;
+	ch->autovibrato_note_offset = 0;
 	ch->autovibrato_ticks = 0;
 
-	if(ch->vibrato_waveform_retrigger) {
-		ch->vibrato_ticks = 0; /* XXX: should the waveform itself also
-								* be reset to sine? */
+	if(!(ch->vibrato_control_param & 4)) {
+		ch->vibrato_ticks = 0;
 	}
-	if(ch->tremolo_waveform_retrigger) {
+	if(!(ch->tremolo_control_param & 4)) {
 		ch->tremolo_ticks = 0;
 	}
 
@@ -961,7 +958,7 @@ static void xm_row(xm_context_t* ctx) {
 static void xm_envelope_tick(xm_channel_context_t* ch,
                              const xm_envelope_t* env,
                              uint16_t* restrict counter,
-                             uint16_t* restrict outval) {
+                             uint8_t* restrict outval) {
 	/* Don't advance envelope position if we are sustaining */
 	if(ch->sustained && env->sustain_enabled &&
 	   *counter == env->points[env->sustain_point].frame) {
@@ -1033,45 +1030,47 @@ static void xm_tick(xm_context_t* ctx) {
 			ch->arp_note_offset = 0;
 			xm_update_frequency(ctx, ch);
 		}
-		if(ch->vibrato_in_progress && !HAS_VIBRATO(ch->current)) {
-			ch->vibrato_in_progress = false;
-			ch->vibrato_note_offset = 0.f;
+		if(ch->should_reset_vibrato && !HAS_VIBRATO(ch->current)) {
+			ch->should_reset_vibrato = false;
+			ch->vibrato_note_offset = 0;
 			xm_update_frequency(ctx, ch);
 		}
 
 		if(ctx->current_tick > 0)
                 switch(ch->current->volume_column >> 4) {
 
-		case 0x6: /* Volume slide down */
+		case 0x6: /* -x: Volume slide down */
 			xm_param_slide(&ch->volume,
 			               ch->current->volume_column & 0x0F,
 			               MAX_VOLUME);
 			break;
 
-		case 0x7: /* Volume slide up */
+		case 0x7: /* +x: Volume slide up */
 			xm_param_slide(&ch->volume,
 			               ch->current->volume_column << 4,
 			               MAX_VOLUME);
 			break;
 
-		case 0xB: /* Vibrato */
-			ch->vibrato_in_progress = false;
-			xm_vibrato(ctx, ch, ch->vibrato_param);
+                case 0xB: /* Vx: Vibrato */
+	                /* This vibrato *does not* reset pitch when the command
+	                   is discontinued */
+			ch->should_reset_vibrato = false;
+			xm_vibrato(ctx, ch);
 			break;
 
-		case 0xD: /* Panning slide left */
+		case 0xD: /* ◀x: Panning slide left */
 			xm_param_slide(&ch->panning,
 			               ch->current->volume_column & 0x0F,
 			               MAX_PANNING);
 			break;
 
-		case 0xE: /* Panning slide right */
+		case 0xE: /* ▶x: Panning slide right */
 			xm_param_slide(&ch->panning,
 			               ch->current->volume_column << 4,
 			               MAX_PANNING);
 			break;
 
-		case 0xF: /* Tone portamento */
+		case 0xF: /* Mx: Tone portamento */
 			xm_tone_portamento(ctx, ch);
 			break;
 
@@ -1121,8 +1120,8 @@ static void xm_tick(xm_context_t* ctx) {
 
 		case 4: /* 4xy: Vibrato */
 			if(ctx->current_tick == 0) break;
-			ch->vibrato_in_progress = true;
-			xm_vibrato(ctx, ch, ch->vibrato_param);
+			ch->should_reset_vibrato = true;
+			xm_vibrato(ctx, ch);
 			break;
 
 		case 5: /* 5xy: Tone portamento + Volume slide */
@@ -1135,8 +1134,8 @@ static void xm_tick(xm_context_t* ctx) {
 
 		case 6: /* 6xy: Vibrato + Volume slide */
 			if(ctx->current_tick == 0) break;
-			ch->vibrato_in_progress = true;
-			xm_vibrato(ctx, ch, ch->vibrato_param);
+			ch->should_reset_vibrato = true;
+			xm_vibrato(ctx, ch);
 			xm_param_slide(&ch->volume,
 			               ch->volume_slide_param,
 			               MAX_VOLUME);
@@ -1144,7 +1143,7 @@ static void xm_tick(xm_context_t* ctx) {
 
 		case 7: /* 7xy: Tremolo */
 			if(ctx->current_tick == 0) break;
-			xm_tremolo(ch, ch->tremolo_param, ch->tremolo_ticks++);
+			xm_tremolo(ch);
 			break;
 
 		case 0xA: /* Axy: Volume slide */
@@ -1231,11 +1230,20 @@ static void xm_tick(xm_context_t* ctx) {
 		if(ch->tremor_on) {
 		        volume = .0f;
 		} else {
-			volume = ((float)ch->volume/ (float)MAX_VOLUME + ch->tremolo_volume)
-				* (float)ch->fadeout_volume / (float)MAX_FADEOUT_VOLUME
-				* (float)ch->volume_envelope_volume / (float)MAX_VOLUME
-				* (float)ctx->global_volume / (float)MAX_VOLUME;
-			XM_CLAMP(volume);
+			assert(ch->volume <= MAX_VOLUME);
+			assert(ch->tremolo_volume_offset >= -64
+			       && ch->tremolo_volume_offset <= 63);
+			static_assert(MAX_VOLUME + 63 <= INT8_MAX);
+
+			int64_t base = ch->volume + ch->tremolo_volume_offset;
+			if(base < 0) base = 0;
+			else if(base > MAX_VOLUME) base = MAX_VOLUME;
+			base *= ch->fadeout_volume
+				* ch->volume_envelope_volume
+				* ctx->global_volume;
+			base /= MAX_VOLUME * MAX_VOLUME * MAX_VOLUME;
+			volume =  (float)base / (float)(MAX_FADEOUT_VOLUME);
+			assert(volume >= 0.f && volume <= 1.f);
 		}
 
 #if XM_RAMPING

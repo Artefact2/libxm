@@ -685,8 +685,6 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 	for(uint8_t i = 0; i < p->num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 		ch->ping = true;
-		ch->vibrato_waveform_retrigger = true;
-		ch->tremolo_waveform_retrigger = true;
 	}
 
 	assert(xm_context_size(ctx) == ctx_size);

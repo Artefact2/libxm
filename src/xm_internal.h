@@ -53,7 +53,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define MAX_ROWS_PER_PATTERN 256
 #define RAMPING_POINTS 0x20
 #define MAX_VOLUME 64
-#define MAX_FADEOUT_VOLUME 65535
+#define MAX_FADEOUT_VOLUME 65536
 #define MAX_PANNING 256 /* cannot be stored in a uint8_t, this is ft2
                            behaviour */
 #define MAX_ENVELOPE_VALUE 64
@@ -64,18 +64,10 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 
 /* ----- Data types ----- */
 
-enum xm_waveform_type_e: uint8_t {
-	XM_SINE_WAVEFORM = 0,
-	XM_RAMP_DOWN_WAVEFORM = 1,
-	XM_SQUARE_WAVEFORM = 2,
-	XM_RANDOM_WAVEFORM = 3,
-	XM_RAMP_UP_WAVEFORM = 4,
-};
-typedef enum xm_waveform_type_e xm_waveform_type_t;
-
 struct xm_envelope_point_s {
 	uint16_t frame;
-	uint16_t value; /* 0..=MAX_ENVELOPE_VALUE */
+	uint8_t value; /* 0..=MAX_ENVELOPE_VALUE */
+	char __pad[1];
 };
 typedef struct xm_envelope_point_s xm_envelope_point_t;
 
@@ -127,7 +119,7 @@ struct xm_instrument_s {
 	uint16_t samples_index;
 	uint16_t num_samples;
 	uint16_t volume_fadeout;
-	xm_waveform_type_t vibrato_type;
+	uint8_t vibrato_type;
 	uint8_t vibrato_sweep;
 	uint8_t vibrato_depth;
 	uint8_t vibrato_rate;
@@ -136,7 +128,7 @@ struct xm_instrument_s {
 	#if XM_STRINGS
 	char name[INSTRUMENT_NAME_LENGTH + 1];
 	#else
-	char __pad[1];
+	char __pad[5];
 	#endif
 };
 typedef struct xm_instrument_s xm_instrument_t;
@@ -194,8 +186,6 @@ struct xm_channel_context_s {
 	float note;
 	float orig_note; /* The original note before effect modifications, as
 	                    read in the pattern. */
-	float vibrato_note_offset;
-	float autovibrato_note_offset;
 
 	float sample_position;
 	float period;
@@ -204,7 +194,6 @@ struct xm_channel_context_s {
 	float step;
 
 	float actual_volume[2]; /* Multiplier for left/right channel */
-	float tremolo_volume;
 	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
 
 
@@ -217,16 +206,16 @@ struct xm_channel_context_s {
 	float end_of_previous_sample[RAMPING_POINTS];
 	#endif
 
-	uint16_t vibrato_ticks; /* Position in the waveform */
 	uint16_t autovibrato_ticks;
 	uint16_t volume_envelope_frame_count;
 	uint16_t panning_envelope_frame_count;
-	uint16_t volume_envelope_volume; /* 0..=MAX_ENVELOPE_VALUE  */
-	uint16_t panning_envelope_panning; /* 0..=MAX_ENVELOPE_VALUE */
+	uint8_t volume_envelope_volume; /* 0..=MAX_ENVELOPE_VALUE  */
+	uint8_t panning_envelope_panning; /* 0..=MAX_ENVELOPE_VALUE */
 
 	uint8_t volume; /* 0..=MAX_VOLUME  */
 	uint8_t panning; /* 0..MAX_PANNING  */
 
+	int8_t autovibrato_note_offset; /* in 1/128 note increments */
 	uint8_t arp_note_offset;
 	uint8_t volume_slide_param;
 	uint8_t fine_volume_slide_param;
@@ -243,24 +232,25 @@ struct xm_channel_context_s {
 	uint8_t note_delay_param;
 	uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
 	uint8_t pattern_loop_count; /* How many loop passes have been done */
-	uint8_t vibrato_param;
-	uint8_t tremolo_param;
-	uint8_t tremolo_ticks;
 	uint8_t tremor_param;
 	uint8_t sample_offset_param;
 
-	xm_waveform_type_t vibrato_waveform;
-	xm_waveform_type_t tremolo_waveform;
+	uint8_t tremolo_param;
+	uint8_t tremolo_control_param;
+	uint8_t tremolo_ticks;
+	int8_t tremolo_volume_offset; /* -64..63 */
+
+	uint8_t vibrato_param;
+	uint8_t vibrato_control_param;
+	uint8_t vibrato_ticks;
+	int8_t vibrato_note_offset; /* in 1/16 note increments */
 
 	bool ping; /* For ping-pong samples: true is -->, false is <-- */
 	bool sustained;
 	bool muted;
 	bool arp_in_progress;
-	bool vibrato_in_progress;
+	bool should_reset_vibrato;
 	bool tremor_on;
-	/* True if a new note retriggers the waveform */
-	bool vibrato_waveform_retrigger;
-	bool tremolo_waveform_retrigger;
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
 
