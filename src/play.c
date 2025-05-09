@@ -645,7 +645,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 		static_assert(XM_NO_LOOP == 0);
 		if(ch->sample_position >= ch->sample->length
 		   || (ch->sample->loop_type
-		       && ch->sample_position > ch->sample->loop_end)) {
+		       && ch->sample_position >= ch->sample->loop_end)) {
 			/* Pretend the sample dosen't loop and is done playing */
 			ch->sample = NULL;
 		}
