@@ -10,6 +10,8 @@ target_link_libraries(test-libxm PRIVATE xm)
 
 set(XM_RAMPING OFF CACHE BOOL "" FORCE)
 
+add_test(NAME test_arpeggio COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/arpeggio.xm)
 add_test(NAME test_sample_offset COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/sample-offset.xm)
 add_test(NAME test_sample_offset_beyond_loop COMMAND test-libxm
