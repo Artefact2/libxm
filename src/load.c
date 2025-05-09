@@ -531,12 +531,6 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 
 	uint8_t flags = READ_U8(offset + 14);
 	switch(flags & 0b00000011) {
-	#if XM_DEFENSIVE
-	default:
-		NOTICE("unknown loop type (%d) in sample, disabling looping",
-		       flags & 3);
-		[[fallthrough]];
-	#endif
 	case 0:
 		sample->loop_type = XM_NO_LOOP;
 		break;
@@ -544,6 +538,11 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 		sample->loop_type = XM_FORWARD_LOOP;
 		break;
 	case 2:
+		[[fallthrough]];
+	case 3:
+		/* The XM spec doesn't quite say what to do when bits 0 and 1
+		   are set, but FT2 loads it as ping-pong, so it seems bit 1 has
+		   precedence. */
 		sample->loop_type = XM_PING_PONG_LOOP;
 		break;
 	}
