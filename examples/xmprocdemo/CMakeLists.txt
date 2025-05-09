@@ -1,9 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 project(xmprocdemo LANGUAGES C)
 
-include(../../common.cmake)
-add_subdirectory(../libxmize libxmize_build)
-
 # Force a few options for this specific example (we're always playing back the
 # same module anyway)
 foreach(X XM_DEFENSIVE XM_LINEAR_INTERPOLATION
@@ -12,6 +9,9 @@ foreach(X XM_DEFENSIVE XM_LINEAR_INTERPOLATION
 endforeach()
 set(XM_FREQUENCY_TYPES "1" CACHE STRING "" FORCE)
 set(XM_SAMPLE_TYPE "float" CACHE STRING "" FORCE)
+
+include(../../common.cmake)
+add_subdirectory(../libxmize libxmize_build)
 
 add_custom_command(OUTPUT mus.libxm
 	COMMAND libxmize --zero-all-waveforms
