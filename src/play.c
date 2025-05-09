@@ -16,7 +16,7 @@ static void xm_autovibrato(xm_context_t*, xm_channel_context_t*) __attribute__((
 static void xm_vibrato(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tremolo(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
-static void xm_arpeggio(xm_context_t*, xm_channel_context_t*, uint8_t, uint16_t) __attribute__((nonnull));
+static void xm_arpeggio(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tone_portamento(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_pitch_slide(xm_context_t*, xm_channel_context_t*, float) __attribute__((nonnull));
 static void xm_param_slide(uint8_t*, uint8_t, uint16_t) __attribute__((nonnull));
@@ -215,21 +215,36 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(ch->volume > MAX_VOLUME) ch->volume = MAX_VOLUME;
 }
 
-static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch, uint8_t param, uint16_t tick) {
-	ch->arp_in_progress = true;
-	switch(tick % 3) {
-	case 0:
-		ch->arp_in_progress = false;
-		ch->arp_note_offset = 0;
-		break;
-	case 2:
-		ch->arp_note_offset = param >> 4;
-		break;
-	case 1:
-		ch->arp_note_offset = param & 0x0F;
+static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
+	uint8_t offset = ctx->tempo % 3;
+	switch(offset) {
+	case 2: /* 0 -> x -> 0 -> y -> x -> … */
+		if(ctx->current_tick == 1) {
+			ch->arp_note_offset = ch->current->effect_param >> 4;
+			goto end;
+		}
+		[[fallthrough]];
+	case 1: /* 0 -> 0 -> y -> x -> … */
+		if(ctx->current_tick == 0) {
+			ch->arp_note_offset = 0;
+			goto end;
+		}
 		break;
 	}
 
+	switch((ctx->current_tick - offset) % 3) {
+	case 0:
+		ch->arp_note_offset = 0;
+		break;
+	case 1:
+		ch->arp_note_offset = ch->current->effect_param & 0x0F;
+		break;
+	case 2:
+		ch->arp_note_offset = ch->current->effect_param >> 4;
+		break;
+	}
+
+ end:
 	xm_update_frequency(ctx, ch);
 }
 
@@ -1025,8 +1040,8 @@ static void xm_tick(xm_context_t* ctx) {
 		xm_envelopes(ch);
 		xm_autovibrato(ctx, ch);
 
-		if(ch->arp_in_progress && !HAS_ARPEGGIO(ch->current)) {
-			ch->arp_in_progress = false;
+		if(ch->should_reset_arpeggio && !HAS_ARPEGGIO(ch->current)) {
+			ch->should_reset_arpeggio = false;
 			ch->arp_note_offset = 0;
 			xm_update_frequency(ctx, ch);
 		}
@@ -1080,27 +1095,8 @@ static void xm_tick(xm_context_t* ctx) {
 
 		case 0: /* 0xy: Arpeggio */
 			if(ch->current->effect_param == 0) break;
-			uint8_t arp_offset = ctx->tempo % 3;
-			switch(arp_offset) {
-			case 2: /* 0 -> x -> 0 -> y -> x -> … */
-				if(ctx->current_tick == 1) {
-					ch->arp_in_progress = true;
-					ch->arp_note_offset = ch->current->effect_param >> 4;
-					xm_update_frequency(ctx, ch);
-					break;
-				}
-				[[fallthrough]];
-			case 1: /* 0 -> 0 -> y -> x -> … */
-				if(ctx->current_tick == 0) {
-					ch->arp_in_progress = false;
-					ch->arp_note_offset = 0;
-					xm_update_frequency(ctx, ch);
-					break;
-				}
-				[[fallthrough]];
-			case 0: /* 0 -> y -> x -> … */
-				xm_arpeggio(ctx, ch, ch->current->effect_param, ctx->current_tick - arp_offset);
-			}
+			ch->should_reset_arpeggio = true;
+			xm_arpeggio(ctx, ch);
 			break;
 
 		case 1: /* 1xx: Portamento up */

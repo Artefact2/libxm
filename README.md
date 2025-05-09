@@ -52,7 +52,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **4741 bytes** (Linux
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **4708 bytes** (Linux
 x86_64).
 
 ~~~

@@ -248,7 +248,7 @@ struct xm_channel_context_s {
 	bool ping; /* For ping-pong samples: true is -->, false is <-- */
 	bool sustained;
 	bool muted;
-	bool arp_in_progress;
+	bool should_reset_arpeggio;
 	bool should_reset_vibrato;
 	bool tremor_on;
 };
