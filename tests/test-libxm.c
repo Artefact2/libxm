@@ -11,11 +11,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void print_position(xm_context_t*);
+static void print_position(const xm_context_t*);
 
-/* Checks that channel1==channel2, channel3==channel4, etc. If swap_lr is true,
-   swaps LR channels of each odd channel before comparing. */
+/* Checks generated audio samples for channel1==channel2, channel3==channel4,
+   etc. If swap_lr is true, swaps LR channels of each odd channel before
+   comparing. */
 static int channelpairs_eq(xm_context_t*, bool swap_lr);
+
+/* Checks generated audio samples for pattern0==pattern1. */
+static int pat0_pat1_eq(xm_context_t*);
 
 int main(int argc, char** argv) {
 	if(argc != 3) {
@@ -57,13 +61,15 @@ int main(int argc, char** argv) {
 		return channelpairs_eq(ctx, false);
 	} else if(strcmp(argv[1], "channelpairs_lreqrl") == 0) {
 		return channelpairs_eq(ctx, true);
+	} else if(strcmp(argv[1], "pat0_pat1_eq") == 0) {
+		return pat0_pat1_eq(ctx);
 	}
 
 	fprintf(stderr, "Invalid 1st argument\n");
 	return 1;
 }
 
-static void print_position(xm_context_t* ctx) {
+static void print_position(const xm_context_t* ctx) {
 	uint8_t pot;
 	uint8_t pat;
 	uint8_t row;
@@ -94,5 +100,35 @@ static int channelpairs_eq(xm_context_t* ctx, bool swap_lr) {
 			return 1;
 		}
 	}
+	return 0;
+}
+
+static int pat0_pat1_eq(xm_context_t* ctx0) {
+	if(xm_get_module_length(ctx0) != 2) {
+		fprintf(stderr, "This method requires 2 patterns "
+		        "with a pattern order table length of 2\n");
+		return 1;
+	}
+
+	/* Copy the context */
+	char* buf = malloc(xm_context_size(ctx0));
+	if(buf == NULL) return 1;
+	xm_context_to_libxm(ctx0, buf);
+	xm_context_t* ctx1 = xm_create_context_from_libxm(buf, 48000);
+	xm_seek(ctx1, 1, 0, 0);
+
+	float frames0[128], frames1[128];
+	uint8_t idx;
+	while(xm_get_position(ctx0, &idx, NULL, NULL, NULL), idx == 0) {
+		xm_generate_samples(ctx0, frames0, 64);
+		xm_generate_samples(ctx1, frames1, 64);
+		if(memcmp(frames0, frames1, sizeof(frames0))) {
+			fprintf(stderr, "Found mismatch\n");
+			print_position(ctx0);
+			print_position(ctx1);
+			return 1;
+		}
+	}
+
 	return 0;
 }
