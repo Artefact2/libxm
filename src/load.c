@@ -13,6 +13,9 @@
 #define SAMPLE_HEADER_SIZE 40
 #define SAMPLE_FLAG_16B 0b00010000
 
+#define ASSERT_ALIGN(a, b) static_assert(alignof(a) % alignof(b) == 0)
+#define ASSERT_CTX_ALIGNED(ptr) assert((uintptr_t)((void*)(ptr)) % alignof(xm_context_t) == 0)
+
 /* Bounded reader macros (assume little-endian, .XM files always are).
  * If we attempt to read the buffer out-of-bounds, pretend that the buffer is
  * infinitely padded with zeroes.
@@ -28,12 +31,13 @@
 #define READ_MEMCPY(ptr, offset, length) READ_MEMCPY_BOUND(ptr, offset, length, moddata_length)
 
 struct xm_prescan_data_s {
+	uint32_t context_size;
+	uint32_t num_rows;
+	uint32_t samples_data_length;
 	uint16_t num_channels;
 	uint16_t num_patterns;
 	uint16_t num_instruments;
 	uint16_t num_samples;
-	uint32_t num_rows;
-	uint32_t samples_data_length;
 	uint16_t pot_length;
 	char __pad[2];
 };
@@ -171,6 +175,20 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 
 		offset += inst_samples_bytes;
 	}
+
+	unsigned long sz = sizeof(xm_context_t)
+		+ sizeof(xm_pattern_t) * out->num_patterns
+		+ sizeof(xm_pattern_slot_t) * out->num_rows * out->num_channels
+		+ sizeof(xm_instrument_t) * out->num_instruments
+		+ sizeof(xm_sample_t) * out->num_samples
+		+ sizeof(xm_sample_point_t) * out->samples_data_length
+		+ sizeof(xm_channel_context_t) * out->num_channels
+		+ sizeof(uint8_t) * MAX_ROWS_PER_PATTERN * out->pot_length;
+	if(sz > UINT32_MAX) {
+		NOTICE("module too big for uint32");
+		return false;
+	}
+	out->context_size = (uint32_t)sz;
 
 	NOTICE("read %d patterns, %d channels, %d rows, %d instruments, "
 	       "%d samples, %d sample frames, %d pot length",
@@ -607,14 +625,7 @@ static int8_t xm_dither_16b_8b(int16_t x) {
 
 
 uint32_t xm_size_for_context(const xm_prescan_data_t* p) {
-	return sizeof(xm_context_t)
-		+ sizeof(xm_pattern_t) * p->num_patterns
-		+ sizeof(xm_pattern_slot_t) * p->num_rows * p->num_channels
-		+ sizeof(xm_instrument_t) * p->num_instruments
-		+ sizeof(xm_sample_t) * p->num_samples
-		+ sizeof(xm_sample_point_t) * p->samples_data_length
-		+ sizeof(xm_channel_context_t) * p->num_channels
-		+ sizeof(uint8_t) * MAX_ROWS_PER_PATTERN * p->pot_length;
+	return p->context_size;
 }
 
 uint32_t xm_context_size(const xm_context_t* ctx) {
@@ -625,22 +636,31 @@ uint32_t xm_context_size(const xm_context_t* ctx) {
 xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
                                 const char* moddata, uint32_t moddata_length,
                                 uint32_t rate) {
+	/* Make sure we are not misaligning data by accident */
+	ASSERT_CTX_ALIGNED(mempool);
 	uint32_t ctx_size = xm_size_for_context(p);
 	__builtin_memset(mempool, 0, ctx_size);
 	xm_context_t* ctx = (xm_context_t*)mempool;
 	mempool += sizeof(xm_context_t);
-	ctx->patterns = (xm_pattern_t*)mempool;
-	mempool += sizeof(xm_pattern_t) * p->num_patterns;
-	ctx->pattern_slots = (xm_pattern_slot_t*)mempool;
-	mempool += sizeof(xm_pattern_slot_t) * p->num_rows * p->num_channels;
-	ctx->instruments = (xm_instrument_t*)mempool;
-	mempool += sizeof(xm_instrument_t) * p->num_instruments;
-	ctx->samples = (xm_sample_t*)mempool;
-	mempool += sizeof(xm_sample_t) * p->num_samples;
-	ctx->samples_data = (xm_sample_point_t*)mempool;
-	mempool += sizeof(xm_sample_point_t) * p->samples_data_length;
+	ASSERT_ALIGN(xm_context_t, xm_channel_context_t);
 	ctx->channels = (xm_channel_context_t*)mempool;
 	mempool += sizeof(xm_channel_context_t) * p->num_channels;
+	ASSERT_ALIGN(xm_channel_context_t, xm_instrument_t);
+	ctx->instruments = (xm_instrument_t*)mempool;
+	mempool += sizeof(xm_instrument_t) * p->num_instruments;
+	ASSERT_ALIGN(xm_instrument_t, xm_sample_t);
+	ctx->samples = (xm_sample_t*)mempool;
+	mempool += sizeof(xm_sample_t) * p->num_samples;
+	ASSERT_ALIGN(xm_sample_t, xm_pattern_t);
+	ctx->patterns = (xm_pattern_t*)mempool;
+	mempool += sizeof(xm_pattern_t) * p->num_patterns;
+	ASSERT_ALIGN(xm_pattern_t, xm_sample_point_t);
+	ctx->samples_data = (xm_sample_point_t*)mempool;
+	mempool += sizeof(xm_sample_point_t) * p->samples_data_length;
+	ASSERT_ALIGN(xm_sample_point_t, xm_pattern_slot_t);
+	ctx->pattern_slots = (xm_pattern_slot_t*)mempool;
+	mempool += sizeof(xm_pattern_slot_t) * p->num_rows * p->num_channels;
+	ASSERT_ALIGN(xm_pattern_slot_t, uint8_t);
 	ctx->row_loop_count = (uint8_t*)mempool;
 	mempool += sizeof(uint8_t) * MAX_ROWS_PER_PATTERN * p->pot_length;
 	assert(mempool - (char*)ctx == ctx_size);
@@ -766,6 +786,7 @@ void xm_context_to_libxm(xm_context_t* ctx, char* out) {
 }
 
 xm_context_t* xm_create_context_from_libxm(char* data, uint32_t rate) {
+	ASSERT_CTX_ALIGNED(data);
 	xm_context_t* ctx = (void*)data;
 	ctx->rate = rate;
 

@@ -128,7 +128,7 @@ struct xm_instrument_s {
 	#if XM_STRINGS
 	char name[INSTRUMENT_NAME_LENGTH + 1];
 	#else
-	char __pad[5];
+	char __pad[1];
 	#endif
 };
 typedef struct xm_instrument_s xm_instrument_t;
