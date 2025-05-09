@@ -245,7 +245,8 @@ struct xm_channel_context_s {
 	uint8_t vibrato_ticks;
 	int8_t vibrato_note_offset; /* in 1/16 note increments */
 
-	bool ping; /* For ping-pong samples: true is -->, false is <-- */
+	bool sample_loop_direction; /* For ping-pong samples: false is -->,
+	                               true is <-- */
 	bool sustained;
 	bool muted;
 	bool should_reset_arpeggio;

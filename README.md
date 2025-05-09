@@ -31,7 +31,7 @@ Building
 * Build a specific example:
 
   ~~~
-  cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -Bbuild -Sexamples/FOO
+  cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -Bbuild-FOO -Sexamples/FOO
   make -C build-FOO
   ~~~
 
@@ -52,7 +52,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **4708 bytes** (Linux
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **4680 bytes** (Linux
 x86_64).
 
 ~~~

@@ -642,9 +642,12 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 			ch->sample_offset_param = s->effect_param;
 		}
 		ch->sample_position += ch->sample_offset_param * 256;
-		if(ch->sample_position >= ch->sample->length) {
+		static_assert(XM_NO_LOOP == 0);
+		if(ch->sample_position >= ch->sample->length
+		   || (ch->sample->loop_type
+		       && ch->sample_position > ch->sample->loop_end)) {
 			/* Pretend the sample dosen't loop and is done playing */
-			ch->sample_position = -1;
+			ch->sample = NULL;
 		}
 		break;
 
@@ -852,7 +855,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigned int flags) {
 	if(!(flags & XM_TRIGGER_KEEP_SAMPLE_POSITION)) {
 		ch->sample_position = 0.f;
-		ch->ping = true;
+		ch->sample_loop_direction = false;
 	}
 
 	if(ch->sample != NULL) {
@@ -1279,7 +1282,7 @@ static float xm_sample_at(const xm_context_t* ctx,
 
 /* XXX: rename me or merge with xm_next_of_channel */
 static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
-	if(ch->instrument == NULL || ch->sample == NULL || ch->sample_position < 0) {
+	if(ch->instrument == NULL || ch->sample == NULL) {
 		#if XM_RAMPING
 		if(ch->frame_count < RAMPING_POINTS) {
 			return XM_LERP(ch->end_of_previous_sample[ch->frame_count], .0f,
@@ -1288,83 +1291,58 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 		#endif
 		return .0f;
 	}
+
+	/* XXX: maybe do something about 0 length samples in load.c? */
 	if(ch->sample->length == 0) {
 		return .0f;
 	}
 
-	float u, v, t;
-	uint32_t a, b;
-	a = (uint32_t)ch->sample_position; /* This cast is fine,
-	                                    * sample_position will not
-	                                    * go above integer
-	                                    * ranges */
-	if(XM_LINEAR_INTERPOLATION) {
-		b = a + 1;
-		t = ch->sample_position - a; /* Cheaper than fmodf(., 1.f) */
-	}
-	u = xm_sample_at(ctx, ch->sample, a);
+	uint32_t a = (uint32_t)ch->sample_position;
+	float u = (float)xm_sample_at(ctx, ch->sample, a);
+	[[maybe_unused]] uint32_t b;
+	[[maybe_unused]] float t = ch->sample_position - a;
+	ch->sample_position += ch->step;
 
 	switch(ch->sample->loop_type) {
-
 	case XM_NO_LOOP:
-		if(XM_LINEAR_INTERPOLATION) {
-			v = (b < ch->sample->length) ? xm_sample_at(ctx, ch->sample, b) : .0f;
-		}
-		ch->sample_position += ch->step;
 		if(ch->sample_position >= ch->sample->length) {
-			ch->sample_position = -1;
+			ch->sample = NULL;
+			break;
 		}
+		b = (a+1 < ch->sample->length) ? (a+1) : a;
 		break;
 
 	case XM_FORWARD_LOOP:
-		if(XM_LINEAR_INTERPOLATION) {
-			v = xm_sample_at(ctx,
-			                 ch->sample,
-			                 (b == ch->sample->loop_end) ? ch->sample->loop_start : b);
-		}
-		ch->sample_position += ch->step;
+		assert(ch->sample->loop_length > 0);
 		while(ch->sample_position >= ch->sample->loop_end) {
 			ch->sample_position -= ch->sample->loop_length;
 		}
+		b = (a+1 == ch->sample->loop_end) ?
+			ch->sample->loop_start : (a+1);
 		break;
 
 	case XM_PING_PONG_LOOP:
-		if(ch->ping) {
-			ch->sample_position += ch->step;
-		} else {
-			ch->sample_position -= ch->step;
-		}
 		/* XXX: this may not work for very tight ping-pong loops
-		 * (ie switches direction more than once per sample */
-		if(ch->ping) {
-			if(XM_LINEAR_INTERPOLATION) {
-				v = xm_sample_at(ctx, ch->sample, (b >= ch->sample->loop_end) ? a : b);
-			}
+		 * (ie switches direction more than once per step */
+		assert(ch->sample->loop_length > ch->step);
+
+		if(!ch->sample_loop_direction) {
+			/* Ping (-->) */
 			if(ch->sample_position >= ch->sample->loop_end) {
-				ch->ping = false;
-				ch->sample_position = (ch->sample->loop_end << 1) - ch->sample_position;
+				ch->sample_loop_direction = true;
+				ch->sample_position = (ch->sample->loop_end*2)
+					- ch->sample_position;
 			}
-			/* sanity checking */
-			if(ch->sample_position >= ch->sample->length) {
-				ch->ping = false;
-				ch->sample_position -= ch->sample->length - 1;
-			}
+			b = (a+1 == ch->sample->loop_end) ? a : (a+1);
 		} else {
-			if(XM_LINEAR_INTERPOLATION) {
-				v = u;
-				u = xm_sample_at(ctx,
-				                 ch->sample,
-				                 (b == 1 || b - 2 <= ch->sample->loop_start) ? a : (b - 2));
-			}
+			/* Pong (<--) */
+			ch->sample_position -= ch->step * 2.f;
 			if(ch->sample_position <= ch->sample->loop_start) {
-				ch->ping = true;
-				ch->sample_position = (ch->sample->loop_start << 1) - ch->sample_position;
+				ch->sample_loop_direction = false;
+				ch->sample_position = (ch->sample->loop_start*2)
+					- ch->sample_position;
 			}
-			/* sanity checking */
-			if(ch->sample_position <= .0f) {
-				ch->ping = true;
-				ch->sample_position = .0f;
-			}
+			b = (a-1 == ch->sample->loop_start) ? a : (a+1);
 		}
 		break;
 
@@ -1373,17 +1351,22 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 		UNREACHABLE();
 	}
 
-	float endval = (XM_LINEAR_INTERPOLATION ? XM_LERP(u, v, t) : u);
+	#if XM_LINEAR_INTERPOLATION
+	/* u = sample_at(a), v = sample_at(b), t = lerp factor (0..1) */
+	if(ch->sample) {
+		u = XM_LERP(u, (float)xm_sample_at(ctx, ch->sample, b), t);
+	}
+	#endif
 
 	#if XM_RAMPING
 	if(ch->frame_count < RAMPING_POINTS) {
 		/* Smoothly transition between old and new sample. */
-		return XM_LERP(ch->end_of_previous_sample[ch->frame_count], endval,
+		return XM_LERP(ch->end_of_previous_sample[ch->frame_count], u,
 		               (float)ch->frame_count / (float)RAMPING_POINTS);
 	}
 	#endif
 
-	return endval;
+	return u;
 }
 
 static void xm_next_of_channel(xm_context_t* ctx, xm_channel_context_t* ch,

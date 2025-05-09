@@ -715,12 +715,6 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 	assert(ctx->module.num_samples == p->num_samples);
 	assert(ctx->module.samples_data_length == p->samples_data_length);
 
-	/* Initialise non-zero initial fields of channel ctx */
-	for(uint8_t i = 0; i < p->num_channels; ++i) {
-		xm_channel_context_t* ch = ctx->channels + i;
-		ch->ping = true;
-	}
-
 	assert(xm_context_size(ctx) == ctx_size);
 	return ctx;
 }
