@@ -519,18 +519,6 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 		sample->volume = MAX_VOLUME;
 	}
 
-	/* Fix invalid loop definitions */
-	if (sample->loop_start > sample->length) {
-		NOTICE("fixing invalid sample loop start");
-		sample->loop_start = sample->length;
-		sample->loop_length = sample->loop_end - sample->loop_start;
-	}
-	if (sample->loop_end > sample->length) {
-		NOTICE("fixing invalid sample loop end");
-		sample->loop_end = sample->length;
-		sample->loop_length = sample->loop_end - sample->loop_start;
-	}
-
 	uint8_t flags = READ_U8(offset + 14);
 	if(flags & SAMPLE_FLAG_PING_PONG) {
 		/* The XM spec doesn't quite say what to do when bits 0 and 1
@@ -541,6 +529,23 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 		sample->loop_type = XM_FORWARD_LOOP;
 	} else {
 		sample->loop_type = XM_NO_LOOP;
+		sample->loop_start = 0;
+		sample->loop_length = sample->length;
+		sample->loop_end = sample->length;
+	}
+
+	/* Fix invalid loop definitions */
+	if (sample->loop_start > sample->length) {
+		NOTICE("fixing invalid sample loop start");
+		sample->loop_start = sample->length;
+	}
+	if (sample->loop_end > sample->length) {
+		NOTICE("fixing invalid sample loop end");
+		sample->loop_end = sample->length;
+	}
+	if (sample->loop_length != sample->loop_end - sample->loop_start) {
+		NOTICE("fixing invalid sample loop length");
+		sample->loop_length = sample->loop_end - sample->loop_start;
 	}
 
 	/* Fix zero length loops */

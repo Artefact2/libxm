@@ -642,10 +642,9 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 			ch->sample_offset_param = s->effect_param;
 		}
 		ch->sample_position += ch->sample_offset_param * 256;
-		static_assert(XM_NO_LOOP == 0);
-		if(ch->sample_position >= ch->sample->length
-		   || (ch->sample->loop_type
-		       && ch->sample_position >= ch->sample->loop_end)) {
+		/* load.c also sets loop_end to the end of the sample for
+		   XM_NO_LOOP samples */
+		if(ch->sample_position >= ch->sample->loop_end) {
 			/* Pretend the sample dosen't loop and is done playing */
 			ch->sample = NULL;
 		}
