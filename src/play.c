@@ -1009,24 +1009,26 @@ static void xm_envelope_tick(xm_channel_context_t* ch,
 }
 
 static void xm_envelopes(xm_channel_context_t* ch) {
-	if(ch->instrument != NULL) {
-		if(ch->instrument->volume_envelope.enabled) {
-			if(!ch->sustained) {
-				ch->fadeout_volume = (ch->fadeout_volume < ch->instrument->volume_fadeout) ? 0 : ch->fadeout_volume - ch->instrument->volume_fadeout;
-			}
+	if(ch->instrument == NULL) return;
 
-			xm_envelope_tick(ch,
-			                 &(ch->instrument->volume_envelope),
-			                 &(ch->volume_envelope_frame_count),
-			                 &(ch->volume_envelope_volume));
-		}
+	if(!ch->sustained) {
+		ch->fadeout_volume =
+			(ch->fadeout_volume < ch->instrument->volume_fadeout) ?
+			0 : ch->fadeout_volume - ch->instrument->volume_fadeout;
+	}
 
-		if(ch->instrument->panning_envelope.enabled) {
-			xm_envelope_tick(ch,
-			                 &(ch->instrument->panning_envelope),
-			                 &(ch->panning_envelope_frame_count),
-			                 &(ch->panning_envelope_panning));
-		}
+	if(ch->instrument->volume_envelope.enabled) {
+		xm_envelope_tick(ch,
+		                 &(ch->instrument->volume_envelope),
+		                 &(ch->volume_envelope_frame_count),
+		                 &(ch->volume_envelope_volume));
+	}
+
+	if(ch->instrument->panning_envelope.enabled) {
+		xm_envelope_tick(ch,
+		                 &(ch->instrument->panning_envelope),
+		                 &(ch->panning_envelope_frame_count),
+		                 &(ch->panning_envelope_panning));
 	}
 }
 
