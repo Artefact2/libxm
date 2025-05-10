@@ -12,6 +12,8 @@
 #define EMPTY_PATTERN_NUM_ROWS 64
 #define SAMPLE_HEADER_SIZE 40
 #define SAMPLE_FLAG_16B 0b00010000
+#define SAMPLE_FLAG_PING_PONG 0b00000010
+#define SAMPLE_FLAG_FORWARD 0b00000001
 
 #define ASSERT_ALIGN(a, b) static_assert(alignof(a) % alignof(b) == 0)
 #define ASSERT_CTX_ALIGNED(ptr) assert((uintptr_t)((void*)(ptr)) % alignof(xm_context_t) == 0)
@@ -530,21 +532,15 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 	}
 
 	uint8_t flags = READ_U8(offset + 14);
-	switch(flags & 0b00000011) {
-	case 0:
-		sample->loop_type = XM_NO_LOOP;
-		break;
-	case 1:
-		sample->loop_type = XM_FORWARD_LOOP;
-		break;
-	case 2:
-		[[fallthrough]];
-	case 3:
+	if(flags & SAMPLE_FLAG_PING_PONG) {
 		/* The XM spec doesn't quite say what to do when bits 0 and 1
 		   are set, but FT2 loads it as ping-pong, so it seems bit 1 has
 		   precedence. */
 		sample->loop_type = XM_PING_PONG_LOOP;
-		break;
+	} else if(flags & SAMPLE_FLAG_FORWARD) {
+		sample->loop_type = XM_FORWARD_LOOP;
+	} else {
+		sample->loop_type = XM_NO_LOOP;
 	}
 
 	/* Fix zero length loops */
