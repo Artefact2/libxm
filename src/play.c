@@ -46,7 +46,7 @@ static void xm_post_pattern_change(xm_context_t*) __attribute__((nonnull));
 static void xm_row(xm_context_t*) __attribute__((nonnull));
 static void xm_tick(xm_context_t*) __attribute__((nonnull));
 
-static float xm_sample_at(const xm_context_t*, const xm_sample_t*, size_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static float xm_sample_at(const xm_context_t*, const xm_sample_t*, uint32_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static float xm_next_of_sample(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static void xm_next_of_channel(xm_context_t*, xm_channel_context_t*, float*) __attribute__((nonnull));
 static void xm_sample_unmixed(xm_context_t*, float*) __attribute__((nonnull));
@@ -855,7 +855,6 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigned int flags) {
 	if(!(flags & XM_TRIGGER_KEEP_SAMPLE_POSITION)) {
 		ch->sample_position = 0.f;
-		ch->sample_loop_direction = false;
 	}
 
 	if(ch->sample != NULL) {
@@ -1273,7 +1272,10 @@ static void xm_tick(xm_context_t* ctx) {
 }
 
 static float xm_sample_at(const xm_context_t* ctx,
-                          const xm_sample_t* sample, size_t k) {
+                          const xm_sample_t* sample, uint32_t k) {
+	assert(sample != NULL);
+	assert(k < sample->length);
+	assert(sample->index + k < ctx->module.samples_data_length);
 	return _Generic((xm_sample_point_t){},
 	                int8_t: (float)ctx->samples_data[sample->index + k] / (float)INT8_MAX,
 	                int16_t: (float)ctx->samples_data[sample->index + k] / (float)INT16_MAX,
@@ -1297,53 +1299,62 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 		return .0f;
 	}
 
+	xm_sample_t* smp = ch->sample;
 	uint32_t a = (uint32_t)ch->sample_position;
-	float u = (float)xm_sample_at(ctx, ch->sample, a);
-	[[maybe_unused]] uint32_t b;
 	[[maybe_unused]] float t = ch->sample_position - a;
+	[[maybe_unused]] uint32_t b;
 	ch->sample_position += ch->step;
 
 	switch(ch->sample->loop_type) {
 	case XM_NO_LOOP:
 		if(ch->sample_position >= ch->sample->length) {
 			ch->sample = NULL;
+			b = a;
 			break;
 		}
 		b = (a+1 < ch->sample->length) ? (a+1) : a;
 		break;
 
 	case XM_FORWARD_LOOP:
+		/* If length=6, loop_start=2, loop_end=6 */
+		/* 0 1 (2 3 4 5) (2 3 4 5) (2 3 4 5) ... */
 		assert(ch->sample->loop_length > 0);
 		while(ch->sample_position >= ch->sample->loop_end) {
 			ch->sample_position -= ch->sample->loop_length;
 		}
 		b = (a+1 == ch->sample->loop_end) ?
 			ch->sample->loop_start : (a+1);
+		assert(a < ch->sample->loop_end);
+		assert(b < ch->sample->loop_end);
 		break;
 
 	case XM_PING_PONG_LOOP:
-		/* XXX: this may not work for very tight ping-pong loops
-		 * (ie switches direction more than once per step */
-		assert(ch->sample->loop_length > ch->step);
+		/* If length=6, loop_start=2, loop_end=6 */
+		/* 0 1 (2 3 4 5 5 4 3 2) (2 3 4 5 5 4 3 2) ... */
+		assert(ch->sample->loop_length > 0);
+		while(ch->sample_position >=
+		      ch->sample->loop_end + ch->sample->loop_length) {
+			/* XXX check for overflow */
+			ch->sample_position -= ch->sample->loop_length * 2;
+		}
 
-		if(!ch->sample_loop_direction) {
-			/* Ping (-->) */
-			if(ch->sample_position >= ch->sample->loop_end) {
-				ch->sample_loop_direction = true;
-				ch->sample_position = (ch->sample->loop_end*2)
-					- ch->sample_position;
-			}
+		if(a < ch->sample->loop_end) {
+			/* In the first half of the loop, go forwards */
 			b = (a+1 == ch->sample->loop_end) ? a : (a+1);
 		} else {
-			/* Pong (<--) */
-			ch->sample_position -= ch->step * 2.f;
-			if(ch->sample_position <= ch->sample->loop_start) {
-				ch->sample_loop_direction = false;
-				ch->sample_position = (ch->sample->loop_start*2)
-					- ch->sample_position;
-			}
-			b = (a-1 == ch->sample->loop_start) ? a : (a+1);
+			/* In the second half of the loop, go backwards */
+			/* loop_end -> loop_end - 1 */
+			/* loop_end + 1 -> loop_end - 2 */
+			/* etc. */
+			/* loop_end + loop_length - 1 -> loop_start */
+			a = ch->sample->loop_end * 2 - 1 - a;
+			b = (a == ch->sample->loop_start) ? a : (a-1);
+			assert(a >= ch->sample->loop_start);
+			assert(b >= ch->sample->loop_start);
 		}
+
+		assert(a < ch->sample->loop_end);
+		assert(b < ch->sample->loop_end);
 		break;
 
 	default:
@@ -1351,11 +1362,11 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 		UNREACHABLE();
 	}
 
+	float u = (float)xm_sample_at(ctx, smp, a);
+
 	#if XM_LINEAR_INTERPOLATION
 	/* u = sample_at(a), v = sample_at(b), t = lerp factor (0..1) */
-	if(ch->sample) {
-		u = XM_LERP(u, (float)xm_sample_at(ctx, ch->sample, b), t);
-	}
+	u = XM_LERP(u, (float)xm_sample_at(ctx, smp, b), t);
 	#endif
 
 	#if XM_RAMPING
