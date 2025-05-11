@@ -1232,16 +1232,19 @@ static void xm_tick(xm_context_t* ctx) {
 			assert(ch->volume <= MAX_VOLUME);
 			assert(ch->tremolo_volume_offset >= -64
 			       && ch->tremolo_volume_offset <= 63);
-			static_assert(MAX_VOLUME + 63 <= INT8_MAX);
+			static_assert(MAX_VOLUME == 1<<6);
+			static_assert(MAX_ENVELOPE_VALUE == 1<<6);
+			static_assert(MAX_FADEOUT_VOLUME == 1<<16);
 
-			int64_t base = ch->volume + ch->tremolo_volume_offset;
+			/* 6 + 6 + 16 - 3 + 6 => 31 bits of range */
+			int32_t base = ch->volume + ch->tremolo_volume_offset;
 			if(base < 0) base = 0;
 			else if(base > MAX_VOLUME) base = MAX_VOLUME;
-			base *= ch->fadeout_volume
-				* ch->volume_envelope_volume
-				* ctx->global_volume;
-			base /= MAX_VOLUME * MAX_VOLUME * MAX_VOLUME;
-			volume =  (float)base / (float)(MAX_FADEOUT_VOLUME);
+			base *= ch->volume_envelope_volume;
+			base *= ch->fadeout_volume;
+			base /= 8;
+			base *= ctx->global_volume;
+			volume =  (float)base / (float)(INT32_MAX);
 			assert(volume >= 0.f && volume <= 1.f);
 		}
 
