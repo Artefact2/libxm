@@ -475,12 +475,9 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			/* Ghost instrument, trigger note */
 			/* Sample position is kept, but envelopes are reset */
 			xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_SAMPLE_POSITION);
-		} else if(s->instrument > ctx->module.num_instruments) {
-			/* Invalid instrument, Cut current note */
-			xm_cut_note(ch);
-			ch->instrument = NULL;
-			ch->sample = NULL;
 		} else {
+			/* Invalid instruments are deleted in load.c */
+			assert(s->instrument <= ctx->module.num_instruments);
 			ch->instrument = ctx->instruments + (s->instrument - 1);
 		}
 	}

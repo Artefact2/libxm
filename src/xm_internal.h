@@ -257,6 +257,8 @@ struct xm_channel_context_s {
 	bool muted;
 	bool should_reset_vibrato;
 	bool tremor_on;
+
+	char __pad[1];
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
 

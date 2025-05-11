@@ -347,6 +347,14 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
 		} else if(slot->note == 97) {
 			slot->note = KEY_OFF_NOTE;
 		}
+
+		if(slot->instrument > ctx->module.num_instruments) {
+			NOTICE("pattern %lu slot %lu: "
+			       "deleting invalid instrument %u",
+			       pat - ctx->patterns, slot - slots,
+			       slot->instrument);
+			slot->instrument = 0;
+		}
 	}
 
 	#if XM_DEFENSIVE
