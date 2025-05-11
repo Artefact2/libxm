@@ -229,15 +229,15 @@ static uint32_t xm_load_module_header(xm_context_t* ctx,
 	}
 
 	if(mod->length > PATTERN_ORDER_TABLE_LENGTH) {
-		NOTICE("clamping module pot length %d to %d\n", mod->length, PATTERN_ORDER_TABLE_LENGTH);
+		NOTICE("clamping module pot length %d to %d\n",
+		       mod->length, PATTERN_ORDER_TABLE_LENGTH);
 		mod->length = PATTERN_ORDER_TABLE_LENGTH;
 	}
 
-	[[maybe_unused]] uint16_t flags = READ_U32(offset + 14);
-	#if XM_FREQUENCY_TYPES == 3
+	uint16_t flags = READ_U32(offset + 14);
 	mod->frequency_type = (flags & 1) ?
 		XM_LINEAR_FREQUENCIES : XM_AMIGA_FREQUENCIES;
-	#endif
+
 	#if XM_DEFENSIVE
 	if(flags & 0b11111110) {
 		NOTICE("unknown flags set in module header (%d)", flags);

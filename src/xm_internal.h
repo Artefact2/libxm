@@ -51,7 +51,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define NUM_NOTES 96
 #define MAX_ENVELOPE_POINTS 12
 #define MAX_ROWS_PER_PATTERN 256
-#define RAMPING_POINTS 0x20
+#define RAMPING_POINTS 31
 #define MAX_VOLUME 64
 #define MAX_FADEOUT_VOLUME 32768
 #define MAX_PANNING 256 /* cannot be stored in a uint8_t, this is ft2
@@ -114,10 +114,13 @@ struct xm_sample_s {
 	int8_t relative_note;
 
 	#if XM_STRINGS
-	char name[SAMPLE_NAME_LENGTH + 1];
-	#else
-	char __pad[7];
+	/* Pad the name length to a multiple of 8, this makes struct packing
+	   easier */
+	static_assert(SAMPLE_NAME_LENGTH < 24); /* name[23] is for \0 */
+	char name[24];
 	#endif
+
+	char __pad[7];
 };
 typedef struct xm_sample_s xm_sample_t;
 
@@ -137,10 +140,11 @@ struct xm_instrument_s {
 	bool muted;
 
 	#if XM_STRINGS
-	char name[INSTRUMENT_NAME_LENGTH + 1];
-	#else
-	char __pad[1];
+	static_assert(INSTRUMENT_NAME_LENGTH < 24);
+	char name[24];
 	#endif
+
+	char __pad[1];
 };
 typedef struct xm_instrument_s xm_instrument_t;
 
@@ -171,20 +175,19 @@ struct xm_module_s {
 	uint32_t num_rows;
 	uint32_t samples_data_length;
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
-
-	#if XM_FREQUENCY_TYPES == 3
 	enum: uint8_t {
 		XM_LINEAR_FREQUENCIES = 0,
 		XM_AMIGA_FREQUENCIES = 1,
 	} frequency_type;
-	#endif
 
 	#if XM_STRINGS
-	char name[MODULE_NAME_LENGTH + 1];
-	char trackername[TRACKER_NAME_LENGTH + 1];
-	#elif XM_FREQUENCY_TYPES == 3
-	char __pad[3];
+	static_assert(MODULE_NAME_LENGTH < 24);
+	static_assert(TRACKER_NAME_LENGTH < 24);
+	char name[24];
+	char trackername[24];
 	#endif
+
+	char __pad[3];
 };
 typedef struct xm_module_s xm_module_t;
 
@@ -210,6 +213,7 @@ struct xm_channel_context_s {
 	 * a couple of float operations on every generated sample. */
 	float target_volume[2];
 	uint32_t frame_count; /* Gets reset after every note */
+	static_assert(RAMPING_POINTS % 2 == 1);
 	float end_of_previous_sample[RAMPING_POINTS];
 	#endif
 	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
