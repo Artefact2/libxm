@@ -767,7 +767,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			break;
 
 		case 0xE: /* EEy: Pattern delay */
-			ctx->extra_ticks = (ch->current->effect_param & 0x0F) * ctx->tempo;
+			ctx->extra_rows = (ch->current->effect_param & 0x0F);
 			break;
 
 		}
@@ -1111,9 +1111,18 @@ static void xm_tick(xm_context_t* ctx) {
 	}
 
 	ctx->current_tick++;
-	if(ctx->current_tick >= ctx->tempo + ctx->extra_ticks) {
-		ctx->current_tick = 0;
-		ctx->extra_ticks = 0;
+	if(ctx->current_tick >= ctx->tempo) {
+		if(ctx->extra_rows) {
+			/* Only restart after one extra tick, and restart at
+			   tick 1 instead (this is important for
+			   xm_tick_effects()). */
+			if(ctx->current_tick > ctx->tempo) {
+				--ctx->extra_rows;
+				ctx->current_tick = 1;
+			}
+		} else {
+			ctx->current_tick = 0;
+		}
 	}
 
 	/* FT2 manual says number of ticks / second = BPM * 0.4 */

@@ -277,14 +277,10 @@ struct xm_context_s {
 
 	float remaining_samples_in_tick;
 
-	/* Can go beyond 255, with high tempo and a pattern delay */
-	uint16_t current_tick;
-
-	/* Extra ticks to be played before going to the next row -
-	 * Used for EEy effect */
-	uint16_t extra_ticks;
-
 	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
+
+	uint8_t current_tick; /* Typically 0..(ctx->tempo) */
+	uint8_t extra_rows; /* See EEy Pattern Delay effect */
 
 	uint8_t tempo; /* 0..MIN_BPM */
 	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
@@ -301,5 +297,5 @@ struct xm_context_s {
 	uint8_t loop_count;
 	uint8_t max_loop_count;
 
-	char __pad[3];
+	char __pad[5];
 };

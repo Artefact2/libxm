@@ -16,6 +16,8 @@ add_test(NAME test_instrument_fadeout COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/instrument-fadeout.xm)
 add_test(NAME test_key_off COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/key-off.xm)
+add_test(NAME test_pattern_delay COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/pattern-delay.xm)
 add_test(NAME test_sample_offset COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/sample-offset.xm)
 add_test(NAME test_sample_offset_beyond_loop COMMAND test-libxm
