@@ -774,12 +774,10 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 
 	case 0xF: /* Fxx: Set tempo/BPM */
-		if(s->effect_param > 0) {
-			if(s->effect_param < MIN_BPM) {
-				ctx->tempo = s->effect_param;
-			} else {
-				ctx->bpm = s->effect_param;
-			}
+		if(s->effect_param >= MIN_BPM) {
+			ctx->bpm = s->effect_param;
+		} else {
+			ctx->tempo = s->effect_param;
 		}
 		break;
 
