@@ -631,7 +631,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 		break;
 
 	case 8: /* 8xx: Set panning */
-		ch->panning = (float)s->effect_param / (float)0xFF;
+		ch->panning = s->effect_param;
 		break;
 
 	case 9: /* 9xx: Sample offset */
