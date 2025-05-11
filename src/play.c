@@ -1079,15 +1079,15 @@ static void xm_tick(xm_context_t* ctx) {
 			       && ch->tremolo_volume_offset <= 63);
 			static_assert(MAX_VOLUME == 1<<6);
 			static_assert(MAX_ENVELOPE_VALUE == 1<<6);
-			static_assert(MAX_FADEOUT_VOLUME == 1<<16);
+			static_assert(MAX_FADEOUT_VOLUME == 1<<15);
 
-			/* 6 + 6 + 16 - 3 + 6 => 31 bits of range */
+			/* 6 + 6 + 15 - 2 + 6 => 31 bits of range */
 			int32_t base = ch->volume + ch->tremolo_volume_offset;
 			if(base < 0) base = 0;
 			else if(base > MAX_VOLUME) base = MAX_VOLUME;
 			base *= ch->volume_envelope_volume;
 			base *= ch->fadeout_volume;
-			base /= 8;
+			base /= 4;
 			base *= ctx->global_volume;
 			volume =  (float)base / (float)(INT32_MAX);
 			assert(volume >= 0.f && volume <= 1.f);

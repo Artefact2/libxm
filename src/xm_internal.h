@@ -53,7 +53,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define MAX_ROWS_PER_PATTERN 256
 #define RAMPING_POINTS 0x20
 #define MAX_VOLUME 64
-#define MAX_FADEOUT_VOLUME 65536
+#define MAX_FADEOUT_VOLUME 32768
 #define MAX_PANNING 256 /* cannot be stored in a uint8_t, this is ft2
                            behaviour */
 #define MAX_ENVELOPE_VALUE 64
