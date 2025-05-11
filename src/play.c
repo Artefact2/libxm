@@ -99,10 +99,6 @@ static bool HAS_VIBRATO(const xm_pattern_slot_t* s) {
 		|| (s->volume_column >> 4) == 0xB;
 }
 
-static bool HAS_ARPEGGIO(const xm_pattern_slot_t* s) {
-	return s->effect_type == 0 && s->effect_param != 0;
-}
-
 static bool NOTE_IS_VALID(uint8_t n) {
 	return n & ~KEY_OFF_NOTE;
 }
@@ -952,6 +948,17 @@ static void xm_row(xm_context_t* ctx) {
 		if(ch->pattern_loop_count > 0) {
 			in_a_loop = true;
 		}
+
+		if(ch->arp_note_offset) {
+			ch->arp_note_offset = 0;
+			xm_update_frequency(ctx, ch);
+		}
+
+		if(ch->should_reset_vibrato && !HAS_VIBRATO(ch->current)) {
+			ch->should_reset_vibrato = false;
+			ch->vibrato_note_offset = 0;
+			xm_update_frequency(ctx, ch);
+		}
 	}
 
 	if(!in_a_loop) {
@@ -1053,17 +1060,6 @@ static void xm_tick(xm_context_t* ctx) {
 
 		xm_tick_envelopes(ch);
 		xm_autovibrato(ctx, ch);
-
-		if(ch->should_reset_arpeggio && !HAS_ARPEGGIO(ch->current)) {
-			ch->should_reset_arpeggio = false;
-			ch->arp_note_offset = 0;
-			xm_update_frequency(ctx, ch);
-		}
-		if(ch->should_reset_vibrato && !HAS_VIBRATO(ch->current)) {
-			ch->should_reset_vibrato = false;
-			ch->vibrato_note_offset = 0;
-			xm_update_frequency(ctx, ch);
-		}
 
 		if(ctx->current_tick > 0) {
 			xm_tick_effects(ctx, ch);
@@ -1172,7 +1168,6 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		/* Technically not necessary, since 000 arpeggio will do
 		   nothing, this is a performance optimisation. */
 		if(ch->current->effect_param == 0) break;
-		ch->should_reset_arpeggio = true;
 		xm_arpeggio(ctx, ch);
 		break;
 

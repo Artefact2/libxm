@@ -255,7 +255,6 @@ struct xm_channel_context_s {
 
 	bool sustained;
 	bool muted;
-	bool should_reset_arpeggio;
 	bool should_reset_vibrato;
 	bool tremor_on;
 };
