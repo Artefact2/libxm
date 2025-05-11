@@ -57,6 +57,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define MAX_PANNING 256 /* cannot be stored in a uint8_t, this is ft2
                            behaviour */
 #define MAX_ENVELOPE_VALUE 64
+#define MIN_BPM 32
 
 /* Not the original key off (97), this is the value used by libxm once a ctx
    has been loaded */

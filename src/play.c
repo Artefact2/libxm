@@ -779,7 +779,7 @@ static void xm_handle_note_and_instrument(xm_context_t* ctx,
 
 	case 0xF: /* Fxx: Set tempo/BPM */
 		if(s->effect_param > 0) {
-			if(s->effect_param <= 0x1F) {
+			if(s->effect_param < MIN_BPM) {
 				ctx->tempo = s->effect_param;
 			} else {
 				ctx->bpm = s->effect_param;
