@@ -92,7 +92,7 @@ __attribute__((nonnull));
  */
 xm_context_t* xm_create_context(char* pool, const xm_prescan_data_t* p,
                                 const char* moddata,
-                                uint32_t moddata_length, uint32_t rate)
+                                uint32_t moddata_length, uint16_t rate)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -129,7 +129,7 @@ __attribute__((nonnull));
  * the pointer must be aligned to max_align_t (this is always true for pointers
  * returned by malloc())
  */
-xm_context_t* xm_create_context_from_libxm(char* data, uint32_t rate)
+xm_context_t* xm_create_context_from_libxm(char* data, uint16_t rate)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 

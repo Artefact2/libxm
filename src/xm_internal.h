@@ -58,10 +58,20 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
                            behaviour */
 #define MAX_ENVELOPE_VALUE 64
 #define MIN_BPM 32
+#define MAX_BPM 255
 
 /* Not the original key off (97), this is the value used by libxm once a ctx
    has been loaded */
 #define KEY_OFF_NOTE 128
+
+/* How much is a channel final volume allowed to change per audio frame; this is
+   used to avoid abrubt volume changes which manifest as "clicks" in the
+   generated sound. */
+#define RAMPING_VOLUME_RAMP (1.f/128.f)
+
+/* Final amplification factor for the generated audio frames. This value is a
+   compromise between too quiet output and clipping. */
+#define AMPLIFICATION .25f
 
 /* ----- Data types ----- */
 
@@ -195,17 +205,14 @@ struct xm_channel_context_s {
 	float step;
 
 	float actual_volume[2]; /* Multiplier for left/right channel */
-	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
-
-
 	#if XM_RAMPING
 	/* These values are updated at the end of each tick, to save
 	 * a couple of float operations on every generated sample. */
 	float target_volume[2];
-
 	uint32_t frame_count; /* Gets reset after every note */
 	float end_of_previous_sample[RAMPING_POINTS];
 	#endif
+	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
 
 	uint16_t autovibrato_ticks;
 	uint16_t volume_envelope_frame_count;
@@ -266,17 +273,6 @@ struct xm_context_s {
 	uint8_t* row_loop_count;
 
 	uint64_t generated_samples;
-	float amplification;
-	uint32_t rate;
-	uint16_t tempo;
-	uint16_t bpm;
-
-	#if XM_RAMPING
-	/* How much is a channel final volume allowed to change per
-	 * sample; this is used to avoid abrubt volume changes which
-	 * manifest as "clicks" in the generated sound. */
-	float volume_ramp;
-	#endif
 
 	float remaining_samples_in_tick;
 
@@ -286,6 +282,11 @@ struct xm_context_s {
 	/* Extra ticks to be played before going to the next row -
 	 * Used for EEy effect */
 	uint16_t extra_ticks;
+
+	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
+
+	uint8_t tempo; /* 0..MIN_BPM */
+	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
 
 	uint8_t global_volume; /* 0..=MAX_VOLUME */
 	uint8_t current_table_index; /* 0..(module.length) */
@@ -298,4 +299,6 @@ struct xm_context_s {
 
 	uint8_t loop_count;
 	uint8_t max_loop_count;
+
+	char __pad[3];
 };

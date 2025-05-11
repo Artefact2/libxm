@@ -244,8 +244,18 @@ static uint32_t xm_load_module_header(xm_context_t* ctx,
 	}
 	#endif
 
-	ctx->tempo = READ_U16(offset + 16);
-	ctx->bpm = READ_U16(offset + 18);
+	uint16_t tempo = READ_U16(offset + 16);
+	uint16_t bpm = READ_U16(offset + 18);
+	if(tempo >= MIN_BPM) {
+		NOTICE("clamping tempo (%u -> %u)", tempo, MIN_BPM-1);
+		tempo = MIN_BPM-1;
+	}
+	if(bpm > MAX_BPM) {
+		NOTICE("clamping bpm (%u -> %u)", bpm, MAX_BPM);
+		bpm = MAX_BPM;
+	}
+	ctx->tempo = (uint8_t)tempo;
+	ctx->bpm = (uint8_t)bpm;
 
 	READ_MEMCPY(mod->pattern_table, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
 
@@ -635,7 +645,7 @@ uint32_t xm_context_size(const xm_context_t* ctx) {
 
 xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
                                 const char* moddata, uint32_t moddata_length,
-                                uint32_t rate) {
+                                uint16_t rate) {
 	/* Make sure we are not misaligning data by accident */
 	ASSERT_CTX_ALIGNED(mempool);
 	uint32_t ctx_size = xm_size_for_context(p);
@@ -667,11 +677,6 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 
 	ctx->rate = rate;
 	ctx->global_volume = MAX_VOLUME;
-	ctx->amplification = .25f; /* XXX: some bad modules may still clip. Find out something better. */
-
-	#if XM_RAMPING
-	ctx->volume_ramp = (1.f / 128.f);
-	#endif
 
 	/* Read module header */
 	uint32_t offset = xm_load_module_header(ctx, moddata, moddata_length);
@@ -754,7 +759,7 @@ void xm_context_to_libxm(xm_context_t* ctx, char* out) {
 	uint32_t ctx_size = xm_context_size(ctx);
 	[[maybe_unused]] uint64_t old_hash = xm_fnv1a((void*)ctx, ctx_size);
 
-	uint32_t old_rate = ctx->rate;
+	uint16_t old_rate = ctx->rate;
 	ctx->rate = 0;
 
 	#if XM_LIBXM_DELTA_SAMPLES
@@ -779,7 +784,7 @@ void xm_context_to_libxm(xm_context_t* ctx, char* out) {
 	assert(xm_fnv1a((void*)ctx, ctx_size) == old_hash);
 }
 
-xm_context_t* xm_create_context_from_libxm(char* data, uint32_t rate) {
+xm_context_t* xm_create_context_from_libxm(char* data, uint16_t rate) {
 	ASSERT_CTX_ALIGNED(data);
 	xm_context_t* ctx = (void*)data;
 	ctx->rate = rate;

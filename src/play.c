@@ -1375,7 +1375,7 @@ static void xm_next_of_channel(xm_context_t* ctx, xm_channel_context_t* ch,
                                float* out_lr) {
 	out_lr[0] = 0.f;
 	out_lr[1] = 0.f;
-	const float fval = xm_next_of_sample(ctx, ch) * ctx->amplification;
+	const float fval = xm_next_of_sample(ctx, ch) * AMPLIFICATION;
 
 	if(ch->muted || (ch->instrument != NULL && ch->instrument->muted)
 	   || (ctx->max_loop_count > 0
@@ -1389,9 +1389,9 @@ static void xm_next_of_channel(xm_context_t* ctx, xm_channel_context_t* ch,
 	#if XM_RAMPING
 	ch->frame_count++;
 	XM_SLIDE_TOWARDS(&(ch->actual_volume[0]),
-	                 ch->target_volume[0], ctx->volume_ramp);
+	                 ch->target_volume[0], RAMPING_VOLUME_RAMP);
 	XM_SLIDE_TOWARDS(&(ch->actual_volume[1]),
-	                 ch->target_volume[1], ctx->volume_ramp);
+	                 ch->target_volume[1], RAMPING_VOLUME_RAMP);
 	#endif
 }
 
