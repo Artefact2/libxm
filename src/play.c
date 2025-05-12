@@ -1129,7 +1129,15 @@ static void xm_tick(xm_context_t* ctx) {
 	}
 
 	/* FT2 manual says number of ticks / second = BPM * 0.4 */
-	ctx->remaining_samples_in_tick += (float)ctx->rate / ((float)ctx->bpm * 0.4f);
+	static_assert(_Generic(ctx->remaining_samples_in_tick,
+	                       int32_t: true, default: false));
+	static_assert(_Generic(ctx->rate, uint16_t: true, default: false));
+	static_assert(TICK_SUBSAMPLES % 4 == 0);
+	static_assert(10 * (TICK_SUBSAMPLES / 4) * UINT16_MAX <= INT32_MAX);
+	int32_t samples_in_tick = ctx->rate;
+	samples_in_tick *= 10 * TICK_SUBSAMPLES / 4;
+	samples_in_tick /= ctx->bpm;
+	ctx->remaining_samples_in_tick += samples_in_tick;
 }
 
 /* These effects only do something every tick after the first tick of every row.
@@ -1419,7 +1427,7 @@ static void xm_sample_unmixed(xm_context_t* ctx, float* out_lr) {
 	if(ctx->remaining_samples_in_tick <= 0) {
 		xm_tick(ctx);
 	}
-	ctx->remaining_samples_in_tick--;
+	ctx->remaining_samples_in_tick -= TICK_SUBSAMPLES;
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_next_of_channel(ctx, ctx->channels + i, out_lr + 2*i);
@@ -1440,7 +1448,7 @@ static void xm_sample(xm_context_t* ctx, float* out_lr) {
 	if(ctx->remaining_samples_in_tick <= 0) {
 		xm_tick(ctx);
 	}
-	ctx->remaining_samples_in_tick--;
+	ctx->remaining_samples_in_tick -= TICK_SUBSAMPLES;
 
 	out_lr[0] = 0.f;
 	out_lr[1] = 0.f;

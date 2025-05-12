@@ -73,6 +73,13 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
    compromise between too quiet output and clipping. */
 #define AMPLIFICATION .25f
 
+/* Granularity of sample count for ctx->remaining_samples_in_tick, for precise
+   timings of ticks. Worst case rounding is 1 frame (1/ctx->rate second worth of
+   audio) error every TICK_SUBSAMPLES ticks. A tick is at least 0.01s long (255
+   BPM), so at 44100 Hz the error is 1/44100 second every 81.92 seconds, or
+   about 0.00003%. */
+#define TICK_SUBSAMPLES (1<<13)
+
 /* ----- Data types ----- */
 
 struct xm_envelope_point_s {
@@ -283,7 +290,7 @@ struct xm_context_s {
 
 	uint64_t generated_samples;
 
-	float remaining_samples_in_tick;
+	int32_t remaining_samples_in_tick; /* In 1/TICK_SUBSAMPLE increments */
 
 	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
 
