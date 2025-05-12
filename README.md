@@ -139,7 +139,6 @@ ramping2.xm                    | PASS           | MilkyTracker           | If XM
 retrig-vol-fade.xm             | PASS           | MT, FT2clone, OpenMPT  | Should sound identical.
 tone-portamento.xm             | PASS           | MilkyTracker           | Should sound identical.
 tremolo.xm                     | PASS           | MilkyTracker           | Should sound identical.
-tremor.xm                      | PASS           | MilkyTracker           | Should sound identical.
 vibrato.xm                     | PASS           | MilkyTracker           | Should sound identical.
 vibrato-slow.xm                | PASS           | OpenMPT                | Should sound identical.
 vibrato-octave.xm              | PASS           | FT2clone, OpenMPT      | Should sound identical.
