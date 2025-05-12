@@ -224,7 +224,10 @@ struct xm_channel_context_s {
 	uint8_t volume_envelope_volume; /* 0..=MAX_ENVELOPE_VALUE  */
 	uint8_t panning_envelope_panning; /* 0..=MAX_ENVELOPE_VALUE */
 
-	uint8_t volume; /* 0..=MAX_VOLUME  */
+	uint8_t volume; /* 0..=MAX_VOLUME */
+	int8_t volume_offset; /* -MIN_VOLUME..MAX_VOLUME. Reset by note trigger
+                                   or by any volume command. Shared by 7xy:
+                                   Tremolo and Txy: Tremor. */
 	uint8_t panning; /* 0..MAX_PANNING  */
 
 	int8_t autovibrato_note_offset; /* in 1/128 note increments */
@@ -244,23 +247,24 @@ struct xm_channel_context_s {
 	uint8_t note_delay_param;
 	uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
 	uint8_t pattern_loop_count; /* How many loop passes have been done */
-	uint8_t tremor_param;
 	uint8_t sample_offset_param;
 
 	uint8_t tremolo_param;
 	uint8_t tremolo_control_param;
-	uint8_t tremolo_ticks;
-	int8_t tremolo_volume_offset; /* -64..63 */
+	uint8_t tremolo_ticks; /* Mod 0x40, so wraparound is fine. XXX: is it
+	                          shared with vibrato ticks? tremor ticks? */
 
 	uint8_t vibrato_param;
 	uint8_t vibrato_control_param;
 	uint8_t vibrato_ticks;
 	int8_t vibrato_note_offset; /* in 1/16 note increments */
+	bool should_reset_vibrato;
+
+	uint8_t tremor_param;
+	uint8_t tremor_ticks; /* XXX: test overflow */
 
 	bool sustained;
 	bool muted;
-	bool should_reset_vibrato;
-	bool tremor_on;
 
 	char __pad[1];
 };

@@ -173,8 +173,10 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 	   means pitch goes down with vibrato, but volume goes up with
 	   tremolo.). Tremolo, like vibrato, is not applied on 1st tick of every
 	   row (has no effect on Spd=1). */
+	/* Like Txy: Tremor, tremolo effect *persists* after the end of the
+	   effect, but is reset after any volume command. */
 	ch->tremolo_ticks += (ch->tremolo_param >> 4);
-	ch->tremolo_volume_offset =
+	ch->volume_offset =
 		-xm_waveform(ch->tremolo_control_param, ch->tremolo_ticks)
 		* (ch->tremolo_param & 0x0F) * 4 / 128;
 }
@@ -539,15 +541,18 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		[[fallthrough]];
 	case 0x4:
 		/* Set volume */
+		ch->volume_offset = 0;
 		ch->volume = s->volume_column - 0x10;
 		break;
 
 	case 0x8: /* ▼x: Fine volume slide down */
+		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, s->volume_column & 0x0F,
 		               MAX_VOLUME);
 		break;
 
 	case 0x9: /* ▲x: Fine volume slide up */
+		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, s->volume_column << 4,
 		               MAX_VOLUME);
 		break;
@@ -661,6 +666,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 
 	case 0xC: /* Cxx: Set volume */
+		ch->volume_offset = 0;
 		ch->volume = s->effect_param > MAX_VOLUME ?
 			MAX_VOLUME : s->effect_param;
 		break;
@@ -730,6 +736,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			if(s->effect_param & 0x0F) {
 				ch->fine_volume_slide_param = (s->effect_param & 0x0F) << 4;
 			}
+			ch->volume_offset = 0;
 			xm_param_slide(&ch->volume,
 			               ch->fine_volume_slide_param,
 			               MAX_VOLUME);
@@ -739,6 +746,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			if(s->effect_param & 0x0F) {
 				ch->fine_volume_slide_param = s->effect_param & 0x0F;
 			}
+			ch->volume_offset = 0;
 			xm_param_slide(&ch->volume,
 			               ch->fine_volume_slide_param,
 			               MAX_VOLUME);
@@ -867,8 +875,8 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 		ch->panning_envelope_frame_count = 0;
 	}
 
-	ch->tremolo_volume_offset = 0;
-	ch->tremor_on = false;
+	ch->tremor_ticks = 0;
+	ch->volume_offset = 0;
 	ch->vibrato_note_offset = 0;
 	ch->autovibrato_note_offset = 0;
 	ch->autovibrato_ticks = 0;
@@ -1069,27 +1077,24 @@ static void xm_tick(xm_context_t* ctx) {
 			   - __builtin_abs(ch->panning - MAX_PANNING/2))
 			/ (MAX_ENVELOPE_VALUE/2);
 
-		if(ch->tremor_on) {
-		        volume = .0f;
-		} else {
-			assert(ch->volume <= MAX_VOLUME);
-			assert(ch->tremolo_volume_offset >= -64
-			       && ch->tremolo_volume_offset <= 63);
-			static_assert(MAX_VOLUME == 1<<6);
-			static_assert(MAX_ENVELOPE_VALUE == 1<<6);
-			static_assert(MAX_FADEOUT_VOLUME == 1<<15);
+		assert(ch->volume <= MAX_VOLUME);
+		assert(ch->volume_offset >= -MAX_VOLUME
+		       && ch->volume_offset < MAX_VOLUME);
 
-			/* 6 + 6 + 15 - 2 + 6 => 31 bits of range */
-			int32_t base = ch->volume + ch->tremolo_volume_offset;
-			if(base < 0) base = 0;
-			else if(base > MAX_VOLUME) base = MAX_VOLUME;
-			base *= ch->volume_envelope_volume;
-			base *= ch->fadeout_volume;
-			base /= 4;
-			base *= ctx->global_volume;
-			volume =  (float)base / (float)(INT32_MAX);
-			assert(volume >= 0.f && volume <= 1.f);
-		}
+		static_assert(MAX_VOLUME == 1<<6);
+		static_assert(MAX_ENVELOPE_VALUE == 1<<6);
+		static_assert(MAX_FADEOUT_VOLUME == 1<<15);
+
+		/* 6 + 6 + 15 - 2 + 6 => 31 bits of range */
+		int32_t base = ch->volume + ch->volume_offset;
+		if(base < 0) base = 0;
+		else if(base > MAX_VOLUME) base = MAX_VOLUME;
+		base *= ch->volume_envelope_volume;
+		base *= ch->fadeout_volume;
+		base /= 4;
+		base *= ctx->global_volume;
+		volume =  (float)base / (float)(INT32_MAX);
+		assert(volume >= 0.f && volume <= 1.f);
 
 #if XM_RAMPING
 		/* See https://modarchive.org/forums/index.php?topic=3517.0
@@ -1134,11 +1139,13 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 	switch(ch->current->volume_column >> 4) {
 
 	case 0x6: /* -x: Volume slide down */
+		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, ch->current->volume_column & 0x0F,
 		               MAX_VOLUME);
 		break;
 
 	case 0x7: /* +x: Volume slide up */
+		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, ch->current->volume_column << 4,
 		               MAX_VOLUME);
 		break;
@@ -1193,11 +1200,13 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 5: /* 5xy: Tone portamento + Volume slide */
+		ch->volume_offset = 0;
 		xm_tone_portamento(ctx, ch);
 		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
 		break;
 
 	case 6: /* 6xy: Vibrato + Volume slide */
+		ch->volume_offset = 0;
 		ch->should_reset_vibrato = true;
 		xm_vibrato(ctx, ch);
 		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
@@ -1208,6 +1217,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 0xA: /* Axy: Volume slide */
+		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
 		break;
 
@@ -1255,7 +1265,18 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 29: /* Txy: Tremor */
-		ch->tremor_on = (ctx->current_tick - 1) % ((ch->tremor_param >> 4) + (ch->tremor_param & 0x0F) + 2) > (ch->tremor_param >> 4);
+		/* (x+1) ticks on, then (y+1) ticks off */
+		/* Effect is not the same every row: it keeps an internal tick
+		   counter */
+		/* If tremor ends with "off" volume, volume stays off, but *any*
+		   volume effect restores the volume (with the volume effect
+		   applied). */
+		/* It works exactly like 7xy: Tremolo with a square waveform,
+		   and xy param defines the period and duty cycle. */
+		uint8_t x = (ch->tremor_param >> 4) + 1;
+		uint8_t y = (ch->tremor_param & 0x0F) + 1;
+		ch->volume_offset = (ch->tremor_ticks % (x+y) < x) ? 0 : -MAX_VOLUME;
+		ch->tremor_ticks++;
 		break;
 
 	}
