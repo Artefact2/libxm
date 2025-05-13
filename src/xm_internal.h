@@ -268,12 +268,11 @@ struct xm_channel_context_s {
 	bool should_reset_vibrato;
 
 	uint8_t tremor_param;
-	uint8_t tremor_ticks; /* XXX: test overflow */
+	uint8_t tremor_ticks; /* Decrements from max 16 */
+	bool tremor_on;
 
 	bool sustained;
 	bool muted;
-
-	char __pad[1];
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
 

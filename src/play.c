@@ -876,6 +876,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 	}
 
 	ch->tremor_ticks = 0;
+	ch->tremor_on = false;
 	ch->volume_offset = 0;
 	ch->vibrato_note_offset = 0;
 	ch->autovibrato_note_offset = 0;
@@ -1275,18 +1276,24 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 	case 29: /* Txy: Tremor */
 		/* (x+1) ticks on, then (y+1) ticks off */
 		/* Effect is not the same every row: it keeps an internal tick
-		   counter */
+		   counter and updates to the parameter only matters at the end
+		   of an on or off cycle */
 		/* If tremor ends with "off" volume, volume stays off, but *any*
 		   volume effect restores the volume (with the volume effect
 		   applied). */
 		/* It works exactly like 7xy: Tremolo with a square waveform,
 		   and xy param defines the period and duty cycle. */
-		uint8_t x = (ch->tremor_param >> 4) + 1;
-		uint8_t y = (ch->tremor_param & 0x0F) + 1;
-		ch->volume_offset = (ch->tremor_ticks % (x+y) < x) ? 0 : -MAX_VOLUME;
-		ch->tremor_ticks++;
+		if(ch->tremor_ticks == 0) {
+			ch->tremor_on = !ch->tremor_on;
+			if(ch->tremor_on) {
+				ch->tremor_ticks = (ch->tremor_param >> 4) + 1;
+			} else {
+				ch->tremor_ticks = (ch->tremor_param & 0xF) + 1;
+			}
+		}
+		ch->volume_offset = ch->tremor_on ? 0 : -MAX_VOLUME;
+		ch->tremor_ticks--;
 		break;
-
 	}
 }
 
