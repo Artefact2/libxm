@@ -26,16 +26,13 @@ static uint8_t xm_envelope_lerp(const xm_envelope_point_t*, const xm_envelope_po
 static void xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16_t*, uint8_t*) __attribute__((nonnull));
 static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
-#if XM_FREQUENCY_TYPES & 1
 static float xm_linear_period(float) __attribute__((warn_unused_result));
-static float xm_linear_frequency(float, float, float) __attribute__((warn_unused_result));
-#endif
-#if XM_FREQUENCY_TYPES & 2
+static float xm_linear_frequency(float, float) __attribute__((warn_unused_result));
 static float xm_amiga_period(float) __attribute__((warn_unused_result));
-static float xm_amiga_frequency(float, float, float) __attribute__((warn_unused_result));
-#endif
+static float xm_amiga_frequency(float, float) __attribute__((warn_unused_result));
+
 static float xm_period(xm_context_t*, float) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static float xm_frequency(xm_context_t*, float, float, float) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static float xm_frequency(xm_context_t*, float, float) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static void xm_update_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
 static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
@@ -244,6 +241,7 @@ static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 
  end:
+	ch->period = xm_period(ctx, ch->note + ch->arp_note_offset);
 	xm_update_frequency(ctx, ch);
 }
 
@@ -320,122 +318,36 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	}
 }
 
-#if XM_FREQUENCY_TYPES & 1
-static float xm_linear_period(float note) {
+[[maybe_unused]] static float xm_linear_period(float note) {
 	return 7680.f - note * 64.f;
 }
 
-static float xm_linear_frequency(float period, float note_offset, float period_offset) {
-	period -= 64.f * note_offset + 16.f * period_offset;
+[[maybe_unused]] static float xm_linear_frequency(float period,
+                                                  float period_offset) {
+	period -= 16.f * period_offset;
 	return 8363.f * powf(2.f, (4608.f - period) / 768.f);
 }
-#endif
 
-#if XM_FREQUENCY_TYPES & 2
-
-#define AMIGA_FREQ_SCALE 1024
-static const uint32_t amiga_frequencies[] = {
-	1712*AMIGA_FREQ_SCALE, 1616*AMIGA_FREQ_SCALE, 1525*AMIGA_FREQ_SCALE, 1440*AMIGA_FREQ_SCALE, /* C-2, C#2, D-2, D#2 */
-	1357*AMIGA_FREQ_SCALE, 1281*AMIGA_FREQ_SCALE, 1209*AMIGA_FREQ_SCALE, 1141*AMIGA_FREQ_SCALE, /* E-2, F-2, F#2, G-2 */
-	1077*AMIGA_FREQ_SCALE, 1017*AMIGA_FREQ_SCALE,  961*AMIGA_FREQ_SCALE,  907*AMIGA_FREQ_SCALE, /* G#2, A-2, A#2, B-2 */
-	856*AMIGA_FREQ_SCALE,                                                                       /* C-3 */
-};
-
-static float xm_amiga_period(float note) {
-	unsigned int intnote = note;
-	uint8_t a = intnote % 12;
-	int8_t octave = note / 12.f - 2;
-	int32_t p1 = amiga_frequencies[a], p2 = amiga_frequencies[a + 1];
-
-	if(octave > 0) {
-		p1 >>= octave;
-		p2 >>= octave;
-	} else if(octave < 0) {
-		p1 <<= (-octave);
-		p2 <<= (-octave);
-	}
-
-	return XM_LERP(p1, p2, note - intnote) / AMIGA_FREQ_SCALE;
+[[maybe_unused]] static float xm_amiga_period(float note) {
+	/* Values obtained via exponential regression over the period tables in
+	   modfil10.txt */
+	return 8.f * 855.9563438f * powf(2.f, -0.0832493329f * note);
 }
 
-static float xm_amiga_frequency(float period, float note_offset, float period_offset) {
-	if(period == .0f) return .0f;
-
-	if(note_offset == 0) {
-		/* A chance to escape from insanity */
-		period += 16.f * period_offset;
-		goto end;
-	}
-
-	uint8_t a;
-	int8_t octave;
-	float note;
-	int32_t p1, p2;
-
-	/* FIXME: this is very crappy at best */
-	a = octave = 0;
-
-	/* Find the octave of the current period */
-	period *= AMIGA_FREQ_SCALE;
-	if(period > amiga_frequencies[0]) {
-		--octave;
-		while(period > (amiga_frequencies[0] << (-octave))) --octave;
-	} else if(period < amiga_frequencies[12]) {
-		++octave;
-		while(period < (amiga_frequencies[12] >> octave)) ++octave;
-	}
-
-	/* Find the smallest note closest to the current period */
-	for(uint8_t i = 0; i < 12; ++i) {
-		p1 = amiga_frequencies[i], p2 = amiga_frequencies[i + 1];
-
-		if(octave > 0) {
-			p1 >>= octave;
-			p2 >>= octave;
-		} else if(octave < 0) {
-			p1 <<= (-octave);
-			p2 <<= (-octave);
-		}
-
-		if(p2 <= period && period <= p1) {
-			a = i;
-			break;
-		}
-	}
-
-	assert(p1 < period || p2 > period);
-
-	note = 12.f * (octave + 2) + a + XM_INVERSE_LERP(p1, p2, period);
-	period = xm_amiga_period(note + note_offset) + 16.f * period_offset;
-
- end:
+[[maybe_unused]] static float xm_amiga_frequency(float period,
+                                                 float period_offset) {
 	/* This is the PAL value. No reason to choose this one over the
 	 * NTSC value. */
-	return 7093789.2f / (period * 2.f);
+	if(period == 0.f) return 0.f;
+	return 7093789.2f / ((period + period_offset) * 2.f);
 }
-#endif
 
-#if XM_FREQUENCY_TYPES == 1
 static float xm_period([[maybe_unused]] xm_context_t* ctx, float note) {
+	#if XM_FREQUENCY_TYPES == 1
 	return xm_linear_period(note);
-
-}
-static float xm_frequency([[maybe_unused]] xm_context_t* ctx,
-                          float period, float note_offset,
-                          float period_offset) {
-	return xm_linear_frequency(period, note_offset, period_offset);
-}
-#elif XM_FREQUENCY_TYPES == 2
-static float xm_period([[maybe_unused]] xm_context_t* ctx, float note) {
+	#elif XM_FREQUENCY_TYPES == 2
 	return xm_amiga_period(note);
-
-}
-static float xm_frequency([[maybe_unused]] xm_context_t* ctx, float period,
-                          float note_offset, float period_offset) {
-	return xm_amiga_frequency(period, note_offset, period_offset);
-}
-#else
-static float xm_period(xm_context_t* ctx, float note) {
+	#else
 	switch(ctx->module.frequency_type) {
 	case XM_LINEAR_FREQUENCIES:
 		return xm_linear_period(note);
@@ -443,22 +355,28 @@ static float xm_period(xm_context_t* ctx, float note) {
 		return xm_amiga_period(note);
 	}
 	UNREACHABLE();
+	#endif
 }
-static float xm_frequency(xm_context_t* ctx, float period, float note_offset, float period_offset) {
+static float xm_frequency([[maybe_unused]] xm_context_t* ctx,
+                          float period, float offset) {
+	#if XM_FREQUENCY_TYPES == 1
+	return xm_linear_frequency(period, offset);
+	#elif XM_FREQUENCY_TYPES == 2
+	return xm_amiga_frequency(period_offset);
+	#else
 	switch(ctx->module.frequency_type) {
 	case XM_LINEAR_FREQUENCIES:
-		return xm_linear_frequency(period, note_offset, period_offset);
+		return xm_linear_frequency(period, offset);
 	case XM_AMIGA_FREQUENCIES:
-		return xm_amiga_frequency(period, note_offset, period_offset);
+		return xm_amiga_frequency(period, offset);
 	}
 	UNREACHABLE();
+	#endif
 }
-#endif
 
 static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->frequency = xm_frequency(
 		ctx, ch->period,
-		ch->arp_note_offset,
 		(float)(8*ch->vibrato_note_offset + ch->autovibrato_note_offset) / 128.f
 	);
 	ch->step = ch->frequency / ctx->rate;
@@ -955,6 +873,7 @@ static void xm_row(xm_context_t* ctx) {
 
 		if(ch->arp_note_offset) {
 			ch->arp_note_offset = 0;
+			ch->period = xm_period(ctx, ch->note);
 			xm_update_frequency(ctx, ch);
 		}
 
