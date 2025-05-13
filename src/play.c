@@ -152,18 +152,18 @@ static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
 	uint8_t sweep = (ch->autovibrato_ticks < instr->vibrato_sweep) ?
 		ch->autovibrato_ticks : UINT8_MAX;
 
-	ch->autovibrato_ticks += instr->vibrato_rate;
 	ch->autovibrato_note_offset =
 		xm_waveform(instr->vibrato_type, ch->autovibrato_ticks >> 2)
 		* instr->vibrato_depth * sweep / (16*256);
+	ch->autovibrato_ticks += instr->vibrato_rate;
 	xm_update_frequency(ctx, ch);
 }
 
 static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
-	ch->vibrato_ticks += (ch->vibrato_param >> 4);
 	ch->vibrato_note_offset =
 		xm_waveform(ch->vibrato_control_param, ch->vibrato_ticks)
 		* (ch->vibrato_param & 0x0F) / 0x0F;
+	ch->vibrato_ticks += (ch->vibrato_param >> 4);
 	xm_update_frequency(ctx, ch);
 }
 
@@ -175,10 +175,10 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 	   row (has no effect on Spd=1). */
 	/* Like Txy: Tremor, tremolo effect *persists* after the end of the
 	   effect, but is reset after any volume command. */
-	ch->tremolo_ticks += (ch->tremolo_param >> 4);
 	ch->volume_offset =
 		-xm_waveform(ch->tremolo_control_param, ch->tremolo_ticks)
 		* (ch->tremolo_param & 0x0F) * 4 / 128;
+	ch->tremolo_ticks += (ch->tremolo_param >> 4);
 }
 
 static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
