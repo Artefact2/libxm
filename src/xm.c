@@ -170,7 +170,7 @@ void xm_get_position(const xm_context_t* ctx, uint8_t* pattern_index,
                      uint8_t* pattern, uint8_t* row, uint64_t* samples) {
 	if(pattern_index) *pattern_index = ctx->current_table_index;
 	if(pattern) *pattern = ctx->module.pattern_table[ctx->current_table_index];
-	if(row) *row = ctx->current_row;
+	if(row) *row = ctx->current_row - 1;
 	if(samples) *samples = ctx->generated_samples;
 }
 
