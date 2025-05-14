@@ -12,14 +12,22 @@
 #include <string.h>
 
 static void print_position(const xm_context_t*);
+static uint16_t modal_interpeak_distance(const float*, uint16_t, uint16_t);
 
 /* Checks generated audio samples for channel1==channel2, channel3==channel4,
    etc. If swap_lr is true, swaps LR channels of each odd channel before
    comparing. */
 static int channelpairs_eq(xm_context_t*, bool swap_lr);
 
+/* Similar to channelpairs_eq(), but checks pitch of each channel pair. Assumes
+   sawtooth samples only as pitch detection is really simplistic. */
+static int channelpairs_pitcheq(xm_context_t*);
+
 /* Checks generated audio samples for pattern0==pattern1. */
 static int pat0_pat1_eq(xm_context_t*);
+
+static int channelpairs_pitcheq(xm_context_t*);
+
 
 int main(int argc, char** argv) {
 	if(argc != 3) {
@@ -61,6 +69,8 @@ int main(int argc, char** argv) {
 		return channelpairs_eq(ctx, false);
 	} else if(strcmp(argv[1], "channelpairs_lreqrl") == 0) {
 		return channelpairs_eq(ctx, true);
+	} else if(strcmp(argv[1], "channelpairs_pitcheq") == 0) {
+		return channelpairs_pitcheq(ctx);
 	} else if(strcmp(argv[1], "pat0_pat1_eq") == 0) {
 		return pat0_pat1_eq(ctx);
 	}
@@ -103,6 +113,30 @@ static int channelpairs_eq(xm_context_t* ctx, bool swap_lr) {
 	return 0;
 }
 
+static int channelpairs_pitcheq(xm_context_t* ctx) {
+	if(xm_get_number_of_channels(ctx) != 2) return 1;
+	uint16_t bpm;
+	xm_get_playing_speed(ctx, &bpm, nullptr);
+	if(bpm != 32) return 1;
+	float frames[3750*4]; /* 48000 Hz, 32 BPM => 1 tick is 3750 samples */
+	while(!xm_get_loop_count(ctx)) {
+		xm_generate_samples_unmixed(ctx, frames, 3750);
+		for(uint16_t i = 0; i < 2; ++i) {
+			uint16_t a = modal_interpeak_distance(frames+i,
+			                                      3750, 4);
+			uint16_t b = modal_interpeak_distance(frames+i+2,
+			                                      3750, 4);
+			if(a != b) {
+				fprintf(stderr, "MIPD mismatch, %u != %u\n",
+				        a, b);
+				print_position(ctx);
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
 static int pat0_pat1_eq(xm_context_t* ctx0) {
 	if(xm_get_module_length(ctx0) != 2) {
 		fprintf(stderr, "This method requires 2 patterns "
@@ -131,4 +165,34 @@ static int pat0_pat1_eq(xm_context_t* ctx0) {
 	}
 
 	return 0;
+}
+
+static uint16_t modal_interpeak_distance(const float* data, uint16_t count,
+                                         uint16_t stride) {
+	if(count < 3) return 0;
+
+	uint16_t* counts = alloca(sizeof(uint16_t) * count);
+	__builtin_memset(counts, 0, sizeof(uint16_t) * count);
+
+	uint16_t last_peak_idx = count;
+	for(uint16_t i = 2; i < count; ++i) {
+		if(data[(i-1)*stride] < data[(i-2)*stride] ||
+		   data[(i-1)*stride] <= data[i*stride]) {
+			continue;
+		}
+		if(last_peak_idx < count) {
+			counts[i-1 - last_peak_idx]++;
+		}
+		last_peak_idx = i-1;
+	}
+
+	last_peak_idx = 0;
+	uint16_t last_peak_count = 0;
+	for(uint16_t i = 1; i < count; ++i) {
+		if(counts[i] < last_peak_count) continue;
+		last_peak_count = counts[i];
+		last_peak_idx = i;
+	}
+
+	return last_peak_idx;
 }
