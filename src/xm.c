@@ -200,7 +200,7 @@ bool xm_is_channel_active(const xm_context_t* ctx, uint16_t chn) {
 
 float xm_get_frequency_of_channel(const xm_context_t* ctx, uint16_t chn) {
 	CHECK_CHANNEL(ctx, chn);
-	return ctx->channels[chn - 1].frequency;
+	return ctx->channels[chn - 1].step * ctx->rate;
 }
 
 float xm_get_volume_of_channel(const xm_context_t* ctx, uint16_t chn) {

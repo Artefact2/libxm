@@ -204,14 +204,7 @@ struct xm_channel_context_s {
 	xm_sample_t* sample; /* Could be NULL */
 	xm_pattern_slot_t* current;
 
-	float note; /* In semitones (C-4 to C#4 is 1 semitone) */
-	float orig_note; /* The original note before effect modifications, as
-	                    read in the pattern. */
-
 	float sample_position;
-	float period; /* 1/64th semitone increments (linear frequencies) */
-	float tone_portamento_target_period;
-	float frequency;
 	float step;
 
 	float actual_volume[2]; /* Multiplier for left/right channel */
@@ -223,8 +216,13 @@ struct xm_channel_context_s {
 	static_assert(RAMPING_POINTS % 2 == 1);
 	float end_of_previous_sample[RAMPING_POINTS];
 	#endif
-	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
 
+	uint16_t period; /* 1/64 semitone increments (linear frequencies) */
+	uint16_t orig_period; /* As initially read when first triggering the
+	                         note. Used by retrigger effects. */
+	uint16_t tone_portamento_target_period;
+
+	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
 	uint16_t autovibrato_ticks;
 	uint16_t volume_envelope_frame_count;
 	uint16_t panning_envelope_frame_count;
@@ -237,8 +235,8 @@ struct xm_channel_context_s {
                                    Tremolo and Txy: Tremor. */
 	uint8_t panning; /* 0..MAX_PANNING  */
 
-	int8_t autovibrato_note_offset; /* in 1/128 note increments */
-	uint8_t arp_note_offset;
+	int8_t autovibrato_note_offset; /* in 1/128 semitone increments */
+	uint8_t arp_note_offset; /* in semitones */
 	uint8_t volume_slide_param;
 	uint8_t fine_volume_slide_param;
 	uint8_t global_volume_slide_param;
@@ -264,7 +262,7 @@ struct xm_channel_context_s {
 	uint8_t vibrato_param;
 	uint8_t vibrato_control_param;
 	uint8_t vibrato_ticks;
-	int8_t vibrato_note_offset; /* in 1/16 note increments */
+	int8_t vibrato_note_offset; /* in 1/64 semitone increments */
 	bool should_reset_vibrato;
 
 	uint8_t tremor_param;
@@ -273,6 +271,8 @@ struct xm_channel_context_s {
 
 	bool sustained;
 	bool muted;
+
+	char __pad[6];
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
 

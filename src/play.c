@@ -18,7 +18,7 @@ static void xm_tremolo(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_arpeggio(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tone_portamento(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
-static void xm_pitch_slide(xm_context_t*, xm_channel_context_t*, float) __attribute__((nonnull));
+static void xm_pitch_slide(xm_context_t*, xm_channel_context_t*, int16_t) __attribute__((nonnull));
 static void xm_param_slide(uint8_t*, uint8_t, uint16_t) __attribute__((nonnull));
 static void xm_tick_effects(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
@@ -26,13 +26,13 @@ static uint8_t xm_envelope_lerp(const xm_envelope_point_t*, const xm_envelope_po
 static void xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16_t*, uint8_t*) __attribute__((nonnull));
 static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
-static float xm_linear_period(float) __attribute__((warn_unused_result));
-static float xm_linear_frequency(float, float) __attribute__((warn_unused_result));
-static float xm_amiga_period(float) __attribute__((warn_unused_result));
-static float xm_amiga_frequency(float, float) __attribute__((warn_unused_result));
+static uint16_t xm_linear_period(uint16_t) __attribute__((warn_unused_result));
+static float xm_linear_frequency(uint16_t, int16_t) __attribute__((warn_unused_result));
+static uint16_t xm_amiga_period(uint16_t) __attribute__((warn_unused_result));
+static float xm_amiga_frequency(uint16_t, int16_t) __attribute__((warn_unused_result));
 
-static float xm_period(xm_context_t*, float) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static float xm_frequency(xm_context_t*, float, float) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static uint16_t xm_period(xm_context_t*, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static float xm_frequency(xm_context_t*, uint16_t, int16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static void xm_update_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
 static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
@@ -75,7 +75,8 @@ static void xm_sample(xm_context_t*, float*) __attribute__((nonnull));
 
 #define XM_LERP(u, v, t) ((u) + (t) * ((v) - (u)))
 
-static void XM_SLIDE_TOWARDS(float* val, float goal, float incr) {
+[[maybe_unused]] static void XM_SLIDE_TOWARDS(float* val,
+                                              float goal, float incr) {
 	if(*val > goal) {
 		*val -= incr;
 		XM_CLAMP_DOWN1F(*val, goal);
@@ -240,26 +241,44 @@ static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 
  end:
-	ch->period = xm_period(ctx, ch->note + ch->arp_note_offset);
 	xm_update_frequency(ctx, ch);
 }
 
 static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* 3xx called without a note, wait until we get an actual
 	 * target note. */
-	if(ch->tone_portamento_target_period == 0.f) return;
+	if(ch->tone_portamento_target_period == 0) return;
 
-	if(ch->period != ch->tone_portamento_target_period) {
-		XM_SLIDE_TOWARDS(&(ch->period),
-		                 ch->tone_portamento_target_period,
-		                 4 * ch->tone_portamento_param);
-		xm_update_frequency(ctx, ch);
+	/* Already done, don't bother updating frequency */
+	if(ch->period == ch->tone_portamento_target_period) return;
+
+	uint16_t incr = 4 * ch->tone_portamento_param;
+	if(ch->period > ch->tone_portamento_target_period) {
+		if(ch->period <= incr) {
+			ch->period = 0;
+		} else {
+			ch->period -= incr;
+		}
+		if(ch->period < ch->tone_portamento_target_period) {
+			ch->period = ch->tone_portamento_target_period;
+		}
 	}
+	if(ch->period < ch->tone_portamento_target_period) {
+		ch->period += incr;
+		if(ch->period > ch->tone_portamento_target_period) {
+			ch->period = ch->tone_portamento_target_period;
+		}
+	}
+	xm_update_frequency(ctx, ch);
 }
 
-static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch, float period_offset) {
-	ch->period += period_offset;
-	XM_CLAMP_DOWN(ch->period);
+static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch,
+                           int16_t period_offset) {
+	if(ch->period < -period_offset) {
+		ch->period = 0;
+	} else {
+		ch->period += period_offset;
+	}
 	/* XXX: upper bound of period ? */
 	xm_update_frequency(ctx, ch);
 }
@@ -297,31 +316,32 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	}
 }
 
-[[maybe_unused]] static float xm_linear_period(float note) {
-	return 7680.f - note * 64.f;
+[[maybe_unused]] static uint16_t xm_linear_period(uint16_t note) {
+	assert(7680 - note / 2 > 0);
+	return 7680 - note / 2; /* XXX: we lose 1 bit of finetune information
+	                           here? investigate */
 }
 
-[[maybe_unused]] static float xm_linear_frequency(float period,
-                                                  float period_offset) {
-	period -= 16.f * period_offset;
-	return 8363.f * powf(2.f, (4608.f - period) / 768.f);
+[[maybe_unused]] static float xm_linear_frequency(uint16_t period,
+                                                  int16_t period_offset) {
+	return 8363.f * powf(2.f, (4608.f - period + period_offset) / 768.f);
 }
 
-[[maybe_unused]] static float xm_amiga_period(float note) {
+[[maybe_unused]] static uint16_t xm_amiga_period(uint16_t note) {
 	/* Values obtained via exponential regression over the period tables in
 	   modfil10.txt */
-	return 32.f * 855.9563438f * powf(2.f, -0.0832493329f * note);
+	return 32.f * 855.9563438f * powf(2.f, -0.0832493329f * note / 128.f);
 }
 
-[[maybe_unused]] static float xm_amiga_frequency(float period,
-                                                 float period_offset) {
+[[maybe_unused]] static float xm_amiga_frequency(uint16_t period,
+                                                 int16_t period_offset) {
 	/* This is the PAL value. No reason to choose this one over the
 	 * NTSC value. */
-	if(period == 0.f) return 0.f;
+	if(period == 0) return 0;
 	return 4.f * 7093789.2f / ((period + period_offset) * 2.f);
 }
 
-static float xm_period([[maybe_unused]] xm_context_t* ctx, float note) {
+static uint16_t xm_period([[maybe_unused]] xm_context_t* ctx, uint16_t note) {
 	#if XM_FREQUENCY_TYPES == 1
 	return xm_linear_period(note);
 	#elif XM_FREQUENCY_TYPES == 2
@@ -337,7 +357,7 @@ static float xm_period([[maybe_unused]] xm_context_t* ctx, float note) {
 	#endif
 }
 static float xm_frequency([[maybe_unused]] xm_context_t* ctx,
-                          float period, float offset) {
+                          uint16_t period, int16_t offset) {
 	#if XM_FREQUENCY_TYPES == 1
 	return xm_linear_frequency(period, offset);
 	#elif XM_FREQUENCY_TYPES == 2
@@ -354,11 +374,11 @@ static float xm_frequency([[maybe_unused]] xm_context_t* ctx,
 }
 
 static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
-	ch->frequency = xm_frequency(
-		ctx, ch->period,
-		(float)(8*ch->vibrato_note_offset + ch->autovibrato_note_offset) / 128.f
-	);
-	ch->step = ch->frequency / ctx->rate;
+	int16_t period_offset = ch->arp_note_offset * 64;
+	period_offset += ch->vibrato_note_offset;
+	period_offset += ch->autovibrato_note_offset / 2;
+	ch->step = xm_frequency(ctx, ch->period, period_offset);
+	ch->step /= ctx->rate;
 }
 
 static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) {
@@ -396,8 +416,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		if(HAS_TONE_PORTAMENTO(ch->current) && instr != NULL && ch->sample != NULL) {
 			/* Tone portamento in effect */
-			ch->note = s->note + ch->sample->relative_note + ch->sample->finetune / 128.f - 1.f;
-			ch->tone_portamento_target_period = xm_period(ctx, ch->note);
+			assert(ch->sample != NULL); /* XXXXXXXX: broken logic here */
+			ch->tone_portamento_target_period = xm_period(ctx, 128 * (s->note + ch->sample->relative_note - 1) + ch->sample->finetune);
 		} else if(instr == NULL || ch->instrument->num_samples == 0) {
 			/* Bad instrument */
 			xm_cut_note(ch);
@@ -411,8 +431,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 				#endif
 
 				ch->sample = ctx->samples + instr->samples_index + instr->sample_of_notes[s->note - 1];
-				ch->orig_note = ch->note = s->note + ch->sample->relative_note
-					+ ch->sample->finetune / 128.f - 1.f;
+				ch->orig_period = xm_period(ctx, 128 * (s->note + ch->sample->relative_note - 1) + ch->sample->finetune); /* XXX: avoid duplicating formula with tone portamento target */
 				if(s->instrument > 0) {
 					xm_trigger_note(ctx, ch, 0);
 				} else {
@@ -600,9 +619,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		case 5: /* E5y: Set finetune */
 			if(NOTE_IS_VALID(ch->current->note) && ch->sample != NULL) {
-				ch->note = ch->current->note + ch->sample->relative_note +
-					(float)(((s->effect_param & 0x0F) - 8) << 4) / 128.f - 1.f;
-				ch->period = xm_period(ctx, ch->note);
+				/* XXX: test this */
+				ch->period = ch->orig_period - ch->sample->finetune + (((s->effect_param & 0x0F) - 8) << 4);
 				xm_update_frequency(ctx, ch);
 			}
 			break;
@@ -661,7 +679,6 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 				unsigned int flags = XM_TRIGGER_KEEP_VOLUME;
 
 				if(ch->current->effect_param & 0x0F) {
-					ch->note = ch->orig_note;
 					xm_trigger_note(ctx, ch, flags);
 				} else {
 					xm_trigger_note(
@@ -792,7 +809,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 	}
 
 	if(!(flags & XM_TRIGGER_KEEP_PERIOD)) {
-		ch->period = xm_period(ctx, ch->note);
+		ch->period = ch->orig_period;
 		xm_update_frequency(ctx, ch);
 	}
 
@@ -857,7 +874,6 @@ static void xm_row(xm_context_t* ctx) {
 
 		if(ch->arp_note_offset) {
 			ch->arp_note_offset = 0;
-			ch->period = xm_period(ctx, ch->note);
 			xm_update_frequency(ctx, ch);
 		}
 
