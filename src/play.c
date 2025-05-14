@@ -157,6 +157,7 @@ static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
 }
 
 static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
+	/* Depth 8 == 2 semitones amplitude (-1 then +1) */
 	ch->vibrato_offset =
 		xm_waveform(ch->vibrato_control_param, ch->vibrato_ticks)
 		* (ch->vibrato_param & 0x0F) / 0x10;
