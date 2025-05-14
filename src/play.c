@@ -417,7 +417,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 					xm_trigger_note(ctx, ch, 0);
 				} else {
 					/* Ghost note: keep old volume */
-					xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_VOLUME);
+					xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_VOLUME | XM_TRIGGER_KEEP_ENVELOPE);
 				}
 			} else {
 				/* Bad sample */
