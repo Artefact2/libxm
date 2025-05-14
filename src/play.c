@@ -249,38 +249,18 @@ static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 	 * target note. */
 	if(ch->tone_portamento_target_period == 0.f) return;
 
-	float incr = ch->tone_portamento_param;
-	#if XM_FREQUENCY_TYPES == 1
-	incr *= 4.f;
-	#elif XM_FREQUENCY_TYPES == 3
-	if(ctx->module.frequency_type == XM_LINEAR_FREQUENCIES) {
-		incr *= 4.f;
-	}
-	#endif
-
 	if(ch->period != ch->tone_portamento_target_period) {
 		XM_SLIDE_TOWARDS(&(ch->period),
 		                 ch->tone_portamento_target_period,
-		                 incr);
+		                 4 * ch->tone_portamento_param);
 		xm_update_frequency(ctx, ch);
 	}
 }
 
 static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch, float period_offset) {
-	/* Don't ask about the 4.f coefficient. I found mention of it
-	 * nowhere. Found by ear™. */
-	#if XM_FREQUENCY_TYPES == 1
-	period_offset *= 4.f;
-	#elif XM_FREQUENCY_TYPES == 3
-	if(ctx->module.frequency_type == XM_LINEAR_FREQUENCIES) {
-		period_offset *= 4.f;
-	}
-	#endif
-
 	ch->period += period_offset;
 	XM_CLAMP_DOWN(ch->period);
 	/* XXX: upper bound of period ? */
-
 	xm_update_frequency(ctx, ch);
 }
 
@@ -330,7 +310,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 [[maybe_unused]] static float xm_amiga_period(float note) {
 	/* Values obtained via exponential regression over the period tables in
 	   modfil10.txt */
-	return 8.f * 855.9563438f * powf(2.f, -0.0832493329f * note);
+	return 32.f * 855.9563438f * powf(2.f, -0.0832493329f * note);
 }
 
 [[maybe_unused]] static float xm_amiga_frequency(float period,
@@ -338,7 +318,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	/* This is the PAL value. No reason to choose this one over the
 	 * NTSC value. */
 	if(period == 0.f) return 0.f;
-	return 7093789.2f / ((period + period_offset) * 2.f);
+	return 4.f * 7093789.2f / ((period + period_offset) * 2.f);
 }
 
 static float xm_period([[maybe_unused]] xm_context_t* ctx, float note) {
@@ -602,14 +582,16 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			if(s->effect_param & 0x0F) {
 				ch->fine_portamento_up_param = s->effect_param & 0x0F;
 			}
-			xm_pitch_slide(ctx, ch, -ch->fine_portamento_up_param);
+			xm_pitch_slide(ctx, ch,
+			               -4 * ch->fine_portamento_up_param);
 			break;
 
 		case 2: /* E2y: Fine portamento down */
 			if(s->effect_param & 0x0F) {
 				ch->fine_portamento_down_param = s->effect_param & 0x0F;
 			}
-			xm_pitch_slide(ctx, ch, ch->fine_portamento_down_param);
+			xm_pitch_slide(ctx, ch,
+			               4 * ch->fine_portamento_down_param);
 			break;
 
 		case 4: /* E4y: Set vibrato control */
@@ -755,14 +737,16 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			if(s->effect_param & 0x0F) {
 				ch->extra_fine_portamento_up_param = s->effect_param & 0x0F;
 			}
-			xm_pitch_slide(ctx, ch, -1.0f * ch->extra_fine_portamento_up_param);
+			xm_pitch_slide(ctx, ch,
+			               -ch->extra_fine_portamento_up_param);
 			break;
 
 		case 2: /* X2y: Extra fine portamento down */
 			if(s->effect_param & 0x0F) {
 				ch->extra_fine_portamento_down_param = s->effect_param & 0x0F;
 			}
-			xm_pitch_slide(ctx, ch, ch->extra_fine_portamento_down_param);
+			xm_pitch_slide(ctx, ch,
+			               ch->extra_fine_portamento_down_param);
 			break;
 
 		}
@@ -1111,11 +1095,11 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 1: /* 1xx: Portamento up */
-		xm_pitch_slide(ctx, ch, -ch->portamento_up_param);
+		xm_pitch_slide(ctx, ch, -4 * ch->portamento_up_param);
 		break;
 
 	case 2: /* 2xx: Portamento down */
-		xm_pitch_slide(ctx, ch, ch->portamento_down_param);
+		xm_pitch_slide(ctx, ch, 4 * ch->portamento_down_param);
 		break;
 
 	case 3: /* 3xx: Tone portamento */

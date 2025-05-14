@@ -204,12 +204,12 @@ struct xm_channel_context_s {
 	xm_sample_t* sample; /* Could be NULL */
 	xm_pattern_slot_t* current;
 
-	float note;
+	float note; /* In semitones (C-4 to C#4 is 1 semitone) */
 	float orig_note; /* The original note before effect modifications, as
 	                    read in the pattern. */
 
 	float sample_position;
-	float period;
+	float period; /* 1/64th semitone increments (linear frequencies) */
 	float tone_portamento_target_period;
 	float frequency;
 	float step;
