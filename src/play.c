@@ -486,68 +486,14 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		ch->panning = (s->volume_column & 0x0F) * 0x11;
 		break;
 
-	case 0xF: /* Mx: Tone portamento */
-		if(s->volume_column & 0x0F) {
-			ch->tone_portamento_param =
-				(s->volume_column & 0x0F) * 0x11;
-		}
-		break;
-
 	}
 
 	switch(s->effect_type) {
 
-	case 1: /* 1xx: Portamento up */
-		if(s->effect_param > 0) {
-			ch->portamento_up_param = s->effect_param;
-		}
-		break;
-
-	case 2: /* 2xx: Portamento down */
-		if(s->effect_param > 0) {
-			ch->portamento_down_param = s->effect_param;
-		}
-		break;
-
 	case 3: /* 3xx: Tone portamento */
 		if(s->effect_param > 0) {
+			/* XXX: test me */
 			ch->tone_portamento_param = s->effect_param;
-		}
-		break;
-
-	case 4: /* 4xy: Vibrato */
-		if(s->effect_param & 0x0F) {
-			/* Set vibrato depth */
-			ch->vibrato_param = (ch->vibrato_param & 0xF0) | (s->effect_param & 0x0F);
-		}
-		if(s->effect_param >> 4) {
-			/* Set vibrato speed */
-			ch->vibrato_param = (s->effect_param & 0xF0) | (ch->vibrato_param & 0x0F);
-		}
-		break;
-
-	case 5: /* 5xy: Tone portamento + Volume slide */
-		if(s->effect_param > 0) {
-			ch->volume_slide_param = s->effect_param;
-		}
-		break;
-
-	case 6: /* 6xy: Vibrato + Volume slide */
-		if(s->effect_param > 0) {
-			ch->volume_slide_param = s->effect_param;
-		}
-		break;
-
-	case 7: /* 7xy: Tremolo */
-		if(s->effect_param & 0x0F) {
-			/* Set tremolo depth */
-			ch->tremolo_param = (ch->tremolo_param & 0xF0)
-				| (s->effect_param & 0x0F);
-		}
-		if(s->effect_param >> 4) {
-			/* Set tremolo speed */
-			ch->tremolo_param = (s->effect_param & 0xF0)
-				| (ch->tremolo_param & 0x0F);
 		}
 		break;
 
@@ -568,12 +514,6 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		if(ch->sample_position >= ch->sample->loop_end) {
 			/* Pretend the sample dosen't loop and is done playing */
 			ch->sample = NULL;
-		}
-		break;
-
-	case 0xA: /* Axy: Volume slide */
-		if(s->effect_param > 0) {
-			ch->volume_slide_param = s->effect_param;
 		}
 		break;
 
@@ -714,40 +654,9 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			MAX_VOLUME : s->effect_param;
 		break;
 
-	case 17: /* Hxy: Global volume slide */
-		if(s->effect_param > 0) {
-			ch->global_volume_slide_param = s->effect_param;
-		}
-		break;
-
 	case 21: /* Lxx: Set envelope position */
 		ch->volume_envelope_frame_count = s->effect_param;
 		ch->panning_envelope_frame_count = s->effect_param;
-		break;
-
-	case 25: /* Pxy: Panning slide */
-		if(s->effect_param > 0) {
-			ch->panning_slide_param = s->effect_param;
-		}
-		break;
-
-	case 27: /* Rxy: Multi retrig note */
-		if(s->effect_param > 0) {
-			if((s->effect_param >> 4) == 0) {
-				/* Keep previous x value */
-				ch->multi_retrig_param = (ch->multi_retrig_param & 0xF0) | (s->effect_param & 0x0F);
-			} else {
-				ch->multi_retrig_param = s->effect_param;
-			}
-		}
-		break;
-
-	case 29: /* Txy: Tremor */
-		if(s->effect_param > 0) {
-			/* Tremor x and y params do not appear to be separately
-			 * kept in memory, unlike Rxy */
-			ch->tremor_param = s->effect_param;
-		}
 		break;
 
 	case 33: /* Xxy: Extra stuff */
@@ -1103,6 +1012,10 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 0xF: /* Mx: Tone portamento */
+		if(ch->current->volume_column & 0x0F) {
+			ch->tone_portamento_param =
+				(ch->current->volume_column & 0x0F) * 0x11;
+		}
 		xm_tone_portamento(ctx, ch);
 		break;
 
@@ -1118,10 +1031,16 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 1: /* 1xx: Portamento up */
+		if(ch->current->effect_param > 0) {
+			ch->portamento_up_param = ch->current->effect_param;
+		}
 		xm_pitch_slide(ctx, ch, -4 * ch->portamento_up_param);
 		break;
 
 	case 2: /* 2xx: Portamento down */
+		if(ch->current->effect_param > 0) {
+			ch->portamento_down_param = ch->current->effect_param;
+		}
 		xm_pitch_slide(ctx, ch, 4 * ch->portamento_down_param);
 		break;
 
@@ -1130,17 +1049,33 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 4: /* 4xy: Vibrato */
+		if(ch->current->effect_param & 0x0F) {
+			/* Set vibrato depth */
+			ch->vibrato_param = (ch->vibrato_param & 0xF0)
+				| (ch->current->effect_param & 0x0F);
+		}
+		if(ch->current->effect_param >> 4) {
+			/* Set vibrato speed */
+			ch->vibrato_param = (ch->current->effect_param & 0xF0)
+				| (ch->vibrato_param & 0x0F);
+		}
 		ch->should_reset_vibrato = true;
 		xm_vibrato(ctx, ch);
 		break;
 
 	case 5: /* 5xy: Tone portamento + Volume slide */
+		if(ch->current->effect_param > 0) {
+			ch->volume_slide_param = ch->current->effect_param;
+		}
 		ch->volume_offset = 0;
 		xm_tone_portamento(ctx, ch);
 		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
 		break;
 
 	case 6: /* 6xy: Vibrato + Volume slide */
+		if(ch->current->effect_param > 0) {
+			ch->volume_slide_param = ch->current->effect_param;
+		}
 		ch->volume_offset = 0;
 		ch->should_reset_vibrato = true;
 		xm_vibrato(ctx, ch);
@@ -1148,10 +1083,23 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 7: /* 7xy: Tremolo */
+		if(ch->current->effect_param & 0x0F) {
+			/* Set tremolo depth */
+			ch->tremolo_param = (ch->tremolo_param & 0xF0)
+				| (ch->current->effect_param & 0x0F);
+		}
+		if(ch->current->effect_param >> 4) {
+			/* Set tremolo speed */
+			ch->tremolo_param = (ch->current->effect_param & 0xF0)
+				| (ch->tremolo_param & 0x0F);
+		}
 		xm_tremolo(ch);
 		break;
 
 	case 0xA: /* Axy: Volume slide */
+		if(ch->current->effect_param > 0) {
+			ch->volume_slide_param = ch->current->effect_param;
+		}
 		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
 		break;
@@ -1186,16 +1134,30 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 17: /* Hxy: Global volume slide */
+		if(ch->current->effect_param > 0) {
+			ch->global_volume_slide_param = ch->current->effect_param;
+		}
 		xm_param_slide(&ctx->global_volume,
 		               ch->global_volume_slide_param, MAX_VOLUME);
 		break;
 
 	case 25: /* Pxy: Panning slide */
+		if(ch->current->effect_param > 0) {
+			ch->panning_slide_param = ch->current->effect_param;
+		}
 		xm_param_slide(&ch->panning, ch->panning_slide_param,
 		               MAX_PANNING);
 		break;
 
 	case 27: /* Rxy: Multi retrig note */
+		if(ch->current->effect_param > 0) {
+			if((ch->current->effect_param >> 4) == 0) {
+				/* Keep previous x value */
+				ch->multi_retrig_param = (ch->multi_retrig_param & 0xF0) | (ch->current->effect_param & 0x0F);
+			} else {
+				ch->multi_retrig_param = ch->current->effect_param;
+			}
+		}
 		xm_multi_retrig_note(ctx, ch);
 		break;
 
@@ -1209,6 +1171,11 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		   applied). */
 		/* It works exactly like 7xy: Tremolo with a square waveform,
 		   and xy param defines the period and duty cycle. */
+		/* Tremor x and y params do not appear to be separately kept in
+		   memory, unlike Rxy */
+		if(ch->current->effect_param > 0) {
+			ch->tremor_param = ch->current->effect_param;
+		}
 		if(ch->tremor_ticks == 0) {
 			ch->tremor_on = !ch->tremor_on;
 			if(ch->tremor_on) {

@@ -12,6 +12,8 @@ target_link_libraries(test-libxm PRIVATE xm)
 
 add_test(NAME test_arpeggio COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/arpeggio.xm)
+add_test(NAME test_effect_memory COMMAND test-libxm
+	channelpairs_eq ${CMAKE_SOURCE_DIR}/effect-memory.xm)
 add_test(NAME test_instrument_fadeout COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/instrument-fadeout.xm)
 add_test(NAME test_key_off COMMAND test-libxm
