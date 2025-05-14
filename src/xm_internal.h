@@ -262,7 +262,7 @@ struct xm_channel_context_s {
 	uint8_t vibrato_param;
 	uint8_t vibrato_control_param;
 	uint8_t vibrato_ticks;
-	int8_t vibrato_note_offset; /* in 1/64 semitone increments */
+	int8_t vibrato_offset; /* in 1/64 semitone increments */
 	bool should_reset_vibrato;
 
 	uint8_t tremor_param;

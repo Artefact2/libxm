@@ -27,12 +27,12 @@ static void xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16
 static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
 static uint16_t xm_linear_period(uint16_t) __attribute__((warn_unused_result));
-static float xm_linear_frequency(uint16_t, int16_t) __attribute__((warn_unused_result));
+static float xm_linear_frequency(xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static uint16_t xm_amiga_period(uint16_t) __attribute__((warn_unused_result));
-static float xm_amiga_frequency(uint16_t, int16_t) __attribute__((warn_unused_result));
+static float xm_amiga_frequency(xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
 
 static uint16_t xm_period(xm_context_t*, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static float xm_frequency(xm_context_t*, uint16_t, int16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static float xm_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static void xm_update_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
 static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
@@ -157,9 +157,9 @@ static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
 }
 
 static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
-	ch->vibrato_note_offset =
+	ch->vibrato_offset =
 		xm_waveform(ch->vibrato_control_param, ch->vibrato_ticks)
-		* (ch->vibrato_param & 0x0F) / 0x0F;
+		* (ch->vibrato_param & 0x0F) / 0x10;
 	ch->vibrato_ticks += (ch->vibrato_param >> 4);
 	xm_update_frequency(ctx, ch);
 }
@@ -322,9 +322,12 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	                           here? investigate */
 }
 
-[[maybe_unused]] static float xm_linear_frequency(uint16_t period,
-                                                  int16_t period_offset) {
-	return 8363.f * powf(2.f, (4608.f - period + period_offset) / 768.f);
+[[maybe_unused]] static float xm_linear_frequency(xm_channel_context_t* ch) {
+	uint16_t p = ch->period;
+	p -= ch->arp_note_offset * 64;
+	p -= ch->vibrato_offset;
+	p -= ch->autovibrato_note_offset / 2;
+	return 8363.f * powf(2.f, (4608.f - (float)p) / 768.f);
 }
 
 [[maybe_unused]] static uint16_t xm_amiga_period(uint16_t note) {
@@ -333,12 +336,16 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	return 32.f * 855.9563438f * powf(2.f, -0.0832493329f * note / 128.f);
 }
 
-[[maybe_unused]] static float xm_amiga_frequency(uint16_t period,
-                                                 int16_t period_offset) {
+[[maybe_unused]] static float xm_amiga_frequency(xm_channel_context_t* ch) {
+	if(ch->period == 0) return 0;
+	float p = (float)ch->period
+		* powf(2.f, -0.0832493329f * (float)ch->arp_note_offset);
+	p -= (float)ch->vibrato_offset;
+	p -= (float)ch->autovibrato_note_offset / 2.f;
+
 	/* This is the PAL value. No reason to choose this one over the
 	 * NTSC value. */
-	if(period == 0) return 0;
-	return 4.f * 7093789.2f / ((period + period_offset) * 2.f);
+	return 4.f * 7093789.2f / (p * 2.f);
 }
 
 static uint16_t xm_period([[maybe_unused]] xm_context_t* ctx, uint16_t note) {
@@ -357,28 +364,24 @@ static uint16_t xm_period([[maybe_unused]] xm_context_t* ctx, uint16_t note) {
 	#endif
 }
 static float xm_frequency([[maybe_unused]] xm_context_t* ctx,
-                          uint16_t period, int16_t offset) {
+                          xm_channel_context_t* ch) {
 	#if XM_FREQUENCY_TYPES == 1
-	return xm_linear_frequency(period, offset);
+	return xm_linear_frequency(ch);
 	#elif XM_FREQUENCY_TYPES == 2
-	return xm_amiga_frequency(period, offset);
+	return xm_amiga_frequency(ch);
 	#else
 	switch(ctx->module.frequency_type) {
 	case XM_LINEAR_FREQUENCIES:
-		return xm_linear_frequency(period, offset);
+		return xm_linear_frequency(ch);
 	case XM_AMIGA_FREQUENCIES:
-		return xm_amiga_frequency(period, offset);
+		return xm_amiga_frequency(ch);
 	}
 	UNREACHABLE();
 	#endif
 }
 
 static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
-	int16_t period_offset = ch->arp_note_offset * 64;
-	period_offset += ch->vibrato_note_offset;
-	period_offset += ch->autovibrato_note_offset / 2;
-	ch->step = xm_frequency(ctx, ch->period, period_offset);
-	ch->step /= ctx->rate;
+	ch->step = xm_frequency(ctx, ch) / ctx->rate;
 }
 
 static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) {
@@ -797,7 +800,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 	ch->tremor_ticks = 0;
 	ch->tremor_on = false;
 	ch->volume_offset = 0;
-	ch->vibrato_note_offset = 0;
+	ch->vibrato_offset = 0;
 	ch->autovibrato_note_offset = 0;
 	ch->autovibrato_ticks = 0;
 
@@ -879,7 +882,7 @@ static void xm_row(xm_context_t* ctx) {
 
 		if(ch->should_reset_vibrato && !HAS_VIBRATO(ch->current)) {
 			ch->should_reset_vibrato = false;
-			ch->vibrato_note_offset = 0;
+			ch->vibrato_offset = 0;
 			xm_update_frequency(ctx, ch);
 		}
 	}
@@ -1079,6 +1082,10 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 0xB: /* Vx: Vibrato */
+		if(ch->current->volume_column & 0x0F) {
+			ch->vibrato_param = (ch->vibrato_param & 0xF0)
+				| (ch->current->volume_column & 0x0F);
+		}
 		/* This vibrato *does not* reset pitch when the command
 		   is discontinued */
 		ch->should_reset_vibrato = false;

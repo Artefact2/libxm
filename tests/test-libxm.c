@@ -126,7 +126,8 @@ static int channelpairs_pitcheq(xm_context_t* ctx) {
 			                                      3750, 4);
 			uint16_t b = modal_interpeak_distance(frames+i+2,
 			                                      3750, 4);
-			if(a != b) {
+			/* Allow some error caused by period rounding */
+			if(a != b && a != b+1 && a != b-1) {
 				fprintf(stderr, "MIPD mismatch, %u != %u\n",
 				        a, b);
 				print_position(ctx);
