@@ -74,7 +74,6 @@ static void xm_sample(xm_context_t*, float*) __attribute__((nonnull));
 #define XM_CLAMP(vol) XM_CLAMP2F((vol), 1.f, .0f)
 
 #define XM_LERP(u, v, t) ((u) + (t) * ((v) - (u)))
-#define XM_INVERSE_LERP(u, v, lerp) (((lerp) - (u)) / ((v) - (u)))
 
 static void XM_SLIDE_TOWARDS(float* val, float goal, float incr) {
 	if(*val > goal) {
@@ -362,7 +361,7 @@ static float xm_frequency([[maybe_unused]] xm_context_t* ctx,
 	#if XM_FREQUENCY_TYPES == 1
 	return xm_linear_frequency(period, offset);
 	#elif XM_FREQUENCY_TYPES == 2
-	return xm_amiga_frequency(period_offset);
+	return xm_amiga_frequency(period, offset);
 	#else
 	switch(ctx->module.frequency_type) {
 	case XM_LINEAR_FREQUENCIES:
