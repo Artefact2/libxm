@@ -351,9 +351,8 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 [[maybe_unused]] static float xm_amiga_frequency(xm_channel_context_t* ch) {
 	if(ch->period == 0) return 0;
 	float p = (float)ch->period
-		* powf(2.f, -0.0832493329f * (float)ch->arp_note_offset);
+		* powf(2.f, -0.0832493329f * ((float)ch->arp_note_offset + (float)ch->autovibrato_note_offset / 64.f));
 	p -= (float)ch->vibrato_offset;
-	p -= (float)ch->autovibrato_note_offset;
 
 	/* This is the PAL value. No reason to choose this one over the
 	 * NTSC value. */
