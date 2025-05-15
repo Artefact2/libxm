@@ -140,7 +140,7 @@ static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
 
 static void xm_autovibrato(xm_channel_context_t* ch) {
 	xm_instrument_t* instr = ch->instrument;
-	assert(instr != NULL);
+	if(instr == NULL) return;
 
 	/* Autovibrato, unlike 4xx vibrato, only bends pitch *down*, not down
 	   and up. Its full range at depth F seems to be about the same as
@@ -843,7 +843,7 @@ static void xm_tick_envelope(xm_channel_context_t* ch,
 }
 
 static void xm_tick_envelopes(xm_channel_context_t* ch) {
-	assert(ch->instrument != NULL);
+	if(ch->instrument == NULL) return;
 
 	if(!ch->sustained) {
 		ch->fadeout_volume =
@@ -882,10 +882,8 @@ static void xm_tick(xm_context_t* ctx) {
 			xm_key_off(ch);
 		}
 
-		if(ch->instrument) {
-			xm_tick_envelopes(ch);
-			xm_autovibrato(ch);
-		}
+		xm_tick_envelopes(ch);
+		xm_autovibrato(ch);
 
 		if(ctx->current_tick > 0) {
 			xm_tick_effects(ctx, ch);
