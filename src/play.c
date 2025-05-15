@@ -380,22 +380,34 @@ static float xm_frequency([[maybe_unused]] xm_context_t* ctx,
 static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) {
 	xm_pattern_slot_t* s = ch->current;
 
-	if(s->instrument > 0) {
-		if(HAS_TONE_PORTAMENTO(ch->current) && ch->instrument != NULL
-		   && ch->sample != NULL) {
-			/* Tone portamento in effect, unclear stuff happens */
-			xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_PERIOD
-			                | XM_TRIGGER_KEEP_SAMPLE_POSITION);
-		} else if(s->note == 0 && ch->sample != NULL) {
-			/* Ghost instrument, trigger note */
-			/* Sample position is kept, but envelopes are reset */
-			xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_PERIOD
-			                | XM_TRIGGER_KEEP_SAMPLE_POSITION);
+	/* Maybe update ch->instrument */
+	if(s->instrument) {
+		if(s->instrument <= ctx->module.num_instruments) {
+			ch->orig_instrument = ctx->instruments
+				+ (s->instrument - 1);
 		} else {
-			/* Invalid instruments are deleted in load.c */
-			assert(s->instrument <= ctx->module.num_instruments);
-			ch->instrument = ctx->instruments + (s->instrument - 1);
+			ch->orig_instrument = NULL;
 		}
+	}
+
+	/* Maybe update ch->sample */
+	if(NOTE_IS_VALID(s->note)) {
+		if(ch->orig_instrument != NULL &&
+		   ch->orig_instrument->sample_of_notes[s->note - 1]
+		   < ch->orig_instrument->num_samples) {
+			ch->instrument = ch->orig_instrument;
+			ch->sample = ctx->samples
+				+ ch->instrument->samples_index
+				+ ch->instrument->sample_of_notes[s->note - 1];
+		} else {
+			ch->sample = NULL;
+			xm_cut_note(ch);
+		}
+	} else if(s->instrument) {
+		/* Ghost instrument, trigger note */
+		/* Sample position is kept, but envelopes are reset */
+		xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_PERIOD
+		                | XM_TRIGGER_KEEP_SAMPLE_POSITION);
 	}
 
 	if(NOTE_IS_KEY_OFF(s->note)) {
@@ -407,36 +419,36 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		/* Yes, the real note number is s->note -1. Try finding
 		 * THAT in any of the specs! :-) */
+		uint16_t new_period = ch->sample != NULL ?
+			xm_period(ctx, 128 * (s->note
+			                      + ch->sample->relative_note - 1)
+			          + ch->sample->finetune) : 0;
 
-		xm_instrument_t* instr = ch->instrument;
+		if(HAS_TONE_PORTAMENTO(ch->current)) {
+			ch->tone_portamento_target_period = new_period;
 
-		if(HAS_TONE_PORTAMENTO(ch->current) && instr != NULL && ch->sample != NULL) {
-			/* Tone portamento in effect */
-			assert(ch->sample != NULL); /* XXXXXXXX: broken logic here */
-			ch->tone_portamento_target_period = xm_period(ctx, 128 * (s->note + ch->sample->relative_note - 1) + ch->sample->finetune);
-		} else if(instr == NULL || ch->instrument->num_samples == 0) {
-			/* Bad instrument */
-			xm_cut_note(ch);
+			if(s->instrument) {
+				/* Pretend this is a ghost instrument */
+				xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_PERIOD
+				                | XM_TRIGGER_KEEP_SAMPLE_POSITION);
+			}
 		} else {
-			if(instr->sample_of_notes[s->note - 1] < instr->num_samples) {
-				#if XM_RAMPING
-				for(unsigned int z = 0; z < RAMPING_POINTS; ++z) {
-					ch->end_of_previous_sample[z] = xm_next_of_sample(ctx, ch);
-				}
-				ch->frame_count = 0;
-				#endif
+			ch->orig_period = new_period;
 
-				ch->sample = ctx->samples + instr->samples_index + instr->sample_of_notes[s->note - 1];
-				ch->orig_period = xm_period(ctx, 128 * (s->note + ch->sample->relative_note - 1) + ch->sample->finetune); /* XXX: avoid duplicating formula with tone portamento target */
-				if(s->instrument > 0) {
-					xm_trigger_note(ctx, ch, 0);
-				} else {
-					/* Ghost note: keep old volume */
-					xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_VOLUME | XM_TRIGGER_KEEP_ENVELOPE);
-				}
+			#if XM_RAMPING
+			for(unsigned int z = 0; z < RAMPING_POINTS; ++z) {
+				ch->end_of_previous_sample[z] =
+					xm_next_of_sample(ctx, ch);
+			}
+			ch->frame_count = 0;
+			#endif
+
+			if(s->instrument) {
+				xm_trigger_note(ctx, ch, 0);
 			} else {
-				/* Bad sample */
-				xm_cut_note(ch);
+				/* Ghost note */
+				xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_VOLUME
+				                | XM_TRIGGER_KEEP_ENVELOPE);
 			}
 		}
 	}
@@ -495,13 +507,13 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 
 	case 9: /* 9xx: Sample offset */
+		/* 9xx is ignored unless we have a note */
 		if(ch->sample == NULL || !NOTE_IS_VALID(s->note))
 			break;
 		if(s->effect_param > 0) {
-			/* 9xx is ignored unless we have a note */
 			ch->sample_offset_param = s->effect_param;
 		}
-		ch->sample_position += ch->sample_offset_param * 256;
+		ch->sample_position = ch->sample_offset_param * 256;
 		/* load.c also sets loop_end to the end of the sample for
 		   XM_NO_LOOP samples */
 		if(ch->sample_position >= ch->sample->loop_end) {
@@ -684,9 +696,8 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 	if(ch->sample != NULL) {
 		if(!(flags & XM_TRIGGER_KEEP_VOLUME)) {
 			ch->volume = ch->sample->volume;
+			ch->panning = ch->sample->panning;
 		}
-
-		ch->panning = ch->sample->panning;
 	}
 
 	if(!(flags & XM_TRIGGER_KEEP_ENVELOPE)) {
@@ -873,14 +884,6 @@ static void xm_tick(xm_context_t* ctx) {
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
-
-		/* Handle Kxx: Key Off, since this can be both an immediate or a
-		   tick effect, and *needs* to be handled before
-		   envelopes/fadeout. */
-		if(ch->current->effect_type == 20
-		   && ctx->current_tick == ch->current->effect_param) {
-			xm_key_off(ch);
-		}
 
 		xm_tick_envelopes(ch);
 		xm_autovibrato(ch);
@@ -1130,6 +1133,12 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		}
 		xm_param_slide(&ctx->global_volume,
 		               ch->global_volume_slide_param, MAX_VOLUME);
+		break;
+
+	case 20: /* Kxx: Key off (as tick effect) */
+		if(ctx->current_tick == ch->current->effect_param) {
+			xm_key_off(ch);
+		}
 		break;
 
 	case 25: /* Pxy: Panning slide */

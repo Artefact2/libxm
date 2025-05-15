@@ -34,6 +34,8 @@ add_test(NAME test_tremolo COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/tremolo.xm)
 add_test(NAME test_tremor COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/tremor.xm)
+add_test(NAME test_trigger_types COMMAND test-libxm
+	channelpairs_eq ${CMAKE_SOURCE_DIR}/trigger-types.xm)
 add_test(NAME test_vibrato COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/vibrato.xm)
 add_test(NAME test_vibrato_amiga COMMAND test-libxm

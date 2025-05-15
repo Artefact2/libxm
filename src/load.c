@@ -348,14 +348,6 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
 			slot->note = KEY_OFF_NOTE;
 		}
 
-		if(slot->instrument > ctx->module.num_instruments) {
-			NOTICE("pattern %lu slot %lu: "
-			       "deleting invalid instrument %u",
-			       pat - ctx->patterns, slot - slots,
-			       slot->instrument);
-			slot->instrument = 0;
-		}
-
 		if(slot->effect_type == 0x0F && slot->effect_param == 0) {
 			/* Delete F00 (stops playback) */
 			slot->effect_type = 0;
@@ -365,6 +357,16 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
 			/* Convert E8x to 8xx */
 			slot->effect_type = 8;
 			slot->effect_param = (slot->effect_param & 0xF) * 0x11;
+		}
+
+		if(slot->effect_type == 20 && slot->effect_param == 0) {
+			/* Convert K00 to key off note. This is vital, as Kxx
+			   effect logic would otherwise be applied much later,
+			   and this has all kinds of nasty side effects when K00
+			   is used with either a note, or an instrument in the
+			   same slot. */
+			slot->effect_type = 0;
+			slot->note = KEY_OFF_NOTE;
 		}
 	}
 
