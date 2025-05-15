@@ -12,13 +12,13 @@
 /* ----- Static functions ----- */
 
 static int8_t xm_waveform(uint8_t, uint8_t) __attribute__((warn_unused_result));
-static void xm_autovibrato(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
-static void xm_vibrato(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+static void xm_autovibrato(xm_channel_context_t*) __attribute__((nonnull));
+static void xm_vibrato(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tremolo(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_arpeggio(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
-static void xm_tone_portamento(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
-static void xm_pitch_slide(xm_context_t*, xm_channel_context_t*, int16_t) __attribute__((nonnull));
+static void xm_tone_portamento(xm_channel_context_t*) __attribute__((nonnull));
+static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnull));
 static void xm_param_slide(uint8_t*, uint8_t, uint16_t) __attribute__((nonnull));
 static void xm_tick_effects(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
@@ -33,7 +33,6 @@ static float xm_amiga_frequency(xm_channel_context_t*) __attribute__((warn_unuse
 
 static uint16_t xm_period(xm_context_t*, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static float xm_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static void xm_update_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
 static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_trigger_note(xm_context_t*, xm_channel_context_t*, unsigned int flags) __attribute__((nonnull));
@@ -139,12 +138,9 @@ static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
 	UNREACHABLE();
 }
 
-static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
-	if(ch->instrument == NULL) {
-		return;
-	}
-
+static void xm_autovibrato(xm_channel_context_t* ch) {
 	xm_instrument_t* instr = ch->instrument;
+	assert(instr != NULL);
 
 	/* Autovibrato, unlike 4xx vibrato, only bends pitch *down*, not down
 	   and up. Its full range at depth F seems to be about the same as
@@ -161,16 +157,14 @@ static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 
 	ch->autovibrato_ticks++;
-	xm_update_frequency(ctx, ch);
 }
 
-static void xm_vibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
+static void xm_vibrato(xm_channel_context_t* ch) {
 	/* Depth 8 == 2 semitones amplitude (-1 then +1) */
 	ch->vibrato_offset =
 		xm_waveform(ch->vibrato_control_param, ch->vibrato_ticks)
 		* (ch->vibrato_param & 0x0F) / 0x10;
 	ch->vibrato_ticks += (ch->vibrato_param >> 4);
-	xm_update_frequency(ctx, ch);
 }
 
 static void xm_tremolo(xm_channel_context_t* ch) {
@@ -226,13 +220,13 @@ static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
 	case 2: /* 0 -> x -> 0 -> y -> x -> … */
 		if(ctx->current_tick == 1) {
 			ch->arp_note_offset = ch->current->effect_param >> 4;
-			goto end;
+			return;
 		}
 		[[fallthrough]];
 	case 1: /* 0 -> 0 -> y -> x -> … */
 		if(ctx->current_tick == 0) {
 			ch->arp_note_offset = 0;
-			goto end;
+			return;
 		}
 		break;
 	}
@@ -248,12 +242,9 @@ static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
 		ch->arp_note_offset = ch->current->effect_param >> 4;
 		break;
 	}
-
- end:
-	xm_update_frequency(ctx, ch);
 }
 
-static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
+static void xm_tone_portamento(xm_channel_context_t* ch) {
 	/* 3xx called without a note, wait until we get an actual
 	 * target note. */
 	if(ch->tone_portamento_target_period == 0) return;
@@ -278,10 +269,9 @@ static void xm_tone_portamento(xm_context_t* ctx, xm_channel_context_t* ch) {
 			ch->period = ch->tone_portamento_target_period;
 		}
 	}
-	xm_update_frequency(ctx, ch);
 }
 
-static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch,
+static void xm_pitch_slide(xm_channel_context_t* ch,
                            int16_t period_offset) {
 	if(ch->period < -period_offset) {
 		ch->period = 0;
@@ -289,7 +279,6 @@ static void xm_pitch_slide(xm_context_t* ctx, xm_channel_context_t* ch,
 		ch->period += period_offset;
 	}
 	/* XXX: upper bound of period ? */
-	xm_update_frequency(ctx, ch);
 }
 
 static void xm_param_slide(uint8_t* param, uint8_t rawval, uint16_t max) {
@@ -386,10 +375,6 @@ static float xm_frequency([[maybe_unused]] xm_context_t* ctx,
 	}
 	UNREACHABLE();
 	#endif
-}
-
-static void xm_update_frequency(xm_context_t* ctx, xm_channel_context_t* ch) {
-	ch->step = xm_frequency(ctx, ch) / ctx->rate;
 }
 
 static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) {
@@ -552,7 +537,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			if(s->effect_param & 0x0F) {
 				ch->fine_portamento_up_param = s->effect_param & 0x0F;
 			}
-			xm_pitch_slide(ctx, ch,
+			xm_pitch_slide(ch,
 			               -4 * ch->fine_portamento_up_param);
 			break;
 
@@ -560,7 +545,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			if(s->effect_param & 0x0F) {
 				ch->fine_portamento_down_param = s->effect_param & 0x0F;
 			}
-			xm_pitch_slide(ctx, ch,
+			xm_pitch_slide(ch,
 			               4 * ch->fine_portamento_down_param);
 			break;
 
@@ -572,7 +557,6 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			if(NOTE_IS_VALID(ch->current->note) && ch->sample != NULL) {
 				/* XXX: test this */
 				ch->period = ch->orig_period - ch->sample->finetune + (((s->effect_param & 0x0F) - 8) << 4);
-				xm_update_frequency(ctx, ch);
 			}
 			break;
 
@@ -674,7 +658,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			if(s->effect_param & 0x0F) {
 				ch->extra_fine_portamento_up_param = s->effect_param & 0x0F;
 			}
-			xm_pitch_slide(ctx, ch,
+			xm_pitch_slide(ch,
 			               -ch->extra_fine_portamento_up_param);
 			break;
 
@@ -682,7 +666,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			if(s->effect_param & 0x0F) {
 				ch->extra_fine_portamento_down_param = s->effect_param & 0x0F;
 			}
-			xm_pitch_slide(ctx, ch,
+			xm_pitch_slide(ch,
 			               ch->extra_fine_portamento_down_param);
 			break;
 
@@ -730,7 +714,6 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 
 	if(!(flags & XM_TRIGGER_KEEP_PERIOD)) {
 		ch->period = ch->orig_period;
-		xm_update_frequency(ctx, ch);
 	}
 
 	ch->latest_trigger = ctx->generated_samples;
@@ -794,13 +777,11 @@ static void xm_row(xm_context_t* ctx) {
 
 		if(ch->arp_note_offset) {
 			ch->arp_note_offset = 0;
-			xm_update_frequency(ctx, ch);
 		}
 
 		if(ch->should_reset_vibrato && !HAS_VIBRATO(ch->current)) {
 			ch->should_reset_vibrato = false;
 			ch->vibrato_offset = 0;
-			xm_update_frequency(ctx, ch);
 		}
 	}
 
@@ -862,7 +843,7 @@ static void xm_tick_envelope(xm_channel_context_t* ch,
 }
 
 static void xm_tick_envelopes(xm_channel_context_t* ch) {
-	if(ch->instrument == NULL) return;
+	assert(ch->instrument != NULL);
 
 	if(!ch->sustained) {
 		ch->fadeout_volume =
@@ -901,12 +882,16 @@ static void xm_tick(xm_context_t* ctx) {
 			xm_key_off(ch);
 		}
 
-		xm_tick_envelopes(ch);
-		xm_autovibrato(ctx, ch);
+		if(ch->instrument) {
+			xm_tick_envelopes(ch);
+			xm_autovibrato(ch);
+		}
 
 		if(ctx->current_tick > 0) {
 			xm_tick_effects(ctx, ch);
 		}
+
+		ch->step = xm_frequency(ctx, ch) / ctx->rate;
 
 		uint8_t panning;
 		float volume;
@@ -1006,7 +991,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		/* This vibrato *does not* reset pitch when the command
 		   is discontinued */
 		ch->should_reset_vibrato = false;
-		xm_vibrato(ctx, ch);
+		xm_vibrato(ch);
 		break;
 
 	case 0xD: /* ◀x: Panning slide left */
@@ -1024,7 +1009,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 			ch->tone_portamento_param =
 				(ch->current->volume_column & 0x0F) * 0x11;
 		}
-		xm_tone_portamento(ctx, ch);
+		xm_tone_portamento(ch);
 		break;
 
 	}
@@ -1042,18 +1027,18 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		if(ch->current->effect_param > 0) {
 			ch->portamento_up_param = ch->current->effect_param;
 		}
-		xm_pitch_slide(ctx, ch, -4 * ch->portamento_up_param);
+		xm_pitch_slide(ch, -4 * ch->portamento_up_param);
 		break;
 
 	case 2: /* 2xx: Portamento down */
 		if(ch->current->effect_param > 0) {
 			ch->portamento_down_param = ch->current->effect_param;
 		}
-		xm_pitch_slide(ctx, ch, 4 * ch->portamento_down_param);
+		xm_pitch_slide(ch, 4 * ch->portamento_down_param);
 		break;
 
 	case 3: /* 3xx: Tone portamento */
-		xm_tone_portamento(ctx, ch);
+		xm_tone_portamento(ch);
 		break;
 
 	case 4: /* 4xy: Vibrato */
@@ -1068,7 +1053,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 				| (ch->vibrato_param & 0x0F);
 		}
 		ch->should_reset_vibrato = true;
-		xm_vibrato(ctx, ch);
+		xm_vibrato(ch);
 		break;
 
 	case 5: /* 5xy: Tone portamento + Volume slide */
@@ -1076,7 +1061,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 			ch->volume_slide_param = ch->current->effect_param;
 		}
 		ch->volume_offset = 0;
-		xm_tone_portamento(ctx, ch);
+		xm_tone_portamento(ch);
 		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
 		break;
 
@@ -1086,7 +1071,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		}
 		ch->volume_offset = 0;
 		ch->should_reset_vibrato = true;
-		xm_vibrato(ctx, ch);
+		xm_vibrato(ch);
 		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
 		break;
 
