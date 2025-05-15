@@ -151,12 +151,9 @@ static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
 	   E24 (=4/16=1/4 semitone). */
 
 	ch->autovibrato_note_offset =
-		xm_waveform(instr->vibrato_type,
-		            instr->vibrato_rate * ch->autovibrato_ticks >> 2);
-	ch->autovibrato_note_offset /= 16; // now in -8..8
-	ch->autovibrato_note_offset *= instr->vibrato_depth; // -256..256
-	ch->autovibrato_note_offset /= 16; // -8..8
-	ch->autovibrato_note_offset -= 8; // -16..0
+		(xm_waveform(instr->vibrato_type,
+		             instr->vibrato_rate * ch->autovibrato_ticks >> 2)
+		 - 128) * instr->vibrato_depth / 256;
 
 	if(ch->autovibrato_ticks < instr->vibrato_sweep) {
 		ch->autovibrato_note_offset = ch->autovibrato_note_offset
