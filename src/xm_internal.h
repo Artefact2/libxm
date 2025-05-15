@@ -235,7 +235,7 @@ struct xm_channel_context_s {
                                    Tremolo and Txy: Tremor. */
 	uint8_t panning; /* 0..MAX_PANNING  */
 
-	int8_t autovibrato_note_offset; /* in 1/128 semitone increments */
+	int8_t autovibrato_note_offset; /* in 1/64 semitones */
 	uint8_t arp_note_offset; /* in semitones */
 	uint8_t volume_slide_param;
 	uint8_t fine_volume_slide_param;

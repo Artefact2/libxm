@@ -146,13 +146,24 @@ static void xm_autovibrato(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	xm_instrument_t* instr = ch->instrument;
 
-	uint8_t sweep = (ch->autovibrato_ticks < instr->vibrato_sweep) ?
-		ch->autovibrato_ticks : UINT8_MAX;
+	/* Autovibrato, unlike 4xx vibrato, only bends pitch *down*, not down
+	   and up. Its full range at depth F seems to be about the same as
+	   E24 (=4/16=1/4 semitone). */
 
 	ch->autovibrato_note_offset =
-		xm_waveform(instr->vibrato_type, ch->autovibrato_ticks >> 2)
-		* instr->vibrato_depth * sweep / (16*256);
-	ch->autovibrato_ticks += instr->vibrato_rate;
+		xm_waveform(instr->vibrato_type,
+		            instr->vibrato_rate * ch->autovibrato_ticks >> 2);
+	ch->autovibrato_note_offset /= 16; // now in -8..8
+	ch->autovibrato_note_offset *= instr->vibrato_depth; // -256..256
+	ch->autovibrato_note_offset /= 16; // -8..8
+	ch->autovibrato_note_offset -= 8; // -16..0
+
+	if(ch->autovibrato_ticks < instr->vibrato_sweep) {
+		ch->autovibrato_note_offset = ch->autovibrato_note_offset
+			* ch->autovibrato_ticks / instr->vibrato_sweep;
+	}
+
+	ch->autovibrato_ticks++;
 	xm_update_frequency(ctx, ch);
 }
 
@@ -327,7 +338,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	uint16_t p = ch->period;
 	p -= ch->arp_note_offset * 64;
 	p -= ch->vibrato_offset;
-	p -= ch->autovibrato_note_offset / 2;
+	p -= ch->autovibrato_note_offset;
 	return 8363.f * powf(2.f, (4608.f - (float)p) / 768.f);
 }
 
@@ -342,7 +353,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	float p = (float)ch->period
 		* powf(2.f, -0.0832493329f * (float)ch->arp_note_offset);
 	p -= (float)ch->vibrato_offset;
-	p -= (float)ch->autovibrato_note_offset / 2.f;
+	p -= (float)ch->autovibrato_note_offset;
 
 	/* This is the PAL value. No reason to choose this one over the
 	 * NTSC value. */
