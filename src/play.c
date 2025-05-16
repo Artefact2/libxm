@@ -646,7 +646,6 @@ static void xm_trigger_instrument(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->panning = ch->sample->panning;
 
 	ch->sustained = true;
-	ch->fadeout_volume = MAX_FADEOUT_VOLUME-1;
 	ch->volume_envelope_frame_count = 0;
 	ch->panning_envelope_frame_count = 0;
 
@@ -808,6 +807,8 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 		ch->fadeout_volume =
 			(ch->fadeout_volume < inst->volume_fadeout) ?
 			0 : ch->fadeout_volume - inst->volume_fadeout;
+	} else {
+		ch->fadeout_volume = MAX_FADEOUT_VOLUME-1;
 	}
 
 	if(inst->volume_envelope.enabled) {
