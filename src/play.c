@@ -38,7 +38,7 @@ static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attri
 static void xm_trigger_instrument(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_trigger_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_cut_note(xm_channel_context_t*) __attribute__((nonnull));
-static void xm_key_off(xm_channel_context_t*) __attribute__((nonnull));
+static void xm_key_off(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
 static void xm_post_pattern_change(xm_context_t*) __attribute__((nonnull));
 static void xm_row(xm_context_t*) __attribute__((nonnull));
@@ -385,10 +385,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		}
 	}
 
-	if(NOTE_IS_KEY_OFF(s->note)) {
-		/* Key Off */
-		xm_key_off(ch);
-	} else if(s->note) {
+	if(NOTE_IS_VALID(s->note)) {
 		/* Non-zero note, also not key off. Assume note is valid, since
 		   invalid notes are deleted in load.c. */
 
@@ -407,9 +404,14 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		}
 	}
 
-	if(s->instrument) xm_trigger_instrument(ctx, ch);
+	if(s->instrument) {
+		xm_trigger_instrument(ctx, ch);
+	}
 
-	if(NOTE_IS_VALID(s->note)) {
+	if(NOTE_IS_KEY_OFF(s->note)) {
+		/* Key Off */
+		xm_key_off(ctx, ch);
+	} else if(s->note) {
 		/* Yes, the real note number is s->note -1. Try finding
 		 * THAT in any of the specs! :-) */
 		uint16_t new_period = ch->sample != NULL ?
@@ -683,9 +685,16 @@ static void xm_cut_note(xm_channel_context_t* ch) {
 	ch->volume = 0;
 }
 
-static void xm_key_off(xm_channel_context_t* ch) {
+static void xm_key_off(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* Key Off */
 	ch->sustained = false;
+
+	/* XXX: An immediate key-off (note 97 or K00) doesn't actually cut the
+	   note when also triggering an instrument. Find the proper logic around
+	   triggers to avoid needing this ugly workaround in the first place. */
+	if(ch->current->instrument > 0 && ctx->current_tick == 0) {
+		return;
+	}
 
 	/* If no volume envelope is used, also cut the note */
 	if(ch->instrument == NULL || !ch->instrument->volume_envelope.enabled) {
@@ -1088,7 +1097,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	case 20: /* Kxx: Key off (as tick effect) */
 		if(ctx->current_tick == ch->current->effect_param) {
-			xm_key_off(ch);
+			xm_key_off(ctx, ch);
 		}
 		break;
 
