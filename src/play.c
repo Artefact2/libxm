@@ -376,16 +376,12 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	xm_pattern_slot_t* s = ch->current;
 
 	if(s->instrument) {
-		/* Update ch->instrument */
+		/* Update ch->next_instrument */
 		if(s->instrument <= ctx->module.num_instruments) {
-			ch->instrument = ctx->instruments
+			ch->next_instrument = ctx->instruments
 				+ (s->instrument - 1);
 		} else {
-			/* Invalid instruments will cancel out future note
-			   triggers, *but* do not update the current envelopes
-			   (a ghost invalid instrument will retrigger the
-			   current envelopes) */
-			ch->instrument = NULL;
+			ch->next_instrument = NULL;
 		}
 	}
 
@@ -396,14 +392,16 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		/* Non-zero note, also not key off. Assume note is valid, since
 		   invalid notes are deleted in load.c. */
 
-		/* Update ch->sample */
-		if(ch->instrument != NULL &&
-		   ch->instrument->sample_of_notes[s->note - 1]
-		   < ch->instrument->num_samples) {
+		/* Update ch->sample and ch->instrument */
+		if(ch->next_instrument != NULL &&
+		   ch->next_instrument->sample_of_notes[s->note - 1]
+		   < ch->next_instrument->num_samples) {
+			ch->instrument = ch->next_instrument;
 			ch->sample = ctx->samples
 				+ ch->instrument->samples_index
 				+ ch->instrument->sample_of_notes[s->note - 1];
 		} else {
+			ch->instrument = NULL;
 			ch->sample = NULL;
 			xm_cut_note(ch);
 		}
@@ -653,21 +651,15 @@ static void xm_trigger_instrument(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->panning_envelope_frame_count = 0;
 
 	ch->latest_trigger = ctx->generated_samples;
-	if(ch->instrument != NULL) {
-		ch->instrument->latest_trigger = ctx->generated_samples;
-	}
-
-	NOTICE("%u/%u/%u sus %u vol %u fadeout %u env %u", ctx->current_table_index, ctx->current_row, ctx->current_tick, ch->sustained, ch->volume, ch->fadeout_volume);
+	assert(ch->instrument != NULL);
+	ch->instrument->latest_trigger = ctx->generated_samples;
 }
 
 static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
+	if(ch->sample == NULL) return;
+
 	ch->period = ch->orig_period;
 	ch->sample_position = 0.f;
-
-	if(ch->instrument) {
-		ch->volume_env = &ch->instrument->volume_envelope;
-		ch->panning_env = &ch->instrument->panning_envelope;
-	}
 
 	ch->tremor_ticks = 0;
 	ch->tremor_on = false;
@@ -684,9 +676,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 
 	ch->latest_trigger = ctx->generated_samples;
-	if(ch->sample != NULL) {
-		ch->sample->latest_trigger = ctx->generated_samples;
-	}
+	ch->sample->latest_trigger = ctx->generated_samples;
 }
 
 static void xm_cut_note(xm_channel_context_t* ch) {
@@ -699,7 +689,7 @@ static void xm_key_off(xm_channel_context_t* ch) {
 	ch->sustained = false;
 
 	/* If no volume envelope is used, also cut the note */
-	if(ch->volume_env == NULL || !ch->volume_env->enabled) {
+	if(ch->instrument == NULL || !ch->instrument->volume_envelope.enabled) {
 		xm_cut_note(ch);
 	}
 }
@@ -811,23 +801,25 @@ static void xm_tick_envelope(xm_channel_context_t* ch,
 }
 
 static void xm_tick_envelopes(xm_channel_context_t* ch) {
-	if(ch->instrument && !ch->sustained) {
-		/* XXX: does fadeout still work after an invalid instr? */
+	xm_instrument_t* inst = ch->instrument;
+	if(inst == NULL) return;
+
+	if(!ch->sustained) {
 		ch->fadeout_volume =
-			(ch->fadeout_volume < ch->instrument->volume_fadeout) ?
-			0 : ch->fadeout_volume - ch->instrument->volume_fadeout;
+			(ch->fadeout_volume < inst->volume_fadeout) ?
+			0 : ch->fadeout_volume - inst->volume_fadeout;
 	}
 
-	if(ch->volume_env && ch->volume_env->enabled) {
-		xm_tick_envelope(ch, ch->volume_env,
+	if(inst->volume_envelope.enabled) {
+		xm_tick_envelope(ch, &(inst->volume_envelope),
 		                 &(ch->volume_envelope_frame_count),
 		                 &(ch->volume_envelope_volume));
 	} else {
 		ch->volume_envelope_volume = MAX_ENVELOPE_VALUE;
 	}
 
-	if(ch->panning_env && ch->panning_env->enabled) {
-		xm_tick_envelope(ch, ch->panning_env,
+	if(inst->panning_envelope.enabled) {
+		xm_tick_envelope(ch, &(inst->panning_envelope),
 		                 &(ch->panning_envelope_frame_count),
 		                 &(ch->panning_envelope_panning));
 	} else {
