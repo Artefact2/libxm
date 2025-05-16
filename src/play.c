@@ -35,7 +35,8 @@ static uint16_t xm_period(xm_context_t*, uint16_t) __attribute__((warn_unused_re
 static float xm_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
 
 static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
-static void xm_trigger_note(xm_context_t*, xm_channel_context_t*, unsigned int flags) __attribute__((nonnull));
+static void xm_trigger_instrument(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+static void xm_trigger_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_cut_note(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_key_off(xm_channel_context_t*) __attribute__((nonnull));
 
@@ -50,11 +51,6 @@ static void xm_sample_unmixed(xm_context_t*, float*) __attribute__((nonnull));
 static void xm_sample(xm_context_t*, float*) __attribute__((nonnull));
 
 /* ----- Other oddities ----- */
-
-#define XM_TRIGGER_KEEP_VOLUME (1 << 0)
-#define XM_TRIGGER_KEEP_PERIOD (1 << 1)
-#define XM_TRIGGER_KEEP_SAMPLE_POSITION (1 << 2)
-#define XM_TRIGGER_KEEP_ENVELOPE (1 << 3)
 
 #define XM_CLAMP_UP1F(vol, limit) do {                                  \
 		if((vol) > (limit)) (vol) = (limit); \
@@ -198,8 +194,7 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	uint8_t y = ch->multi_retrig_param & 0x0F;
 	if(y == 0 || ctx->current_tick % y) return;
 
-	xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_VOLUME
-	                | XM_TRIGGER_KEEP_ENVELOPE);
+	xm_trigger_instrument(ctx, ch);
 
 	/* Rxy doesn't affect volume if there's a command in the volume
 	   column, or if the instrument has a volume envelope. */
@@ -380,22 +375,37 @@ static float xm_frequency([[maybe_unused]] xm_context_t* ctx,
 static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) {
 	xm_pattern_slot_t* s = ch->current;
 
-	/* Maybe update ch->instrument */
+	/* Instrument trigger? */
 	if(s->instrument) {
+		/* Update ch->instrument, ch->volume_env, ch->panning_env */
 		if(s->instrument <= ctx->module.num_instruments) {
-			ch->orig_instrument = ctx->instruments
+			ch->instrument = ctx->instruments
 				+ (s->instrument - 1);
+			ch->volume_env = &ch->instrument->volume_envelope;
+			ch->panning_env = &ch->instrument->panning_envelope;
 		} else {
-			ch->orig_instrument = NULL;
+			/* Invalid instruments will cancel out future note
+			   triggers, *but* do not update the current envelopes
+			   (a ghost invalid instrument will retrigger the
+			   current envelopes) */
+			ch->instrument = NULL;
 		}
+
+		xm_trigger_instrument(ctx, ch);
 	}
 
-	/* Maybe update ch->sample */
-	if(NOTE_IS_VALID(s->note)) {
-		if(ch->orig_instrument != NULL &&
-		   ch->orig_instrument->sample_of_notes[s->note - 1]
-		   < ch->orig_instrument->num_samples) {
-			ch->instrument = ch->orig_instrument;
+	/* Note trigger? */
+	if(NOTE_IS_KEY_OFF(s->note)) {
+		/* Key Off */
+		xm_key_off(ch);
+	} else if(s->note) {
+		/* Non-zero note, also not key off. Assume note is valid, since
+		   invalid notes are deleted in load.c. */
+
+		/* Update ch->sample */
+		if(ch->instrument != NULL &&
+		   ch->instrument->sample_of_notes[s->note - 1]
+		   < ch->instrument->num_samples) {
 			ch->sample = ctx->samples
 				+ ch->instrument->samples_index
 				+ ch->instrument->sample_of_notes[s->note - 1];
@@ -403,19 +413,6 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			ch->sample = NULL;
 			xm_cut_note(ch);
 		}
-	} else if(s->instrument) {
-		/* Ghost instrument, trigger note */
-		/* Sample position is kept, but envelopes are reset */
-		xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_PERIOD
-		                | XM_TRIGGER_KEEP_SAMPLE_POSITION);
-	}
-
-	if(NOTE_IS_KEY_OFF(s->note)) {
-		/* Key Off */
-		xm_key_off(ch);
-	} else if(s->note) {
-		/* Non-zero note, also not key off. Assume note is valid, since
-		   invalid notes are deleted in load.c. */
 
 		/* Yes, the real note number is s->note -1. Try finding
 		 * THAT in any of the specs! :-) */
@@ -426,30 +423,9 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		if(HAS_TONE_PORTAMENTO(ch->current)) {
 			ch->tone_portamento_target_period = new_period;
-
-			if(s->instrument) {
-				/* Pretend this is a ghost instrument */
-				xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_PERIOD
-				                | XM_TRIGGER_KEEP_SAMPLE_POSITION);
-			}
 		} else {
 			ch->orig_period = new_period;
-
-			#if XM_RAMPING
-			for(unsigned int z = 0; z < RAMPING_POINTS; ++z) {
-				ch->end_of_previous_sample[z] =
-					xm_next_of_sample(ctx, ch);
-			}
-			ch->frame_count = 0;
-			#endif
-
-			if(s->instrument) {
-				xm_trigger_note(ctx, ch, 0);
-			} else {
-				/* Ghost note */
-				xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_VOLUME
-				                | XM_TRIGGER_KEEP_ENVELOPE);
-			}
+			xm_trigger_note(ctx, ch);
 		}
 	}
 
@@ -617,27 +593,6 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			               MAX_VOLUME);
 			break;
 
-		case 0xD: /* EDy: Note delay */
-			/* XXX: figure this out better. EDx triggers
-			 * the note even when there no note and no
-			 * instrument. But ED0 acts like like a ghost
-			 * note, EDx (x ≠ 0) does not. */
-			if(s->note == 0 && s->instrument == 0) {
-				unsigned int flags = XM_TRIGGER_KEEP_VOLUME;
-
-				if(ch->current->effect_param & 0x0F) {
-					xm_trigger_note(ctx, ch, flags);
-				} else {
-					xm_trigger_note(
-						ctx, ch,
-						flags
-						| XM_TRIGGER_KEEP_PERIOD
-						| XM_TRIGGER_KEEP_SAMPLE_POSITION
-						);
-				}
-			}
-			break;
-
 		case 0xE: /* EEy: Pattern delay */
 			ctx->extra_rows = (ch->current->effect_param & 0x0F);
 			break;
@@ -688,25 +643,32 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	}
 }
 
-static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigned int flags) {
-	if(!(flags & XM_TRIGGER_KEEP_SAMPLE_POSITION)) {
-		ch->sample_position = 0.f;
+static void xm_trigger_instrument(xm_context_t* ctx, xm_channel_context_t* ch) {
+	if(ch->sample != NULL) {
+		ch->volume = ch->sample->volume;
+		ch->panning = ch->sample->panning;
 	}
+
+	ch->sustained = true;
+	ch->fadeout_volume = MAX_FADEOUT_VOLUME-1;
+	ch->volume_envelope_volume = MAX_ENVELOPE_VALUE;
+	ch->panning_envelope_panning = MAX_ENVELOPE_VALUE/2;
+	ch->volume_envelope_frame_count = 0;
+	ch->panning_envelope_frame_count = 0;
+
+	ch->latest_trigger = ctx->generated_samples;
+	if(ch->instrument != NULL) {
+		ch->instrument->latest_trigger = ctx->generated_samples;
+	}
+}
+
+static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
+	ch->period = ch->orig_period;
+	ch->sample_position = 0.f;
 
 	if(ch->sample != NULL) {
-		if(!(flags & XM_TRIGGER_KEEP_VOLUME)) {
-			ch->volume = ch->sample->volume;
-			ch->panning = ch->sample->panning;
-		}
-	}
-
-	if(!(flags & XM_TRIGGER_KEEP_ENVELOPE)) {
-		ch->sustained = true;
-		ch->fadeout_volume = MAX_FADEOUT_VOLUME-1;
-		ch->volume_envelope_volume = MAX_VOLUME;
-		ch->panning_envelope_panning = MAX_ENVELOPE_VALUE/2;
-		ch->volume_envelope_frame_count = 0;
-		ch->panning_envelope_frame_count = 0;
+		ch->volume = ch->sample->volume;
+		ch->panning = ch->sample->panning;
 	}
 
 	ch->tremor_ticks = 0;
@@ -723,14 +685,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch, unsigne
 		ch->tremolo_ticks = 0;
 	}
 
-	if(!(flags & XM_TRIGGER_KEEP_PERIOD)) {
-		ch->period = ch->orig_period;
-	}
-
 	ch->latest_trigger = ctx->generated_samples;
-	if(ch->instrument != NULL) {
-		ch->instrument->latest_trigger = ctx->generated_samples;
-	}
 	if(ch->sample != NULL) {
 		ch->sample->latest_trigger = ctx->generated_samples;
 	}
@@ -746,7 +701,7 @@ static void xm_key_off(xm_channel_context_t* ch) {
 	ch->sustained = false;
 
 	/* If no volume envelope is used, also cut the note */
-	if(ch->instrument == NULL || !ch->instrument->volume_envelope.enabled) {
+	if(ch->volume_env == NULL || !ch->volume_env->enabled) {
 		xm_cut_note(ch);
 	}
 }
@@ -776,9 +731,13 @@ static void xm_row(xm_context_t* ctx) {
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i, ++ch, ++s) {
 		ch->current = s;
 
-		if(s->effect_type != 0xE || s->effect_param >> 4 != 0xD) {
+		if(s->effect_type != 0xE || s->effect_param >> 4 != 0xD
+		   || s->effect_param == 0xD0) {
+			/* No EDy note delay, or ED0 */
 			xm_handle_pattern_slot(ctx, ch);
 		} else {
+			/* Call xm_handle_pattern_slot() later, in
+			   xm_tick_effects() */
 			ch->note_delay_param = s->effect_param & 0x0F;
 		}
 
@@ -854,24 +813,21 @@ static void xm_tick_envelope(xm_channel_context_t* ch,
 }
 
 static void xm_tick_envelopes(xm_channel_context_t* ch) {
-	if(ch->instrument == NULL) return;
-
-	if(!ch->sustained) {
+	if(ch->instrument && !ch->sustained) {
+		/* XXX: does fadeout still work after an invalid instr? */
 		ch->fadeout_volume =
 			(ch->fadeout_volume < ch->instrument->volume_fadeout) ?
 			0 : ch->fadeout_volume - ch->instrument->volume_fadeout;
 	}
 
-	if(ch->instrument->volume_envelope.enabled) {
-		xm_tick_envelope(ch,
-		                 &(ch->instrument->volume_envelope),
+	if(ch->volume_env && ch->volume_env->enabled) {
+		xm_tick_envelope(ch, ch->volume_env,
 		                 &(ch->volume_envelope_frame_count),
 		                 &(ch->volume_envelope_volume));
 	}
 
-	if(ch->instrument->panning_envelope.enabled) {
-		xm_tick_envelope(ch,
-		                 &(ch->instrument->panning_envelope),
+	if(ch->panning_env && ch->panning_env->enabled) {
+		xm_tick_envelope(ch, ch->panning_env,
 		                 &(ch->panning_envelope_frame_count),
 		                 &(ch->panning_envelope_panning));
 	}
@@ -1106,7 +1062,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 			if(!(ch->current->effect_param & 0x0F)) break;
 			if(ctx->current_tick
 			   % (ch->current->effect_param & 0x0F)) break;
-			xm_trigger_note(ctx, ch, XM_TRIGGER_KEEP_VOLUME);
+			xm_trigger_note(ctx, ch);
 			xm_tick_envelopes(ch);
 			break;
 

@@ -201,7 +201,8 @@ typedef struct xm_module_s xm_module_t;
 struct xm_channel_context_s {
 	uint64_t latest_trigger;
 	xm_instrument_t* instrument; /* Could be NULL */
-	xm_instrument_t* orig_instrument; /* Could be NULL */
+	xm_envelope_t* volume_env; /* Could be NULL */
+	xm_envelope_t* panning_env; /* Could be NULL */
 	xm_sample_t* sample; /* Could be NULL */
 	xm_pattern_slot_t* current;
 
