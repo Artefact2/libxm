@@ -432,6 +432,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		}
 	}
 
+	/* These volume effects always work, even when called with a delay by
+	   EDy. */
 	switch(s->volume_column >> 4) {
 
 	case 0x5:
@@ -449,27 +451,37 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		ch->volume = s->volume_column - 0x10;
 		break;
 
-	case 0x8: /* ▼x: Fine volume slide down */
-		ch->volume_offset = 0;
-		xm_param_slide(&ch->volume, s->volume_column & 0x0F,
-		               MAX_VOLUME);
-		break;
-
-	case 0x9: /* ▲x: Fine volume slide up */
-		ch->volume_offset = 0;
-		xm_param_slide(&ch->volume, s->volume_column << 4,
-		               MAX_VOLUME);
-		break;
-
-	case 0xA: /* Sx: Set vibrato speed */
-		ch->vibrato_param = (ch->vibrato_param & 0x0F)
-			| ((s->volume_column & 0x0F) << 4);
-		break;
-
 	case 0xC: /* Px: Set panning */
 		ch->panning = (s->volume_column & 0x0F) * 0x11;
 		break;
 
+	}
+
+	if(ctx->current_tick == 0) {
+		/* These effects are ONLY applied at tick 0. If a note delay
+		   effect (EDy), where y>0, uses this effect in its volume
+		   column, it will be ignored. */
+
+		switch(s->volume_column >> 4) {
+
+		case 0x8: /* ▼x: Fine volume slide down */
+			ch->volume_offset = 0;
+			xm_param_slide(&ch->volume, s->volume_column & 0x0F,
+			               MAX_VOLUME);
+			break;
+
+		case 0x9: /* ▲x: Fine volume slide up */
+			ch->volume_offset = 0;
+			xm_param_slide(&ch->volume, s->volume_column << 4,
+			               MAX_VOLUME);
+			break;
+
+		case 0xA: /* Sx: Set vibrato speed */
+			ch->vibrato_param = (ch->vibrato_param & 0x0F)
+				| ((s->volume_column & 0x0F) << 4);
+			break;
+
+		}
 	}
 
 	switch(s->effect_type) {
@@ -663,6 +675,8 @@ static void xm_trigger_instrument(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(ch->sample == NULL) return;
+	/* Can be called by eg, key off note with EDy */
+	if(NOTE_IS_KEY_OFF(ch->current->note)) return;
 
 	ch->period = ch->orig_period;
 	ch->sample_position = 0.f;
@@ -1084,6 +1098,16 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		case 0xD: /* EDy: Note delay */
 			if(ch->note_delay_param == ctx->current_tick) {
 				xm_handle_pattern_slot(ctx, ch);
+				/* EDy (y>0) has a weird trigger mechanism,
+				   where it will reset sample position and
+				   period (except if we have a keyoff), and it
+				   will reset envelopes and sustain status but
+				   keep volume/panning (so it's not a true
+				   instrument trigger) */
+				ch->volume_envelope_frame_count = 0;
+				ch->panning_envelope_frame_count = 0;
+				ch->sustained = true;
+				xm_trigger_note(ctx, ch);
 				xm_tick_envelopes(ch);
 			}
 			break;

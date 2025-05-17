@@ -154,11 +154,16 @@ static int pat0_pat1_eq(xm_context_t* ctx0) {
 
 	float frames0[128], frames1[128];
 	uint8_t idx;
-	while(xm_get_position(ctx0, &idx, NULL, NULL, NULL), idx == 0) {
+	uint64_t smp_count;
+	while(xm_get_position(ctx0, &idx, NULL, NULL, &smp_count), idx == 0) {
 		xm_generate_samples(ctx0, frames0, 64);
 		xm_generate_samples(ctx1, frames1, 64);
-		if(memcmp(frames0, frames1, sizeof(frames0))) {
-			fprintf(stderr, "Found mismatch\n");
+		for(uint8_t i = 0; i < 128; ++i) {
+			if(frames0[i] == frames1[i]) continue;
+			fprintf(stderr,
+			        "Found mismatch at frame position %ld: "
+			        "pat0=%f pat1=%f\n", smp_count + i/2,
+			        (double)frames0[i], (double)frames1[i]);
 			print_position(ctx0);
 			print_position(ctx1);
 			return 1;
