@@ -125,12 +125,9 @@ Other tests require manual checking, see the table below.
 -------------------------------+----------------+------------------------+------------------------------------------------
 amiga.xm                       | FAIL           | MilkyTracker, xmp      | Should sound identical.
 autovibrato-turnoff.xm         | PASS           | MilkyTracker           | Same pitches should be heard twice in a row.
-fadeout-speed.xm               | PASS           | MilkyTracker           | Should sound identical.
 finetune.xm                    | PASS           | MilkyTracker           | Left and right channels should sound identical.
 ghosts.xm                      | FAIL           | MilkyTracker           | Left and right channels should sound identical.
 multiretrig-volume.xm          | PASS           | FT2, OpenMPT           | Should sound identical.
-note-delay-ghost.xm            | PASS           | MilkyTracker, FT2      | Should sound identical.
-note-delay-retrig.xm           | PASS           | MilkyTracker           | Should sound identical.
 panning-law.xm                 | PASS           | MilkyTracker, FT2clone | Should sound identical.
 pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
 pos_jump.xm                    | PASS           | Milkytracker, OpenMPT  | Only one beep should be heard.
@@ -138,8 +135,6 @@ ramping.xm                     | PASS           | MilkyTracker           | If XM
 ramping2.xm                    | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
 retrig-vol-fade.xm             | PASS           | MT, FT2clone, OpenMPT  | Should sound identical.
 tone-portamento.xm             | PASS           | MilkyTracker           | Should sound identical.
-vibrato-slow.xm                | PASS           | OpenMPT                | Should sound identical.
-vibrato-octave.xm              | PASS           | FT2clone, OpenMPT      | Should sound identical.
 ~~~
 
 Thanks
