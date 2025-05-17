@@ -210,6 +210,11 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 }
 
 static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
+	/* Arp effect always resets vibrato offset, even if it only runs for 1
+	   tick where the offset is 0 (eg spd=2 001). Tick counter isn't
+	   reset. */
+	ch->vibrato_offset = 0;
+
 	uint8_t offset = ctx->tempo % 3;
 	switch(offset) {
 	case 2: /* 0 -> x -> 0 -> y -> x -> … */
