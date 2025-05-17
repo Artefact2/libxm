@@ -348,15 +348,22 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
 			slot->note = KEY_OFF_NOTE;
 		}
 
-		if(slot->effect_type == 0x0F && slot->effect_param == 0) {
-			/* Delete F00 (stops playback) */
-			slot->effect_type = 0;
-		}
-
 		if(slot->effect_type == 0x0E && slot->effect_param >> 4 == 8) {
 			/* Convert E8x to 8xx */
 			slot->effect_type = 8;
 			slot->effect_param = (slot->effect_param & 0xF) * 0x11;
+		}
+
+		if(slot->effect_type == 0xE && slot->effect_param == 0xD0) {
+			/* Remove all ED0, these are completely useless and save
+			   us a check in play.c */
+			slot->effect_type = 0;
+			slot->effect_param = 0;
+		}
+
+		if(slot->effect_type == 0x0F && slot->effect_param == 0) {
+			/* Delete F00 (stops playback) */
+			slot->effect_type = 0;
 		}
 
 		if(slot->effect_type == 20 && slot->effect_param == 0) {

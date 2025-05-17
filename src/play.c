@@ -732,9 +732,8 @@ static void xm_row(xm_context_t* ctx) {
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i, ++ch, ++s) {
 		ch->current = s;
 
-		if(s->effect_type != 0xE || s->effect_param >> 4 != 0xD
-		   || s->effect_param == 0xD0) {
-			/* No EDy note delay, or ED0 */
+		if(s->effect_type != 0xE || s->effect_param >> 4 != 0xD) {
+			/* No EDy note delay */
 			xm_handle_pattern_slot(ctx, ch);
 		} else {
 			/* Call xm_handle_pattern_slot() later, in
