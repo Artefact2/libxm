@@ -1,7 +1,21 @@
 cmake_minimum_required(VERSION 3.21)
 project(libxm LANGUAGES C)
+set(CMAKE_C_STANDARD 23)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
-include(../common.cmake)
+add_library(xm_common INTERFACE)
+if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang)$")
+	target_compile_options(xm_common INTERFACE
+		"$<$<CONFIG:MinSizeRel>:-Oz>"
+		"$<$<CONFIG:MinSizeRel>:-ffast-math>"
+		-Wall -Wextra -Wpedantic -Wpadded -Wdouble-promotion -Wvla
+	)
+	target_link_options(xm_common INTERFACE
+		"$<$<CONFIG:MinSizeRel>:-z>"
+		"$<$<CONFIG:MinSizeRel>:norelro>"
+		"$<$<CONFIG:MinSizeRel>:-Wl,--build-id=none>"
+	)
+endif()
 
 add_library(xm xm.c load.c play.c)
 set_target_properties(xm PROPERTIES
@@ -12,7 +26,7 @@ set_target_properties(xm PROPERTIES SOVERSION 5)
 
 find_library(MATH_LIBRARY m REQUIRED)
 target_include_directories(xm SYSTEM PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
-target_link_libraries(xm PRIVATE ${MATH_LIBRARY})
+target_link_libraries(xm PRIVATE xm_common ${MATH_LIBRARY})
 
 function(option_and_define name description default_value)
 	option(${name} ${description} ${default_value})
