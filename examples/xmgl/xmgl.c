@@ -269,7 +269,7 @@ static xm_context_t* create_context_from_file(uint32_t rate, const char* filenam
 	xm_context_t* ctx = NULL;
 	char* xm_data = NULL;
 	FILE* xmfile = NULL;
-	char prescan_data[XM_PRESCAN_DATA_SIZE];
+	char* prescan_data;
 	long size;
 
 	xmfile = fopen(filename, "rb");
@@ -292,6 +292,7 @@ static xm_context_t* create_context_from_file(uint32_t rate, const char* filenam
 		goto end;
 	}
 
+	prescan_data = alloca(XM_PRESCAN_DATA_SIZE);
 	xm_prescan_data_t* p = (xm_prescan_data_t*)prescan_data;
 	if(xm_prescan_module(xm_data, size, p) == false) {
 		fprintf(stderr, "xm_prescan_module() failed\n");
