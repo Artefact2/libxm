@@ -4,16 +4,17 @@ project(test-libxm LANGUAGES C)
 set(XM_RAMPING OFF CACHE BOOL "" FORCE)
 
 include(CTest)
-include(../common.cmake)
 add_subdirectory(../src xm_build)
 
 add_executable(test-libxm test-libxm.c)
-target_link_libraries(test-libxm PRIVATE xm)
+target_link_libraries(test-libxm PRIVATE xm xm_common)
 
 add_test(NAME test_arpeggio COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/arpeggio.xm)
 add_test(NAME test_effect_memory COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/effect-memory.xm)
+add_test(NAME test_ghosts COMMAND test-libxm
+	channelpairs_eq ${CMAKE_SOURCE_DIR}/ghosts.xm)
 add_test(NAME test_instrument_fadeout COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/instrument-fadeout.xm)
 add_test(NAME test_key_off COMMAND test-libxm
