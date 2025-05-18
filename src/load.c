@@ -182,18 +182,27 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 		offset += inst_samples_bytes;
 	}
 
-	unsigned long sz = sizeof(xm_context_t)
-		+ sizeof(xm_pattern_t) * out->num_patterns
-		+ sizeof(xm_pattern_slot_t) * out->num_rows * out->num_channels
-		+ sizeof(xm_instrument_t) * out->num_instruments
-		+ sizeof(xm_sample_t) * out->num_samples
-		+ sizeof(xm_sample_point_t) * out->samples_data_length
-		+ sizeof(xm_channel_context_t) * out->num_channels
-		+ sizeof(uint8_t) * MAX_ROWS_PER_PATTERN * out->pot_length;
-	if(sz > UINT32_MAX) {
+	uint32_t sz = sizeof(xm_context_t);
+	if(ckd_add(&sz, sz, sizeof(xm_pattern_t) * out->num_patterns)
+	   || ckd_add(&sz, sz, sizeof(xm_pattern_slot_t)
+	              * out->num_rows * out->num_channels)
+	   || ckd_add(&sz, sz, sizeof(xm_instrument_t) * out->num_instruments)
+	   || ckd_add(&sz, sz, sizeof(xm_sample_t) * out->num_samples)
+	   || ckd_add(&sz, sz, sizeof(xm_sample_point_t)
+	              * out->samples_data_length)
+	   || ckd_add(&sz, sz, sizeof(xm_channel_context_t) * out->num_channels)
+	   || ckd_add(&sz, sz, sizeof(uint8_t) * MAX_ROWS_PER_PATTERN
+	              * out->pot_length)) {
 		NOTICE("module too big for uint32");
 		return false;
 	}
+	if(XM_DEFENSIVE && sz > 128 << 20) {
+		NOTICE("module is suspiciously large (%u bytes), aborting load "
+		       "as this is probably a corrupt/malicious file, "
+		       "or a bug in libxm", sz);
+		return false;
+	}
+
 	out->context_size = (uint32_t)sz;
 
 	NOTICE("read %d patterns, %d channels, %d rows, %d instruments, "
