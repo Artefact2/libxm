@@ -7,6 +7,7 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
 #include <xm.h>
+#include <stddef.h>
 #include <signal.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -15,7 +16,7 @@ static xm_context_t* ctx;
 static float buffer[256];
 int pipe_fd[2]; /* 0 => read end, 1 => write end */
 
-static char libxm_data[] = {
+static alignas(max_align_t) char libxm_data[] = {
 #embed "mus.libxm"
 };
 
