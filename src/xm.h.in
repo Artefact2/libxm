@@ -22,7 +22,7 @@ typedef struct xm_context_s xm_context_t;
 
 struct xm_prescan_data_s;
 typedef struct xm_prescan_data_s xm_prescan_data_t;
-extern const unsigned int XM_PRESCAN_DATA_SIZE;
+extern const uint8_t XM_PRESCAN_DATA_SIZE;
 
 /** xm_sample_type_t could be int8_t, int16_t or float: you can use _Generic()
  * to cover all possibilities at compile-time:

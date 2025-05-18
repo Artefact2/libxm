@@ -46,7 +46,7 @@ struct xm_prescan_data_s {
 	uint16_t pot_length;
 	char __pad[2];
 };
-const unsigned int XM_PRESCAN_DATA_SIZE = sizeof(xm_prescan_data_t);
+const uint8_t XM_PRESCAN_DATA_SIZE = sizeof(xm_prescan_data_t);
 
 /* ----- Static functions ----- */
 
