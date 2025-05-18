@@ -575,12 +575,6 @@ static void xm_check_and_fix_envelope(xm_envelope_t* env, uint8_t flags) {
 	if(!(flags & ENVELOPE_FLAG_SUSTAIN)) {
 		env->sustain_point += 128;
 	}
-	for(uint8_t i = 0; i < env->num_points; ++i) {
-		if(env->points[i].value <= MAX_ENVELOPE_VALUE) continue;
-		NOTICE("clamped invalid envelope point value (%u -> %u)",
-		       env->points[i].value, MAX_ENVELOPE_VALUE);
-		env->points[i].value = MAX_ENVELOPE_VALUE;
-	}
 }
 
 static uint32_t xm_load_sample_header(xm_context_t* ctx,
