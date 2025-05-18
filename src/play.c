@@ -1092,7 +1092,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		case 0xC: /* ECy: Note cut */
 			/* XXX: test this effect */
 			if((ch->current->effect_param & 0x0F) == ctx->current_tick) {
-				xm_cut_note(ch); /* XXX: tick 0? */
+				xm_cut_note(ch);
 			}
 			break;
 

@@ -371,6 +371,13 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
 			slot->effect_param = (slot->effect_param & 0xF) * 0x11;
 		}
 
+		if(slot->effect_type == 0xE && slot->effect_param == 0xC0) {
+			/* Convert EC0 to C00, this is exactly the same effect
+			   and saves us a switch case in play.c */
+			slot->effect_type = 0xC;
+			slot->effect_param = 0;
+		}
+
 		if(slot->effect_type == 0xE && slot->effect_param == 0xD0) {
 			/* Remove all ED0, these are completely useless and save
 			   us a check in play.c */
