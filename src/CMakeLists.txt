@@ -56,6 +56,10 @@ option_and_define(XM_LIBXM_DELTA_SAMPLES
 set(XM_SAMPLE_TYPE "int16_t" CACHE STRING
 	"Sample type of internal samples (int8_t,int16_t,float)")
 
+set(XM_MICROSTEP_BITS "12" CACHE STRING
+	"Precision of sample stepping (8..12, higher = better pitch accuracy, lower = can load larger samples)")
+target_compile_definitions(xm PRIVATE XM_MICROSTEP_BITS=${XM_MICROSTEP_BITS})
+
 option_and_define(XM_STRINGS
 	"Store module, instrument and sample names in context" "ON")
 

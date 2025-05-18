@@ -163,19 +163,26 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 
 		for(uint16_t j = 0; j < num_samples; ++j) {
 			uint32_t sample_length = READ_U32(offset);
-			if(READ_U8(offset + 14) & SAMPLE_FLAG_16B) {
+			uint32_t sample_bytes = sample_length;
+			uint8_t flags = READ_U8(offset + 14);
+			if(flags & SAMPLE_FLAG_16B) {
 				/* 16-bit sample data */
 				#if XM_DEFENSIVE
 				if(sample_length % 2) {
 					NOTICE("sample %d of instrument %d is 16-bit with an odd length!", j, i+1);
 				}
 				#endif
-				out->samples_data_length += sample_length/2;
-			} else {
-				/* 8-bit sample data */
-				out->samples_data_length += sample_length;
+				sample_length /= 2;
 			}
-			inst_samples_bytes += sample_length;
+			uint32_t max = UINT32_MAX / SAMPLE_MICROSTEPS;
+			if(flags & SAMPLE_FLAG_PING_PONG) max /= 2;
+			if(sample_length > max) {
+				NOTICE("sample %d of instrument %d is too big "
+				       "(%u > %u)", j, i+1, sample_length, max);
+				return false;
+			}
+			out->samples_data_length += sample_length;
+			inst_samples_bytes += sample_bytes;
 			offset += SAMPLE_HEADER_SIZE;
 		}
 

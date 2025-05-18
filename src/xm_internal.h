@@ -80,6 +80,16 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
    about 0.00003%. */
 #define TICK_SUBSAMPLES (1<<13)
 
+/* Granularity of ch->step and ch->sample_position, for precise pitching of
+   samples. Minimum sample step is about 0.008 per frame, at 65535 Hz, when
+   playing C-0. For C-1 at 48000 Hz, the step is about 0.02.
+
+   For example, with 2^12 microsteps, that means the worst pitch error is
+   log2((.008 * 2^12 + 0.5)/(.008 * 2^12))*1200 = 26 cents. (Playing C-1 at 48000
+   Hz, the error is 10 cents.) However, this only leaves 20 bits for the sample
+   position, effectively limiting the maximum sample size to 1M frames. */
+#define SAMPLE_MICROSTEPS (1<<XM_MICROSTEP_BITS)
+
 /* ----- Data types ----- */
 
 struct xm_envelope_point_s {
@@ -209,8 +219,8 @@ struct xm_channel_context_s {
 	                        NULL */
 	xm_pattern_slot_t* current;
 
-	float sample_position;
-	float step;
+	uint32_t sample_position; /* In microsteps */
+	uint32_t step; /* In microsteps */
 
 	float actual_volume[2]; /* Multiplier for left/right channel */
 	#if XM_RAMPING

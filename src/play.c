@@ -27,12 +27,12 @@ static void xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16
 static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
 static uint16_t xm_linear_period(uint16_t) __attribute__((warn_unused_result));
-static float xm_linear_frequency(xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static uint32_t xm_linear_frequency(xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static uint16_t xm_amiga_period(uint16_t) __attribute__((warn_unused_result));
-static float xm_amiga_frequency(xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static uint32_t xm_amiga_frequency(xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
 
 static uint16_t xm_period(xm_context_t*, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static float xm_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static uint32_t xm_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
 
 static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_trigger_instrument(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
@@ -320,12 +320,12 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	                           here? investigate */
 }
 
-[[maybe_unused]] static float xm_linear_frequency(xm_channel_context_t* ch) {
+[[maybe_unused]] static uint32_t xm_linear_frequency(xm_channel_context_t* ch) {
 	uint16_t p = ch->period;
 	p -= ch->arp_note_offset * 64;
 	p -= ch->vibrato_offset;
 	p -= ch->autovibrato_note_offset;
-	return 8363.f * powf(2.f, (4608.f - (float)p) / 768.f);
+	return (uint32_t)(8363.f * powf(2.f, (4608.f - (float)p) / 768.f));
 }
 
 [[maybe_unused]] static uint16_t xm_amiga_period(uint16_t note) {
@@ -334,7 +334,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	return 32.f * 855.9563438f * powf(2.f, -0.0832493329f * note / 128.f);
 }
 
-[[maybe_unused]] static float xm_amiga_frequency(xm_channel_context_t* ch) {
+[[maybe_unused]] static uint32_t xm_amiga_frequency(xm_channel_context_t* ch) {
 	if(ch->period == 0) return 0;
 	float p = (float)ch->period
 		* powf(2.f, -0.0832493329f * ((float)ch->arp_note_offset + (float)ch->autovibrato_note_offset / 64.f));
@@ -342,7 +342,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 
 	/* This is the PAL value. No reason to choose this one over the
 	 * NTSC value. */
-	return 4.f * 7093789.2f / (p * 2.f);
+	return (uint32_t)(4.f * 7093789.2f / (p * 2.f));
 }
 
 static uint16_t xm_period([[maybe_unused]] xm_context_t* ctx, uint16_t note) {
@@ -360,8 +360,8 @@ static uint16_t xm_period([[maybe_unused]] xm_context_t* ctx, uint16_t note) {
 	UNREACHABLE();
 	#endif
 }
-static float xm_frequency([[maybe_unused]] xm_context_t* ctx,
-                          xm_channel_context_t* ch) {
+static uint32_t xm_frequency([[maybe_unused]] xm_context_t* ctx,
+                             xm_channel_context_t* ch) {
 	#if XM_FREQUENCY_TYPES == 1
 	return xm_linear_frequency(ch);
 	#elif XM_FREQUENCY_TYPES == 2
@@ -511,6 +511,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			/* Pretend the sample dosen't loop and is done playing */
 			ch->sample = NULL;
 		}
+		static_assert(256 * SAMPLE_MICROSTEPS * UINT8_MAX <= UINT32_MAX);
+		ch->sample_position *= SAMPLE_MICROSTEPS;
 		break;
 
 	case 0xB: /* Bxx: Position jump */
@@ -679,7 +681,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(NOTE_IS_KEY_OFF(ch->current->note)) return;
 
 	ch->period = ch->orig_period;
-	ch->sample_position = 0.f;
+	ch->sample_position = 0;
 
 	ch->tremor_ticks = 0;
 	ch->tremor_on = false;
@@ -871,7 +873,17 @@ static void xm_tick(xm_context_t* ctx) {
 			xm_tick_effects(ctx, ch);
 		}
 
-		ch->step = xm_frequency(ctx, ch) / ctx->rate;
+		ch->step = xm_frequency(ctx, ch);
+		/* Guard against uint32_t overflow */
+		static_assert(SAMPLE_MICROSTEPS <= 1 << 12);
+		/* For A#9 and +127 finetune, frequency is about 535K */
+		assert(ch->step < 1 << 20);
+		ch->step *= SAMPLE_MICROSTEPS;
+		/* Don't truncate, actually round up or down, precision matters
+		   here (rounding lets us use 0.5 instead of 1 in the error
+		   formula, see SAMPLE_MICROSTEPS comment) */
+		ch->step = ch->step / ctx->rate
+			+ ((ch->step % ctx->rate) << 1 > ctx->rate);
 
 		uint8_t panning;
 		float volume;
@@ -1208,14 +1220,14 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 
 	xm_sample_t* smp = ch->sample;
-	uint32_t a = (uint32_t)ch->sample_position;
-	[[maybe_unused]] float t = ch->sample_position - a;
+	uint32_t a = ch->sample_position / SAMPLE_MICROSTEPS;
+	[[maybe_unused]] float t = (float)(ch->sample_position % SAMPLE_MICROSTEPS) / (float)SAMPLE_MICROSTEPS;
 	[[maybe_unused]] uint32_t b;
 	ch->sample_position += ch->step;
 
 	switch(ch->sample->loop_type) {
 	case XM_NO_LOOP:
-		if(ch->sample_position >= ch->sample->length) {
+		if((ch->sample_position / SAMPLE_MICROSTEPS) >= ch->sample->length) {
 			ch->sample = NULL;
 			b = a;
 			break;
@@ -1227,8 +1239,9 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 		/* If length=6, loop_start=2, loop_end=6 */
 		/* 0 1 (2 3 4 5) (2 3 4 5) (2 3 4 5) ... */
 		assert(ch->sample->loop_length > 0);
-		while(ch->sample_position >= ch->sample->loop_end) {
-			ch->sample_position -= ch->sample->loop_length;
+		while((ch->sample_position / SAMPLE_MICROSTEPS) >= ch->sample->loop_end) {
+			ch->sample_position -= ch->sample->loop_length
+				* SAMPLE_MICROSTEPS;
 		}
 		b = (a+1 == ch->sample->loop_end) ?
 			ch->sample->loop_start : (a+1);
@@ -1240,10 +1253,11 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 		/* If length=6, loop_start=2, loop_end=6 */
 		/* 0 1 (2 3 4 5 5 4 3 2) (2 3 4 5 5 4 3 2) ... */
 		assert(ch->sample->loop_length > 0);
-		while(ch->sample_position >=
+		while((ch->sample_position / SAMPLE_MICROSTEPS) >=
 		      ch->sample->loop_end + ch->sample->loop_length) {
 			/* XXX check for overflow */
-			ch->sample_position -= ch->sample->loop_length * 2;
+			ch->sample_position -= ch->sample->loop_length
+				* 2 * SAMPLE_MICROSTEPS;
 		}
 
 		if(a < ch->sample->loop_end) {
