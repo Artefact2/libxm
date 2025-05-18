@@ -91,14 +91,15 @@ typedef struct xm_envelope_point_s xm_envelope_point_t;
 
 struct xm_envelope_s {
 	xm_envelope_point_t points[MAX_ENVELOPE_POINTS];
-	uint8_t num_points;
-	uint8_t sustain_point;
-	uint8_t loop_start_point;
+
+	static_assert(MAX_ENVELOPE_POINTS + 128 < UINT8_MAX);
+	uint8_t num_points; /* 2..MAX_ENVELOPE_POINTS, values above mean
+	                       envelope is disabled */
+	uint8_t sustain_point; /* 0..MAX_ENVELOPE_POINTS, values above mean no
+	                          sustain */
+	uint8_t loop_start_point; /* 0..MAX_ENVELOPE_POINTS, values above mean
+	                             no loop */
 	uint8_t loop_end_point;
-	bool enabled:1;
-	bool sustain_enabled:1;
-	bool loop_enabled:1;
-	uint16_t __pad:13;
 };
 typedef struct xm_envelope_s xm_envelope_t;
 
@@ -151,7 +152,7 @@ struct xm_instrument_s {
 	char name[24];
 	#endif
 
-	char __pad[1];
+	char __pad[5];
 };
 typedef struct xm_instrument_s xm_instrument_t;
 

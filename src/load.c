@@ -14,6 +14,9 @@
 #define SAMPLE_FLAG_16B 0b00010000
 #define SAMPLE_FLAG_PING_PONG 0b00000010
 #define SAMPLE_FLAG_FORWARD 0b00000001
+#define ENVELOPE_FLAG_ENABLED 0b00000001
+#define ENVELOPE_FLAG_SUSTAIN 0b00000010
+#define ENVELOPE_FLAG_LOOP 0b00000100
 
 #define ASSERT_ALIGN(a, b) static_assert(alignof(a) % alignof(b) == 0)
 #define ASSERT_CTX_ALIGNED(ptr) assert((uintptr_t)((void*)(ptr)) % alignof(xm_context_t) == 0)
@@ -51,7 +54,8 @@ static void memcpy_pad(void*, size_t, const void*, size_t, size_t);
 static uint32_t xm_load_module_header(xm_context_t*, const char*, uint32_t);
 static uint32_t xm_load_pattern(xm_context_t*, xm_pattern_t*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_instrument(xm_context_t*, xm_instrument_t*, const char*, uint32_t, uint32_t);
-static void xm_check_and_fix_envelope(xm_envelope_t*);
+static void xm_load_envelope_points(xm_envelope_t*, const char*);
+static void xm_check_and_fix_envelope(xm_envelope_t*, uint8_t);
 static uint32_t xm_load_sample_header(xm_context_t*, xm_sample_t*, bool*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_8b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
@@ -424,8 +428,11 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 
 	/* Read extra header properties */
 	READ_MEMCPY(instr->sample_of_notes, offset + 33, NUM_NOTES);
-	READ_MEMCPY(instr->volume_envelope.points, offset + 129, 48);
-	READ_MEMCPY(instr->panning_envelope.points, offset + 177, 48);
+
+	xm_load_envelope_points(&instr->volume_envelope,
+	                        moddata + offset + 129);
+	xm_load_envelope_points(&instr->panning_envelope,
+	                        moddata + offset + 177);
 
 	instr->volume_envelope.num_points = READ_U8(offset + 225);
 	instr->panning_envelope.num_points = READ_U8(offset + 226);
@@ -436,18 +443,11 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 	instr->panning_envelope.loop_start_point = READ_U8(offset + 231);
 	instr->panning_envelope.loop_end_point = READ_U8(offset + 232);
 
-	uint8_t flags = READ_U8(offset + 233);
-	instr->volume_envelope.enabled = flags & (1 << 0);
-	instr->volume_envelope.sustain_enabled = flags & (1 << 1);
-	instr->volume_envelope.loop_enabled = flags & (1 << 2);
+	uint8_t vol_env_flags = READ_U8(offset + 233);
+	uint8_t pan_env_flags = READ_U8(offset + 234);
 
-	flags = READ_U8(offset + 234);
-	instr->panning_envelope.enabled = flags & (1 << 0);
-	instr->panning_envelope.sustain_enabled = flags & (1 << 1);
-	instr->panning_envelope.loop_enabled = flags & (1 << 2);
-
-	xm_check_and_fix_envelope(&(instr->volume_envelope));
-	xm_check_and_fix_envelope(&(instr->panning_envelope));
+	xm_check_and_fix_envelope(&(instr->volume_envelope), vol_env_flags);
+	xm_check_and_fix_envelope(&(instr->panning_envelope), pan_env_flags);
 
 	instr->vibrato_type = READ_U8(offset + 235);
 	if(instr->vibrato_type == 2) {
@@ -495,7 +495,22 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 	return offset;
 }
 
-static void xm_check_and_fix_envelope(xm_envelope_t* env) {
+static void xm_load_envelope_points(xm_envelope_t* env, const char* moddata) {
+	uint32_t moddata_length = MAX_ENVELOPE_POINTS * 4;
+	uint16_t env_val;
+	for(uint8_t i = 0; i < MAX_ENVELOPE_POINTS; ++i) {
+		env->points[i].frame = READ_U16(4u * i);
+		env_val = READ_U16(4u * i + 2u);
+		if(env_val > MAX_ENVELOPE_VALUE) {
+			NOTICE("clamped invalid envelope pt value (%u -> %u)",
+			       env_val, MAX_ENVELOPE_VALUE);
+			env_val = MAX_ENVELOPE_VALUE;
+		}
+		env->points[i].value = env_val;
+	}
+}
+
+static void xm_check_and_fix_envelope(xm_envelope_t* env, uint8_t flags) {
 	/* Check this even for disabled envelopes, because this can potentially
 	   lead to out of bounds accesses in the future */
 	if(env->num_points > MAX_ENVELOPE_POINTS) {
@@ -503,12 +518,15 @@ static void xm_check_and_fix_envelope(xm_envelope_t* env) {
 		       env->num_points, MAX_ENVELOPE_POINTS);
 		env->num_points = MAX_ENVELOPE_POINTS;
 	}
-	if(env->enabled == false) return;
+	if(!(flags & ENVELOPE_FLAG_ENABLED)) {
+		env->num_points += 128;
+		return;
+	}
 	if(env->num_points < 2) {
 		NOTICE("discarding invalid envelope data "
 		       "(needs 2 point at least, got %u)",
 		       env->num_points);
-		env->enabled = false;
+		env->num_points += 128;
 		return;
 	}
 	for(uint8_t i = 1; i < env->num_points; ++i) {
@@ -517,23 +535,29 @@ static void xm_check_and_fix_envelope(xm_envelope_t* env) {
 		       "(point %u frame %X -> point %u frame %X)",
 		       i-1, env->points[i-1].frame,
 		       i, env->points[i].frame);
-		env->enabled = false;
+		env->num_points += 128;
 		return;
 	}
-	if(env->loop_enabled && env->loop_start_point >= env->num_points) {
+	if(env->loop_start_point >= env->num_points) {
 		NOTICE("clamped invalid envelope loop start point (%u -> %u)",
 		       env->loop_start_point, env->num_points - 1);
 		env->loop_start_point = env->num_points - 1;
 	}
-	if(env->loop_enabled && env->loop_end_point >= env->num_points) {
+	if(env->loop_end_point >= env->num_points) {
 		NOTICE("clamped invalid envelope loop end point (%u -> %u)",
 		       env->loop_end_point, env->num_points - 1);
 		env->loop_end_point = env->num_points - 1;
 	}
-	if(env->sustain_enabled && env->sustain_point >= env->num_points) {
+	if(!(flags & ENVELOPE_FLAG_LOOP)) {
+		env->loop_start_point += 128;
+	}
+	if(env->sustain_point >= env->num_points) {
 		NOTICE("clamped invalid envelope sustain point (%u -> %u)",
 		       env->sustain_point, env->num_points - 1);
 		env->sustain_point = env->num_points - 1;
+	}
+	if(!(flags & ENVELOPE_FLAG_SUSTAIN)) {
+		env->sustain_point += 128;
 	}
 	for(uint8_t i = 0; i < env->num_points; ++i) {
 		if(env->points[i].value <= MAX_ENVELOPE_VALUE) continue;

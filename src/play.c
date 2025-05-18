@@ -199,7 +199,7 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* Rxy doesn't affect volume if there's a command in the volume
 	   column, or if the instrument has a volume envelope. */
 	if(ch->current->volume_column
-	   || ch->instrument->volume_envelope.enabled)
+	   || ch->instrument->volume_envelope.num_points <= MAX_ENVELOPE_POINTS)
 		return;
 
 	static_assert(MAX_VOLUME <= (UINT8_MAX / 3));
@@ -716,7 +716,8 @@ static void xm_key_off(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 
 	/* If no volume envelope is used, also cut the note */
-	if(ch->instrument == NULL || !ch->instrument->volume_envelope.enabled) {
+	if(ch->instrument == NULL
+	   || ch->instrument->volume_envelope.num_points > MAX_ENVELOPE_POINTS) {
 		xm_cut_note(ch);
 	}
 }
@@ -794,13 +795,13 @@ static void xm_tick_envelope(xm_channel_context_t* ch,
                              uint16_t* restrict counter,
                              uint8_t* restrict outval) {
 	/* Don't advance envelope position if we are sustaining */
-	if(ch->sustained && env->sustain_enabled &&
+	if(ch->sustained && env->sustain_point <= MAX_ENVELOPE_POINTS &&
 	   *counter == env->points[env->sustain_point].frame) {
 		*outval = env->points[env->sustain_point].value;
 		return;
 	}
 
-	if(env->loop_enabled) {
+	if(env->loop_start_point <= MAX_ENVELOPE_POINTS) {
 		uint16_t loop_start = env->points[env->loop_start_point].frame;
 		uint16_t loop_end = env->points[env->loop_end_point].frame;
 		uint16_t loop_length = loop_end - loop_start;
@@ -838,7 +839,7 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 		ch->fadeout_volume = MAX_FADEOUT_VOLUME-1;
 	}
 
-	if(inst->volume_envelope.enabled) {
+	if(inst->volume_envelope.num_points <= MAX_ENVELOPE_POINTS) {
 		xm_tick_envelope(ch, &(inst->volume_envelope),
 		                 &(ch->volume_envelope_frame_count),
 		                 &(ch->volume_envelope_volume));
@@ -846,7 +847,7 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 		ch->volume_envelope_volume = MAX_ENVELOPE_VALUE;
 	}
 
-	if(inst->panning_envelope.enabled) {
+	if(inst->panning_envelope.num_points <= MAX_ENVELOPE_POINTS) {
 		xm_tick_envelope(ch, &(inst->panning_envelope),
 		                 &(ch->panning_envelope_frame_count),
 		                 &(ch->panning_envelope_panning));
