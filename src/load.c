@@ -291,6 +291,10 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
 		return offset;
 	}
 
+	/* Reads beyond the pattern end should be zeroes, this can happen if a
+	   pattern is truncated mid-slot. */
+	moddata_length = offset + packed_patterndata_size;
+
 	/* j counts bytes in the file, k counts pattern slots */
 	uint16_t j, k;
 	for(j = 0, k = 0; j < packed_patterndata_size; ++k) {
