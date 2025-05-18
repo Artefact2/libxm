@@ -1,20 +1,24 @@
 libxm
 =====
 
-A small XM (FastTracker II Extended Module) player library. Main
+A small XM (Fasttracker II Extended Module) player library. Main
 features:
 
-* Small size in mind; many features can be disabled at compile-time,
-  or are optimized out by the compiler if not used.
+* Small and hackable: many features can be disabled at compile-time, or are
+  optimized out by the compiler if not used. It is easy to bundle libxm in your
+  game, demo, intro, etc.
+
+* Fairly portable. Minimal dependencies (just libm). No memory allocations.
+  Big-endian compatible (tested on s390x).
+
+* Reasonable accuracy compared to Fasttracker 2. Deviations from FT2 playback,
+  that aren't obviously bugs in FT2, are also libxm bugs.
 
 * Timing functions for synchronising against specific instruments,
   samples or channels.
 
 * Samples can be loaded and altered at run-time, making it possible to
   use libxm with softsynths or other real-time signal processors.
-
-* Should be fairly portable (only dependency is `libm`). Big-endian compatible
-  (tested on s390x). The example programs mostly target Linux.
 
 Written in C23 and released under the WTFPL license, version 2.
 
