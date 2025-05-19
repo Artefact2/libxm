@@ -291,7 +291,8 @@ struct xm_channel_context_s {
 typedef struct xm_channel_context_s xm_channel_context_t;
 
 struct xm_context_s {
-	xm_module_t module;
+	uint64_t generated_samples;
+
 	xm_pattern_t* patterns;
 	xm_pattern_slot_t* pattern_slots;
 	xm_instrument_t* instruments; /* Instrument 1 has index 0,
@@ -301,7 +302,7 @@ struct xm_context_s {
 	xm_channel_context_t* channels;
 	uint8_t* row_loop_count;
 
-	uint64_t generated_samples;
+	xm_module_t module;
 
 	int32_t remaining_samples_in_tick; /* In 1/TICK_SUBSAMPLE increments */
 
