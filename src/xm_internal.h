@@ -176,10 +176,9 @@ struct xm_pattern_slot_s {
 typedef struct xm_pattern_slot_s xm_pattern_slot_t;
 
 struct xm_pattern_s {
-	/* ctx->pattern_slots[index..(index+num_rows)] */
-	uint32_t slots_index;
+	/* ctx->pattern_slots[index*num_chans..(index+num_rows)*num_chans] */
+	uint16_t rows_index;
 	uint16_t num_rows;
-	char __pad[2];
 };
 typedef struct xm_pattern_s xm_pattern_t;
 

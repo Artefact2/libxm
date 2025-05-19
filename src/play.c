@@ -740,8 +740,10 @@ static void xm_row(xm_context_t* ctx) {
 		xm_post_pattern_change(ctx);
 	}
 
-	xm_pattern_t* cur = ctx->patterns + ctx->module.pattern_table[ctx->current_table_index];
-	xm_pattern_slot_t* s = ctx->pattern_slots + cur->slots_index + ctx->module.num_channels * ctx->current_row;
+	xm_pattern_t* cur = ctx->patterns
+		+ ctx->module.pattern_table[ctx->current_table_index];
+	xm_pattern_slot_t* s = ctx->pattern_slots + ctx->module.num_channels
+		* (cur->rows_index + ctx->current_row);
 	xm_channel_context_t* ch = ctx->channels;
 	bool in_a_loop = false;
 
