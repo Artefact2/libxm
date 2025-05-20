@@ -537,18 +537,18 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		case 1: /* E1y: Fine portamento up */
 			if(s->effect_param & 0x0F) {
-				ch->fine_portamento_up_param = s->effect_param & 0x0F;
+				ch->fine_portamento_up_param =
+					4 * (s->effect_param & 0x0F);
 			}
-			xm_pitch_slide(ch,
-			               -4 * ch->fine_portamento_up_param);
+			xm_pitch_slide(ch, -ch->fine_portamento_up_param);
 			break;
 
 		case 2: /* E2y: Fine portamento down */
 			if(s->effect_param & 0x0F) {
-				ch->fine_portamento_down_param = s->effect_param & 0x0F;
+				ch->fine_portamento_down_param =
+					4 * (s->effect_param & 0x0F);
 			}
-			xm_pitch_slide(ch,
-			               4 * ch->fine_portamento_down_param);
+			xm_pitch_slide(ch, ch->fine_portamento_down_param);
 			break;
 
 		case 4: /* E4y: Set vibrato control */
@@ -639,7 +639,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		case 1: /* X1y: Extra fine portamento up */
 			if(s->effect_param & 0x0F) {
-				ch->extra_fine_portamento_up_param = s->effect_param & 0x0F;
+				ch->extra_fine_portamento_up_param =
+					s->effect_param & 0x0F;
 			}
 			xm_pitch_slide(ch,
 			               -ch->extra_fine_portamento_up_param);
@@ -647,7 +648,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		case 2: /* X2y: Extra fine portamento down */
 			if(s->effect_param & 0x0F) {
-				ch->extra_fine_portamento_down_param = s->effect_param & 0x0F;
+				ch->extra_fine_portamento_down_param =
+					s->effect_param & 0x0F;
 			}
 			xm_pitch_slide(ch,
 			               ch->extra_fine_portamento_down_param);
