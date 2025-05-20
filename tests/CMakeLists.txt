@@ -44,4 +44,4 @@ add_test(NAME test_vibrato COMMAND test-libxm
 add_test(NAME test_vibrato_amiga COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/vibrato-amiga.xm)
 add_test(NAME test_volume_envelope COMMAND test-libxm
-	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/volume-envelope.xm)
+	channelpairs_eq ${CMAKE_SOURCE_DIR}/volume-envelope.xm)
