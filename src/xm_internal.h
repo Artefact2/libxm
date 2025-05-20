@@ -248,7 +248,8 @@ struct xm_channel_context_s {
 	int8_t autovibrato_note_offset; /* in 1/64 semitones */
 	uint8_t arp_note_offset; /* in semitones */
 	uint8_t volume_slide_param;
-	uint8_t fine_volume_slide_param;
+	uint8_t fine_volume_slide_up_param;
+	uint8_t fine_volume_slide_down_param;
 	uint8_t global_volume_slide_param;
 	uint8_t panning_slide_param;
 	uint8_t portamento_up_param;
@@ -282,7 +283,7 @@ struct xm_channel_context_s {
 	bool sustained;
 	bool muted;
 
-	char __pad[6];
+	char __pad[5];
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
 

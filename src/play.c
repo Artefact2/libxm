@@ -589,21 +589,23 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		case 0xA: /* EAy: Fine volume slide up */
 			if(s->effect_param & 0x0F) {
-				ch->fine_volume_slide_param = (s->effect_param & 0x0F) << 4;
+				ch->fine_volume_slide_up_param =
+					s->effect_param << 4;
 			}
 			ch->volume_offset = 0;
 			xm_param_slide(&ch->volume,
-			               ch->fine_volume_slide_param,
+			               ch->fine_volume_slide_up_param,
 			               MAX_VOLUME);
 			break;
 
 		case 0xB: /* EBy: Fine volume slide down */
 			if(s->effect_param & 0x0F) {
-				ch->fine_volume_slide_param = s->effect_param & 0x0F;
+				ch->fine_volume_slide_down_param =
+					s->effect_param & 0x0F;
 			}
 			ch->volume_offset = 0;
 			xm_param_slide(&ch->volume,
-			               ch->fine_volume_slide_param,
+			               ch->fine_volume_slide_down_param,
 			               MAX_VOLUME);
 			break;
 
