@@ -90,6 +90,8 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
    position, effectively limiting the maximum sample size to 1M frames. */
 #define SAMPLE_MICROSTEPS (1<<XM_MICROSTEP_BITS)
 
+#define MAX_SAMPLE_LENGTH (UINT32_MAX/SAMPLE_MICROSTEPS)
+
 /* ----- Data types ----- */
 
 struct xm_envelope_point_s {
@@ -117,17 +119,13 @@ struct xm_sample_s {
 	uint64_t latest_trigger;
 	/* ctx->samples_data[index..(index+length)] */
 	uint32_t index;
-	uint32_t length;
-	uint32_t loop_start;
-	uint32_t loop_length;
-	uint32_t loop_end;
-	uint8_t volume; /* 0..=MAX_VOLUME  */
+	uint32_t length; /* same as loop_end (seeking beyond a loop with 9xx is
+	                    invalid anyway) */
+	uint32_t loop_length; /* is zero for sample without looping */
+	bool ping_pong: 1;
+	static_assert(MAX_VOLUME < (1<<7));
+	uint8_t volume:7; /* 0..=MAX_VOLUME  */
 	uint8_t panning; /* 0..MAX_PANNING */
-	enum: uint8_t {
-		XM_NO_LOOP = 0,
-		XM_FORWARD_LOOP = 1,
-		XM_PING_PONG_LOOP = 2,
-	} loop_type;
 	int8_t finetune;
 	int8_t relative_note;
 
@@ -137,8 +135,6 @@ struct xm_sample_s {
 	static_assert(SAMPLE_NAME_LENGTH < 24); /* name[23] is for \0 */
 	char name[24];
 	#endif
-
-	char __pad[7];
 };
 typedef struct xm_sample_s xm_sample_t;
 

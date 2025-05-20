@@ -505,10 +505,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			ch->sample_offset_param = s->effect_param;
 		}
 		ch->sample_position = ch->sample_offset_param * 256;
-		/* load.c also sets loop_end to the end of the sample for
-		   XM_NO_LOOP samples */
-		if(ch->sample_position >= ch->sample->loop_end) {
-			/* Pretend the sample dosen't loop and is done playing */
+		if(ch->sample_position >= ch->sample->length) {
 			ch->sample = NULL;
 		}
 		static_assert(256 * SAMPLE_MICROSTEPS * UINT8_MAX <= UINT32_MAX);
@@ -1227,63 +1224,59 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	[[maybe_unused]] uint32_t b;
 	ch->sample_position += ch->step;
 
-	switch(ch->sample->loop_type) {
-	case XM_NO_LOOP:
-		if((ch->sample_position / SAMPLE_MICROSTEPS) >= ch->sample->length) {
+	if(ch->sample->loop_length == 0) {
+		if((ch->sample_position / SAMPLE_MICROSTEPS)
+		   >= ch->sample->length) {
 			ch->sample = NULL;
 			b = a;
-			break;
+		} else {
+			b = (a+1 < ch->sample->length) ? (a+1) : a;
 		}
-		b = (a+1 < ch->sample->length) ? (a+1) : a;
-		break;
-
-	case XM_FORWARD_LOOP:
-		/* If length=6, loop_start=2, loop_end=6 */
+	} else if(!ch->sample->ping_pong) {
+		/* If length=6, loop_length=4 */
 		/* 0 1 (2 3 4 5) (2 3 4 5) (2 3 4 5) ... */
 		assert(ch->sample->loop_length > 0);
-		while((ch->sample_position / SAMPLE_MICROSTEPS) >= ch->sample->loop_end) {
+		while((ch->sample_position / SAMPLE_MICROSTEPS)
+		      >= ch->sample->length) {
 			ch->sample_position -= ch->sample->loop_length
 				* SAMPLE_MICROSTEPS;
 		}
-		b = (a+1 == ch->sample->loop_end) ?
-			ch->sample->loop_start : (a+1);
-		assert(a < ch->sample->loop_end);
-		assert(b < ch->sample->loop_end);
-		break;
-
-	case XM_PING_PONG_LOOP:
-		/* If length=6, loop_start=2, loop_end=6 */
+		b = (a+1 == ch->sample->length) ?
+			ch->sample->length - ch->sample->loop_length : (a+1);
+		assert(a < ch->sample->length);
+		assert(b < ch->sample->length);
+	} else {
+		/* If length=6, loop_length=4 */
 		/* 0 1 (2 3 4 5 5 4 3 2) (2 3 4 5 5 4 3 2) ... */
 		assert(ch->sample->loop_length > 0);
 		while((ch->sample_position / SAMPLE_MICROSTEPS) >=
-		      ch->sample->loop_end + ch->sample->loop_length) {
-			/* XXX check for overflow */
+		      ch->sample->length + ch->sample->loop_length) {
+			/* This will not overflow, loop_length size is checked
+			   in load.c */
 			ch->sample_position -= ch->sample->loop_length
 				* 2 * SAMPLE_MICROSTEPS;
 		}
 
-		if(a < ch->sample->loop_end) {
+		if(a < ch->sample->length) {
 			/* In the first half of the loop, go forwards */
-			b = (a+1 == ch->sample->loop_end) ? a : (a+1);
+			b = (a+1 == ch->sample->length) ? a : (a+1);
 		} else {
 			/* In the second half of the loop, go backwards */
 			/* loop_end -> loop_end - 1 */
 			/* loop_end + 1 -> loop_end - 2 */
 			/* etc. */
 			/* loop_end + loop_length - 1 -> loop_start */
-			a = ch->sample->loop_end * 2 - 1 - a;
-			b = (a == ch->sample->loop_start) ? a : (a-1);
-			assert(a >= ch->sample->loop_start);
-			assert(b >= ch->sample->loop_start);
+			a = ch->sample->length * 2 - 1 - a;
+			b = (a == ch->sample->length - ch->sample->loop_length) ?
+				a : (a-1);
+			assert(a >= ch->sample->length
+			       - ch->sample->loop_length);
+			assert(b >= ch->sample->length
+			       - ch->sample->loop_length);
 		}
 
-		assert(a < ch->sample->loop_end);
-		assert(b < ch->sample->loop_end);
-		break;
-
-	default:
-		/* Invalid loop types are deleted in load.c */
-		UNREACHABLE();
+		assert(a < ch->sample->length);
+		assert(b < ch->sample->length);
 	}
 
 	float u = (float)xm_sample_at(ctx, smp, a);

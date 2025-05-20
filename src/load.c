@@ -35,6 +35,12 @@
 #define READ_U32(offset) READ_U32_BOUND(offset, moddata_length)
 #define READ_MEMCPY(ptr, offset, length) READ_MEMCPY_BOUND(ptr, offset, length, moddata_length)
 
+#define TRIM_SAMPLE_LENGTH(length, loop_start, loop_length, flags) \
+	(flags & (SAMPLE_FLAG_PING_PONG | SAMPLE_FLAG_FORWARD) ?	\
+	 ((loop_start > length ? length :				\
+	  (loop_start + (loop_start + loop_length > length ? 0 : loop_length)) \
+	   )) : length)
+
 struct xm_prescan_data_s {
 	uint32_t context_size;
 	uint32_t num_rows;
@@ -56,9 +62,9 @@ static uint32_t xm_load_pattern(xm_context_t*, xm_pattern_t*, const char*, uint3
 static uint32_t xm_load_instrument(xm_context_t*, xm_instrument_t*, const char*, uint32_t, uint32_t);
 static void xm_load_envelope_points(xm_envelope_t*, const char*);
 static void xm_check_and_fix_envelope(xm_envelope_t*, uint8_t);
-static uint32_t xm_load_sample_header(xm_context_t*, xm_sample_t*, bool*, const char*, uint32_t, uint32_t);
-static uint32_t xm_load_8b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
-static uint32_t xm_load_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
+static uint32_t xm_load_sample_header(xm_sample_t*, bool*, const char*, uint32_t, uint32_t);
+static void xm_load_8b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
+static void xm_load_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 static int8_t xm_dither_16b_8b(int16_t);
 
 static uint64_t xm_fnv1a(const char*, uint32_t);
@@ -161,10 +167,17 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 		/* Instrument header size */
 		offset += READ_U32(offset);
 
+		/* Read sample headers */
 		for(uint16_t j = 0; j < num_samples; ++j) {
 			uint32_t sample_length = READ_U32(offset);
 			uint32_t sample_bytes = sample_length;
+			uint32_t loop_start = READ_U32(offset + 4);
+			uint32_t loop_length = READ_U32(offset + 8);
 			uint8_t flags = READ_U8(offset + 14);
+			sample_length = TRIM_SAMPLE_LENGTH(sample_length,
+			                                   loop_start,
+			                                   loop_length,
+			                                   flags);
 			if(flags & SAMPLE_FLAG_16B) {
 				/* 16-bit sample data */
 				#if XM_DEFENSIVE
@@ -174,7 +187,7 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 				#endif
 				sample_length /= 2;
 			}
-			uint32_t max = UINT32_MAX / SAMPLE_MICROSTEPS;
+			uint32_t max = MAX_SAMPLE_LENGTH;
 			if(flags & SAMPLE_FLAG_PING_PONG) max /= 2;
 			if(sample_length > max) {
 				NOTICE("sample %d of instrument %d is too big "
@@ -492,28 +505,41 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 	ctx->module.num_samples += instr->num_samples;
 	for(uint16_t i = 0; i < instr->num_samples; ++i) {
 		bool is_16bit;
-		offset = xm_load_sample_header(ctx, ctx->samples + instr->samples_index + i, &is_16bit, moddata, moddata_length, offset);
+		offset = xm_load_sample_header(ctx->samples + instr->samples_index + i, &is_16bit, moddata, moddata_length, offset);
 		if(is_16bit) {
 			/* Find some free bit in the struct to pack the
 			   16bitness */
-			ctx->samples[instr->samples_index+i].loop_type |= 128;
+			static_assert(MAX_SAMPLE_LENGTH < (1u << 31));
+			ctx->samples[instr->samples_index+i].length
+				|= (1u << 31);
 		}
 	}
 
 	/* Read sample data */
 	for(uint16_t i = 0; i < instr->num_samples; ++i) {
 		xm_sample_t* s = ctx->samples + instr->samples_index + i;
-		if(s->loop_type & 128) {
-			s->loop_type &= ~128;
+		/* As currently loaded, s->index is the real sample length in
+		   the xm file, s->length is after trimming to loop_end (and the
+		   actual sample length as stored in the context) */
+		xm_sample_point_t* sample_data = ctx->samples_data
+			+ ctx->module.samples_data_length;
+		if(s->length & (1u << 31)) {
+			s->length &= ~(1u << 31);
 			if(_Generic((xm_sample_point_t){},
 			            int8_t: true,
 			            default: false)) {
 				NOTICE("instrument %ld, sample %u will be dithered from 16 to 8 bits", instr - ctx->instruments + 1, i);
 			}
-			offset = xm_load_16b_sample_data(s->length, ctx->samples_data + s->index, moddata, moddata_length, offset);
+			xm_load_16b_sample_data(s->length, sample_data, moddata,
+			                        moddata_length, offset);
+			offset += s->index * 2;
 		} else {
-			offset = xm_load_8b_sample_data(s->length, ctx->samples_data + s->index, moddata, moddata_length, offset);
+			xm_load_8b_sample_data(s->length, sample_data, moddata,
+			                       moddata_length, offset);
+			offset += s->index;
 		}
+		s->index = ctx->module.samples_data_length;
+		ctx->module.samples_data_length += s->length;
 	}
 
 	return offset;
@@ -585,16 +611,28 @@ static void xm_check_and_fix_envelope(xm_envelope_t* env, uint8_t flags) {
 	}
 }
 
-static uint32_t xm_load_sample_header(xm_context_t* ctx,
-                                    xm_sample_t* sample,
-                                    bool* is_16bit,
-                                    const char* moddata,
-                                    uint32_t moddata_length,
-                                    uint32_t offset) {
+static uint32_t xm_load_sample_header(xm_sample_t* sample, bool* is_16bit,
+                                      const char* moddata,
+                                      uint32_t moddata_length,
+                                      uint32_t offset) {
 	sample->length = READ_U32(offset);
-	sample->loop_start = READ_U32(offset + 4);
+	sample->index = sample->length; /* Keep original length around, replace
+	                                   it later after sample data is
+	                                   loaded */
+	uint32_t loop_start = READ_U32(offset + 4);
 	sample->loop_length = READ_U32(offset + 8);
-	sample->loop_end = sample->loop_start + sample->loop_length;
+	uint8_t flags = READ_U8(offset + 14);
+	if(loop_start > sample->length) {
+		NOTICE("fixing invalid sample loop start");
+		loop_start = sample->length;
+	}
+	if(loop_start + sample->loop_length > sample->length) {
+		NOTICE("fixing invalid sample loop length");
+		sample->loop_length = 0;
+	}
+	/* Trim end of sample beyond the loop end */
+	sample->length = TRIM_SAMPLE_LENGTH(sample->length, loop_start,
+	                                    sample->loop_length, flags);
 	sample->volume = READ_U8(offset + 12);
 	sample->finetune = (int8_t)READ_U8(offset + 13);
 
@@ -603,39 +641,13 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 		sample->volume = MAX_VOLUME;
 	}
 
-	uint8_t flags = READ_U8(offset + 14);
-	if(flags & SAMPLE_FLAG_PING_PONG) {
-		/* The XM spec doesn't quite say what to do when bits 0 and 1
-		   are set, but FT2 loads it as ping-pong, so it seems bit 1 has
-		   precedence. */
-		sample->loop_type = XM_PING_PONG_LOOP;
-	} else if(flags & SAMPLE_FLAG_FORWARD) {
-		sample->loop_type = XM_FORWARD_LOOP;
-	} else {
-		sample->loop_type = XM_NO_LOOP;
-		sample->loop_start = 0;
-		sample->loop_length = sample->length;
-		sample->loop_end = sample->length;
-	}
-
-	/* Fix invalid loop definitions */
-	if (sample->loop_start > sample->length) {
-		NOTICE("fixing invalid sample loop start");
-		sample->loop_start = sample->length;
-	}
-	if (sample->loop_end > sample->length) {
-		NOTICE("fixing invalid sample loop end");
-		sample->loop_end = sample->length;
-	}
-	if (sample->loop_length != sample->loop_end - sample->loop_start) {
-		NOTICE("fixing invalid sample loop length");
-		sample->loop_length = sample->loop_end - sample->loop_start;
-	}
-
-	/* Fix zero length loops */
-	if(sample->loop_length == 0 && sample->loop_type != XM_NO_LOOP) {
-		NOTICE("fixing loop type for sample with loop length 0");
-		sample->loop_type = XM_NO_LOOP;
+	/* The XM spec doesn't quite say what to do when bits 0 and 1
+	   are set, but FT2 loads it as ping-pong, so it seems bit 1 has
+	   precedence. */
+	sample->ping_pong = flags & SAMPLE_FLAG_PING_PONG;
+	if(!(flags & (SAMPLE_FLAG_FORWARD | SAMPLE_FLAG_PING_PONG))) {
+		/* Not a looping sample */
+		sample->loop_length = 0;
 	}
 
 	#if XM_DEFENSIVE
@@ -654,23 +666,17 @@ static uint32_t xm_load_sample_header(xm_context_t* ctx,
 
 	*is_16bit = flags & SAMPLE_FLAG_16B;
 	if(*is_16bit) {
-		sample->loop_start >>= 1;
 		sample->loop_length >>= 1;
-		sample->loop_end >>= 1;
 		sample->length >>= 1;
+		sample->index >>= 1;
 	}
-
-	sample->index = ctx->module.samples_data_length;
-	ctx->module.samples_data_length += sample->length;
 
 	return offset + SAMPLE_HEADER_SIZE;
 }
 
-static uint32_t xm_load_8b_sample_data(uint32_t length,
-                                       xm_sample_point_t* out,
-                                       const char* moddata,
-                                       uint32_t moddata_length,
-                                       uint32_t offset) {
+static void xm_load_8b_sample_data(uint32_t length, xm_sample_point_t* out,
+                                   const char* moddata,
+                                   uint32_t moddata_length, uint32_t offset) {
 	int8_t v = 0;
 	for(uint32_t k = 0; k < length; ++k) {
 		v = v + (int8_t)READ_U8(offset + k);
@@ -679,14 +685,11 @@ static uint32_t xm_load_8b_sample_data(uint32_t length,
 		                  int16_t: (v * 256),
 		                  float: (float)v / (float)INT8_MAX);
 	}
-	return offset + length;
 }
 
-static uint32_t xm_load_16b_sample_data(uint32_t length,
-                                        xm_sample_point_t* out,
-                                        const char* moddata,
-                                        uint32_t moddata_length,
-                                        uint32_t offset) {
+static void xm_load_16b_sample_data(uint32_t length, xm_sample_point_t* out,
+                                    const char* moddata,
+                                    uint32_t moddata_length, uint32_t offset) {
 	int16_t v = 0;
 	for(uint32_t k = 0; k < length; ++k) {
 		v = v + (int16_t)READ_U16(offset + (k << 1));
@@ -695,7 +698,6 @@ static uint32_t xm_load_16b_sample_data(uint32_t length,
 		                  int16_t: v,
 		                  float: (float)v / (float)INT16_MAX);
 	}
-	return offset + (length << 1);
 }
 
 static int8_t xm_dither_16b_8b(int16_t x) {
