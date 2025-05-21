@@ -670,6 +670,17 @@ static void xm_trigger_instrument(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->sustained = true;
 	ch->volume_envelope_frame_count = 0;
 	ch->panning_envelope_frame_count = 0;
+	ch->tremor_ticks = 0;
+	ch->autovibrato_ticks = 0;
+	ch->autovibrato_note_offset = 0;
+	ch->volume_offset = 0;
+
+	if(!(ch->vibrato_control_param & 4)) {
+		ch->vibrato_ticks = 0;
+	}
+	if(!(ch->tremolo_control_param & 4)) {
+		ch->tremolo_ticks = 0;
+	}
 
 	ch->latest_trigger = ctx->generated_samples;
 	assert(ch->instrument != NULL);
@@ -683,20 +694,12 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	ch->period = ch->orig_period;
 	ch->sample_position = 0;
-
-	ch->tremor_ticks = 0;
-	ch->tremor_on = false;
-	ch->volume_offset = 0;
 	ch->vibrato_offset = 0;
-	ch->autovibrato_note_offset = 0;
-	ch->autovibrato_ticks = 0;
 
-	if(!(ch->vibrato_control_param & 4)) {
-		ch->vibrato_ticks = 0;
-	}
-	if(!(ch->tremolo_control_param & 4)) {
-		ch->tremolo_ticks = 0;
-	}
+	/* XXX: is this reset by a note trigger or inst trigger? does it matter
+	   since tremor_on touches volume_offest anyway, and it gets reset by an
+	   inst trigger?*/
+	//ch->tremor_on = false;
 
 	ch->latest_trigger = ctx->generated_samples;
 	ch->sample->latest_trigger = ctx->generated_samples;
