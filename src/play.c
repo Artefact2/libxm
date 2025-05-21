@@ -325,19 +325,19 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	p -= ch->arp_note_offset * 64;
 	p -= ch->vibrato_offset;
 	p -= ch->autovibrato_note_offset;
-	return (uint32_t)(8363.f * powf(2.f, (4608.f - (float)p) / 768.f));
+	return (uint32_t)(8363.f * exp2f((4608.f - (float)p) / 768.f));
 }
 
 [[maybe_unused]] static uint16_t xm_amiga_period(uint16_t note) {
 	/* Values obtained via exponential regression over the period tables in
 	   modfil10.txt */
-	return 32.f * 855.9563438f * powf(2.f, -0.0832493329f * note / 128.f);
+	return 32.f * 855.9563438f * exp2f(-0.0832493329f * note / 128.f);
 }
 
 [[maybe_unused]] static uint32_t xm_amiga_frequency(xm_channel_context_t* ch) {
 	if(ch->period == 0) return 0;
 	float p = (float)ch->period
-		* powf(2.f, -0.0832493329f * ((float)ch->arp_note_offset + (float)ch->autovibrato_note_offset / 64.f));
+		* exp2f(-0.0832493329f * ((float)ch->arp_note_offset + (float)ch->autovibrato_note_offset / 64.f));
 	p -= (float)ch->vibrato_offset;
 
 	/* This is the PAL value. No reason to choose this one over the
