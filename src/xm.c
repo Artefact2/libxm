@@ -195,7 +195,8 @@ uint64_t xm_get_latest_trigger_of_channel(const xm_context_t* ctx,
 bool xm_is_channel_active(const xm_context_t* ctx, uint16_t chn) {
 	CHECK_CHANNEL(ctx, chn);
 	const xm_channel_context_t* ch = ctx->channels + (chn - 1);
-	return ch->sample != NULL && ch->volume > 0;
+	return ch->sample != NULL
+		&& (ch->actual_volume[0] + ch->actual_volume[1]) > 0.001f;
 }
 
 float xm_get_frequency_of_channel(const xm_context_t* ctx, uint16_t chn) {
