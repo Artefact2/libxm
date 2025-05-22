@@ -529,7 +529,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	case 0xD: /* Dxx: Pattern break */
 		/* Jump after playing this line */
 		ctx->pattern_break = true;
-		ctx->jump_row = (s->effect_param >> 4) * 10 + (s->effect_param & 0x0F);
+		ctx->jump_row = (uint8_t)
+			(s->effect_param - 6 * (s->effect_param >> 4));
 		break;
 
 	case 0xE: /* EXy: Extended command */
