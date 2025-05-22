@@ -149,6 +149,11 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 	}
 	for(uint16_t i = 0; i < out->pot_length; ++i) {
 		if(pot[i] >= out->num_patterns) {
+			if(out->num_patterns >= MAX_PATTERNS) {
+				NOTICE("no room left for blank pattern to replace an invalid pattern");
+				return false;
+			}
+
 			NOTICE("replacing invalid pattern %d in pattern order table with empty pattern", pot[i]);
 			out->num_rows += EMPTY_PATTERN_NUM_ROWS;
 			out->num_patterns += 1;
@@ -798,9 +803,14 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 		}
 	}
 	if(has_invalid_patterns) {
+		assert(ctx->module.num_patterns <= UINT8_MAX);
 		for(uint16_t i = 0; i < ctx->module.length; ++i) {
-			if(ctx->module.pattern_table[i] < ctx->module.num_patterns) continue;
-			ctx->module.pattern_table[i] = ctx->module.num_patterns;
+			if(ctx->module.pattern_table[i]
+			   < ctx->module.num_patterns) {
+				continue;
+			}
+			ctx->module.pattern_table[i] =
+				(uint8_t)ctx->module.num_patterns;
 		}
 		ctx->patterns[ctx->module.num_patterns].num_rows
 			= EMPTY_PATTERN_NUM_ROWS;
