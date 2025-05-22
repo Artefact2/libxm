@@ -67,7 +67,7 @@ static void xm_load_8b_sample_data(uint32_t, xm_sample_point_t*, const char*, ui
 static void xm_load_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 static int8_t xm_dither_16b_8b(int16_t);
 
-static uint64_t xm_fnv1a(const char*, uint32_t);
+static uint64_t xm_fnv1a(const unsigned char*, uint32_t);
 
 /* ----- Function definitions ----- */
 
@@ -816,7 +816,7 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 		(dest) = (void*)((intptr_t)(dest) + (intptr_t)(orig)); \
 	} while(0)
 
-static uint64_t xm_fnv1a(const char* data, uint32_t length) {
+static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
 	uint64_t h = 14695981039346656037UL;
 	for(uint32_t i = 0; i < length; ++i) {
 		h ^= data[i];
