@@ -59,6 +59,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define MAX_ENVELOPE_VALUE 64
 #define MIN_BPM 32
 #define MAX_BPM 255
+#define MAX_PATTERNS 256
 
 /* Not the original key off (97), this is the value used by libxm once a ctx
    has been loaded */
@@ -173,6 +174,7 @@ typedef struct xm_pattern_slot_s xm_pattern_slot_t;
 
 struct xm_pattern_s {
 	/* ctx->pattern_slots[index*num_chans..(index+num_rows)*num_chans] */
+	static_assert((MAX_PATTERNS - 1) * MAX_ROWS_PER_PATTERN < UINT16_MAX);
 	uint16_t rows_index;
 	uint16_t num_rows;
 };

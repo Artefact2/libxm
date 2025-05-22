@@ -104,6 +104,11 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 	out->pot_length = READ_U16(offset + 4);
 	out->num_channels = READ_U16(offset + 8);
 	out->num_patterns = READ_U16(offset + 10);
+	if(out->num_patterns > MAX_PATTERNS) {
+		NOTICE("module has too many patterns (%x > %x)",
+		       out->num_patterns, MAX_PATTERNS);
+		return false;
+	}
 	out->num_instruments = READ_U16(offset + 12);
 	out->num_samples = 0;
 	out->num_rows = 0;
@@ -120,8 +125,16 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 		uint16_t num_rows = READ_U16(offset + 5);
 		uint16_t packed_size = READ_U16(offset + 7);
 		if(packed_size == 0 && num_rows != EMPTY_PATTERN_NUM_ROWS) {
-			NOTICE("pattern has zero size but non-default number of rows, overriding: %d -> %d rows", num_rows, EMPTY_PATTERN_NUM_ROWS);
+			NOTICE("empty pattern %x has incorrect number of rows, "
+			       "overriding (%u -> %u)",
+			       i, num_rows, EMPTY_PATTERN_NUM_ROWS);
 			num_rows = EMPTY_PATTERN_NUM_ROWS;
+		}
+
+		if(num_rows > MAX_ROWS_PER_PATTERN) {
+			NOTICE("pattern %x has too many rows (%u > %u)",
+			       i, num_rows, MAX_ROWS_PER_PATTERN);
+			return false;
 		}
 
 		out->num_rows += num_rows;
@@ -254,6 +267,7 @@ static uint32_t xm_load_module_header(xm_context_t* ctx,
 	mod->restart_position = READ_U16(offset + 6);
 	mod->num_channels = READ_U16(offset + 8);
 	mod->num_patterns = READ_U16(offset + 10);
+	assert(mod->num_patterns <= MAX_PATTERNS);
 	mod->num_instruments = READ_U16(offset + 12);
 
 	if(mod->restart_position >= mod->length) {
@@ -302,7 +316,9 @@ static uint32_t xm_load_pattern(xm_context_t* ctx,
                                 uint32_t offset) {
 	uint16_t packed_patterndata_size = READ_U16(offset + 7);
 	pat->num_rows = READ_U16(offset + 5);
-	pat->rows_index = ctx->module.num_rows;
+	assert(pat->num_rows <= MAX_ROWS_PER_PATTERN);
+	assert(ctx->module.num_rows <= UINT16_MAX);
+	pat->rows_index = (uint16_t)ctx->module.num_rows;
 	ctx->module.num_rows += pat->num_rows;
 	xm_pattern_slot_t* slots = ctx->pattern_slots
 		+ pat->rows_index * ctx->module.num_channels;
@@ -788,8 +804,9 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 		}
 		ctx->patterns[ctx->module.num_patterns].num_rows
 			= EMPTY_PATTERN_NUM_ROWS;
+		assert(ctx->module.num_rows < UINT16_MAX);
 		ctx->patterns[ctx->module.num_patterns].rows_index
-			= ctx->module.num_rows;
+			= (uint16_t)ctx->module.num_rows;
 		ctx->module.num_patterns += 1;
 		ctx->module.num_rows += EMPTY_PATTERN_NUM_ROWS;
 	}
