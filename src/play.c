@@ -19,7 +19,7 @@ static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribu
 static void xm_arpeggio(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tone_portamento(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnull));
-static void xm_param_slide(uint8_t*, uint8_t, uint16_t) __attribute__((nonnull));
+static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
 static void xm_tick_effects(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
 static uint8_t xm_envelope_lerp(const xm_envelope_point_t*, const xm_envelope_point_t*, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
@@ -281,7 +281,7 @@ static void xm_pitch_slide(xm_channel_context_t* ch,
 	/* XXX: upper bound of period ? */
 }
 
-static void xm_param_slide(uint8_t* param, uint8_t rawval, uint16_t max) {
+static void xm_param_slide(uint8_t* param, uint8_t rawval, uint8_t max) {
 	if(rawval & 0xF0) {
 		/* Slide up */
 		if(ckd_add(param, *param, rawval >> 4) || *param > max) {
@@ -994,12 +994,12 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	case 0xD: /* ◀x: Panning slide left */
 		xm_param_slide(&ch->panning, ch->current->volume_column & 0x0F,
-		               MAX_PANNING);
+		               MAX_PANNING-1);
 		break;
 
 	case 0xE: /* ▶x: Panning slide right */
 		xm_param_slide(&ch->panning, ch->current->volume_column << 4,
-		               MAX_PANNING);
+		               MAX_PANNING-1);
 		break;
 
 	case 0xF: /* Mx: Tone portamento */
@@ -1153,7 +1153,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 			ch->panning_slide_param = ch->current->effect_param;
 		}
 		xm_param_slide(&ch->panning, ch->panning_slide_param,
-		               MAX_PANNING);
+		               MAX_PANNING-1);
 		break;
 
 	case 27: /* Rxy: Multi retrig note */
