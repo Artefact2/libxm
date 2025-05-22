@@ -22,7 +22,7 @@ set_target_properties(xm PROPERTIES
 	PUBLIC_HEADER ${CMAKE_CURRENT_BINARY_DIR}/xm.h)
 
 # Bump this when breaking public ABI
-set_target_properties(xm PROPERTIES SOVERSION 5)
+set_target_properties(xm PROPERTIES SOVERSION 6)
 
 find_library(MATH_LIBRARY m REQUIRED)
 target_include_directories(xm SYSTEM PUBLIC ${CMAKE_CURRENT_BINARY_DIR})

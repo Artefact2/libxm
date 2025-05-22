@@ -182,7 +182,7 @@ __attribute__((nonnull));
  * WARNING, WITH BIG LETTERS: seeking modules is broken by design,
  * don't expect miracles.
  */
-void xm_seek(xm_context_t*, uint8_t pot, uint8_t row, uint16_t tick)
+void xm_seek(xm_context_t*, uint8_t pot, uint8_t row, uint8_t tick)
 __attribute__((nonnull));
 
 

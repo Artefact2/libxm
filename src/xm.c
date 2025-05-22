@@ -53,7 +53,7 @@ uint8_t xm_get_loop_count(const xm_context_t* context) {
 
 
 
-void xm_seek(xm_context_t* ctx, uint8_t pot, uint8_t row, uint16_t tick) {
+void xm_seek(xm_context_t* ctx, uint8_t pot, uint8_t row, uint8_t tick) {
 	ctx->current_table_index = pot;
 	ctx->current_row = row;
 	ctx->current_tick = tick;
