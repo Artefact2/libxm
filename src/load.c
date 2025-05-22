@@ -140,7 +140,7 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 		out->num_rows += num_rows;
 
 		/* Pattern header length + packed pattern data size */
-		offset += READ_U32(offset) + READ_U16(offset + 7);
+		offset += READ_U32(offset) + (uint32_t)READ_U16(offset + 7);
 	}
 
 	/* Maybe add space for an empty pattern */
@@ -577,7 +577,7 @@ static void xm_load_envelope_points(xm_envelope_t* env, const char* moddata) {
 			       env_val, MAX_ENVELOPE_VALUE);
 			env_val = MAX_ENVELOPE_VALUE;
 		}
-		env->points[i].value = env_val;
+		env->points[i].value = (uint8_t)env_val;
 	}
 }
 
@@ -654,13 +654,18 @@ static uint32_t xm_load_sample_header(xm_sample_t* sample, bool* is_16bit,
 	/* Trim end of sample beyond the loop end */
 	sample->length = TRIM_SAMPLE_LENGTH(sample->length, loop_start,
 	                                    sample->loop_length, flags);
-	sample->volume = READ_U8(offset + 12);
-	sample->finetune = (int8_t)READ_U8(offset + 13);
 
-	if(sample->volume > MAX_VOLUME) {
-		NOTICE("fixing invalid sample volume");
-		sample->volume = MAX_VOLUME;
+	uint8_t volume = READ_U8(offset + 12);
+	if(volume > MAX_VOLUME) {
+		NOTICE("clamping invalid sample volume (%u > %u)",
+		       volume, MAX_VOLUME);
+		volume = MAX_VOLUME;
 	}
+	/* Assigning to bitfields is ugly with -Wconversion, it is how it is */
+	static_assert(MAX_VOLUME <= 0x7F);
+	sample->volume = (unsigned)volume & 0x7F;
+
+	sample->finetune = (int8_t)READ_U8(offset + 13);
 
 	/* The XM spec doesn't quite say what to do when bits 0 and 1
 	   are set, but FT2 loads it as ping-pong, so it seems bit 1 has
@@ -699,8 +704,10 @@ static void xm_load_8b_sample_data(uint32_t length, xm_sample_point_t* out,
                                    const char* moddata,
                                    uint32_t moddata_length, uint32_t offset) {
 	int8_t v = 0;
+	uint8_t s;
 	for(uint32_t k = 0; k < length; ++k) {
-		v = v + (int8_t)READ_U8(offset + k);
+		s = READ_U8(offset + k);
+		v += (int8_t)s;
 		out[k] = _Generic((xm_sample_point_t){},
 		                  int8_t: v,
 		                  int16_t: (v * 256),
@@ -713,7 +720,7 @@ static void xm_load_16b_sample_data(uint32_t length, xm_sample_point_t* out,
                                     uint32_t moddata_length, uint32_t offset) {
 	int16_t v = 0;
 	for(uint32_t k = 0; k < length; ++k) {
-		v = v + (int16_t)READ_U16(offset + (k << 1));
+		v += (int16_t)READ_U16(offset + (k << 1));
 		out[k] = _Generic((xm_sample_point_t){},
 		                  int8_t: xm_dither_16b_8b(v),
 		                  int16_t: v,
@@ -726,7 +733,8 @@ static int8_t xm_dither_16b_8b(int16_t x) {
 	next = next * 214013 + 2531011;
 	/* Not that this is perf critical, but this should compile to a cmovl
 	   (branchless) */
-	return (x >= 32512) ? 127 : (x + (next >> 16) % 256) / 256;
+	return (x >= 32512) ? 127 :
+		(int8_t)((x + (int16_t)((next >> 16) % 256)) / 256);
 }
 
 
@@ -736,8 +744,12 @@ uint32_t xm_size_for_context(const xm_prescan_data_t* p) {
 }
 
 uint32_t xm_context_size(const xm_context_t* ctx) {
-	return (char*)ctx->row_loop_count - (char*)ctx
-		+ sizeof(uint8_t) * MAX_ROWS_PER_PATTERN * ctx->module.length;
+	/* Prescan already checked that ctx size < UINT32_MAX */
+	/* This prevents duplicating the logic from prescan, but assumes
+	   row_loop_count comes *last* in the allocated memory */
+	return (uint32_t)((char*)ctx->row_loop_count - (char*)ctx)
+		+ (uint32_t)(sizeof(uint8_t) * MAX_ROWS_PER_PATTERN
+		             * ctx->module.length);
 }
 
 xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,

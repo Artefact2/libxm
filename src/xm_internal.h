@@ -97,6 +97,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 
 struct xm_envelope_point_s {
 	uint16_t frame;
+	static_assert(MAX_ENVELOPE_VALUE < UINT8_MAX);
 	uint8_t value; /* 0..=MAX_ENVELOPE_VALUE */
 	char __pad[1];
 };
