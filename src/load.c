@@ -286,7 +286,7 @@ static uint32_t xm_load_module_header(xm_context_t* ctx,
 		mod->length = PATTERN_ORDER_TABLE_LENGTH;
 	}
 
-	uint16_t flags = READ_U32(offset + 14);
+	uint16_t flags = READ_U16(offset + 14);
 	mod->frequency_type = (flags & 1) ?
 		XM_LINEAR_FREQUENCIES : XM_AMIGA_FREQUENCIES;
 
