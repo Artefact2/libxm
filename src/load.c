@@ -286,7 +286,14 @@ static uint32_t xm_load_module_header(xm_context_t* ctx,
 	uint32_t header_size = READ_U32(offset);
 
 	mod->length = READ_U16(offset + 4);
-	mod->restart_position = READ_U16(offset + 6);
+	uint16_t restart_position = READ_U16(offset + 6);
+	if(restart_position >= PATTERN_ORDER_TABLE_LENGTH) {
+		NOTICE("zeroing invalid restart position (%u -> 0)",
+		       restart_position);
+		restart_position = 0;
+	}
+	static_assert(UINT8_MAX >= PATTERN_ORDER_TABLE_LENGTH - 1);
+	mod->restart_position = (uint8_t)restart_position;
 	/* Prescan already checked MAX_CHANNELS */
 	static_assert(MAX_CHANNELS <= UINT8_MAX);
 	mod->num_channels = READ_U8(offset + 8);

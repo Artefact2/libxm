@@ -192,14 +192,14 @@ typedef struct xm_pattern_s xm_pattern_t;
 
 struct xm_module_s {
 	uint32_t samples_data_length;
+	uint32_t num_rows;
 	uint16_t length;
-	uint16_t restart_position;
 	uint16_t num_patterns;
 	uint16_t num_samples;
-	uint32_t num_rows;
 	uint8_t num_channels;
 	uint8_t num_instruments;
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
+	uint8_t restart_position;
 	enum: uint8_t {
 		XM_LINEAR_FREQUENCIES = 0,
 		XM_AMIGA_FREQUENCIES = 1,
@@ -212,7 +212,7 @@ struct xm_module_s {
 	char trackername[24];
 	#endif
 
-	char __pad[1];
+	char __pad[2];
 };
 typedef struct xm_module_s xm_module_t;
 
