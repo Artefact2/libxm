@@ -382,12 +382,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 	if(s->instrument) {
 		/* Update ch->next_instrument */
-		if(s->instrument <= ctx->module.num_instruments) {
-			ch->next_instrument = ctx->instruments
-				+ (s->instrument - 1);
-		} else {
-			ch->next_instrument = NULL;
-		}
+		ch->next_instrument = s->instrument;
 	}
 
 	if(NOTE_IS_VALID(s->note)) {
@@ -395,10 +390,12 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		   invalid notes are deleted in load.c. */
 
 		/* Update ch->sample and ch->instrument */
-		if(ch->next_instrument != NULL &&
-		   ch->next_instrument->sample_of_notes[s->note - 1]
-		   < ch->next_instrument->num_samples) {
-			ch->instrument = ch->next_instrument;
+		xm_instrument_t* next = ctx->instruments
+			+ ch->next_instrument - 1;
+		if(ch->next_instrument
+		   && ch->next_instrument - 1 < ctx->module.num_instruments
+		   && next->sample_of_notes[s->note - 1] < next->num_samples) {
+			ch->instrument = next;
 			ch->sample = ctx->samples
 				+ ch->instrument->samples_index
 				+ ch->instrument->sample_of_notes[s->note - 1];

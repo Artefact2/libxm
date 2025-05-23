@@ -214,8 +214,6 @@ struct xm_module_s {
 typedef struct xm_module_s xm_module_t;
 
 struct xm_channel_context_s {
-	xm_instrument_t* next_instrument; /* Last instrument seen in the
-	                                instrument column. Could be NULL */
 	xm_instrument_t* instrument; /* Last instrument triggered by a note.
 	                                Could be NULL. */
 	xm_sample_t* sample; /* Last sample triggered by a note. Could be
@@ -256,6 +254,9 @@ struct xm_channel_context_s {
                                    or by any volume command. Shared by 7xy:
                                    Tremolo and Txy: Tremor. */
 	uint8_t panning; /* 0..MAX_PANNING  */
+
+	uint8_t next_instrument; /* Last instrument seen in the
+	                            instrument column. Could be 0. */
 
 	int8_t autovibrato_note_offset; /* in 1/64 semitones */
 	uint8_t arp_note_offset; /* in semitones */
