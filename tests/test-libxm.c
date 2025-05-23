@@ -118,7 +118,7 @@ static int channelpairs_eq(xm_context_t* ctx, bool swap_lr) {
 
 static int channelpairs_pitcheq(xm_context_t* ctx) {
 	if(xm_get_number_of_channels(ctx) != 2) return 1;
-	uint16_t bpm;
+	uint8_t bpm;
 	xm_get_playing_speed(ctx, &bpm, nullptr);
 	if(bpm != 32) return 1;
 	float frames[3750*4]; /* 48000 Hz, 32 BPM => 1 tick is 3750 samples */

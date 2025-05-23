@@ -25,9 +25,9 @@
  * If we attempt to read the buffer out-of-bounds, pretend that the buffer is
  * infinitely padded with zeroes.
  */
-#define READ_U8_BOUND(offset, bound) (((offset) < (bound)) ? (*(uint8_t*)(moddata + (offset))) : 0)
-#define READ_U16_BOUND(offset, bound) ((uint16_t)READ_U8_BOUND(offset, bound) | ((uint16_t)READ_U8_BOUND((offset) + 1, bound) << 8))
-#define READ_U32_BOUND(offset, bound) ((uint32_t)READ_U16_BOUND(offset, bound) | ((uint32_t)READ_U16_BOUND((offset) + 2, bound) << 16))
+#define READ_U8_BOUND(offset, bound) ((uint8_t)(((offset) < (bound)) ? (*(uint8_t*)(moddata + (offset))) : 0))
+#define READ_U16_BOUND(offset, bound) ((uint16_t)((uint16_t)READ_U8_BOUND(offset, bound) | ((uint16_t)READ_U8_BOUND((offset) + 1, bound) << 8)))
+#define READ_U32_BOUND(offset, bound) ((uint32_t)((uint32_t)READ_U16_BOUND(offset, bound) | ((uint32_t)READ_U16_BOUND((offset) + 2, bound) << 16)))
 #define READ_MEMCPY_BOUND(ptr, offset, length, bound) memcpy_pad(ptr, length, moddata, bound, offset)
 
 #define READ_U8(offset) READ_U8_BOUND(offset, moddata_length)
@@ -45,12 +45,11 @@ struct xm_prescan_data_s {
 	uint32_t context_size;
 	uint32_t num_rows;
 	uint32_t samples_data_length;
-	uint16_t num_channels;
 	uint16_t num_patterns;
-	uint16_t num_instruments;
 	uint16_t num_samples;
 	uint16_t pot_length;
-	char __pad[2];
+	uint8_t num_channels;
+	uint8_t num_instruments;
 };
 const uint8_t XM_PRESCAN_DATA_SIZE = sizeof(xm_prescan_data_t);
 
@@ -102,14 +101,27 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 
 	/* Read the module header */
 	out->pot_length = READ_U16(offset + 4);
-	out->num_channels = READ_U16(offset + 8);
+	uint16_t num_channels = READ_U16(offset + 8);
+	if(num_channels > MAX_CHANNELS) {
+		NOTICE("module has too many channels (%u > %u)",
+		       num_channels, MAX_CHANNELS);
+		return false;
+	}
+	out->num_channels = (uint8_t)num_channels;
 	out->num_patterns = READ_U16(offset + 10);
 	if(out->num_patterns > MAX_PATTERNS) {
-		NOTICE("module has too many patterns (%x > %x)",
+		NOTICE("module has too many patterns (%u > %u)",
 		       out->num_patterns, MAX_PATTERNS);
 		return false;
 	}
-	out->num_instruments = READ_U16(offset + 12);
+	uint16_t num_instruments = READ_U16(offset + 12);
+	if(num_instruments > MAX_INSTRUMENTS) {
+		NOTICE("module has too many instruments (%u > %u)",
+		       num_instruments, MAX_INSTRUMENTS);
+		return false;
+	}
+	static_assert(MAX_INSTRUMENTS <= UINT8_MAX);
+	out->num_instruments = (uint8_t)num_instruments;
 	out->num_samples = 0;
 	out->num_rows = 0;
 	out->samples_data_length = 0;
@@ -167,6 +179,11 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length, xm_prescan_
 	/* Read instrument headers */
 	for(uint16_t i = 0; i < out->num_instruments; ++i) {
 		uint16_t num_samples = READ_U16(offset + 27);
+		if(num_samples > MAX_SAMPLES_PER_INSTRUMENT) {
+			NOTICE("instrument %u has too many samples (%u > %u)",
+			       i + 1, num_samples, MAX_SAMPLES_PER_INSTRUMENT);
+			return false;
+		}
 		uint32_t inst_samples_bytes = 0;
 		out->num_samples += num_samples;
 
@@ -270,10 +287,14 @@ static uint32_t xm_load_module_header(xm_context_t* ctx,
 
 	mod->length = READ_U16(offset + 4);
 	mod->restart_position = READ_U16(offset + 6);
-	mod->num_channels = READ_U16(offset + 8);
+	/* Prescan already checked MAX_CHANNELS */
+	static_assert(MAX_CHANNELS <= UINT8_MAX);
+	mod->num_channels = READ_U8(offset + 8);
 	mod->num_patterns = READ_U16(offset + 10);
 	assert(mod->num_patterns <= MAX_PATTERNS);
-	mod->num_instruments = READ_U16(offset + 12);
+	/* Prescan already checked MAX_INSTRUMENTS */
+	static_assert(MAX_INSTRUMENTS <= UINT8_MAX);
+	mod->num_instruments = READ_U8(offset + 12);
 
 	if(mod->restart_position >= mod->length) {
 		NOTICE("invalid restart_position, resetting to zero");
@@ -479,7 +500,9 @@ static uint32_t xm_load_instrument(xm_context_t* ctx,
 	}
 	#endif
 
-	instr->num_samples = READ_U16(offset + 27);
+	/* Prescan already checked MAX_SAMPLES_PER_INSTRUMENT */
+	static_assert(MAX_SAMPLES_PER_INSTRUMENT <= UINT8_MAX);
+	instr->num_samples = READ_U8(offset + 27);
 	if(instr->num_samples == 0) {
 		return offset + ins_header_size;
 	}

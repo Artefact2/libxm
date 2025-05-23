@@ -21,8 +21,8 @@ static void zero_waveforms(xm_context_t* ctx) {
 	uint32_t total_zeroed_bytes = 0;
 	xm_sample_point_t* sample_data;
 	uint32_t sample_length;
-	for(uint16_t i = 1; i <= xm_get_number_of_instruments(ctx); ++i) {
-		for(uint16_t s = 0; s < xm_get_number_of_samples(ctx, i); ++s) {
+	for(uint8_t i = 1; i <= xm_get_number_of_instruments(ctx); ++i) {
+		for(uint8_t s = 0; s < xm_get_number_of_samples(ctx, i); ++s) {
 			sample_data = xm_get_sample_waveform(ctx, i, s,
 			                                     &sample_length);
 			if(sample_data == NULL) continue;

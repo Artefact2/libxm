@@ -60,6 +60,9 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define MIN_BPM 32
 #define MAX_BPM 255
 #define MAX_PATTERNS 256
+#define MAX_INSTRUMENTS UINT8_MAX
+#define MAX_CHANNELS UINT8_MAX
+#define MAX_SAMPLES_PER_INSTRUMENT UINT8_MAX
 
 /* Not the original key off (97), this is the value used by libxm once a ctx
    has been loaded */
@@ -153,8 +156,8 @@ struct xm_instrument_s {
 	uint8_t sample_of_notes[NUM_NOTES];
 	/* ctx->samples[index..(index+num_samples)] */
 	uint16_t samples_index;
-	uint16_t num_samples;
 	uint16_t volume_fadeout;
+	uint8_t num_samples;
 	uint8_t vibrato_type;
 	uint8_t vibrato_sweep;
 	uint8_t vibrato_depth;
@@ -166,7 +169,7 @@ struct xm_instrument_s {
 	char name[24];
 	#endif
 
-	char __pad[1];
+	char __pad[2];
 };
 typedef struct xm_instrument_s xm_instrument_t;
 
@@ -188,14 +191,14 @@ struct xm_pattern_s {
 typedef struct xm_pattern_s xm_pattern_t;
 
 struct xm_module_s {
+	uint32_t samples_data_length;
 	uint16_t length;
 	uint16_t restart_position;
-	uint16_t num_channels;
 	uint16_t num_patterns;
-	uint16_t num_instruments;
 	uint16_t num_samples;
 	uint32_t num_rows;
-	uint32_t samples_data_length;
+	uint8_t num_channels;
+	uint8_t num_instruments;
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 	enum: uint8_t {
 		XM_LINEAR_FREQUENCIES = 0,
@@ -209,7 +212,7 @@ struct xm_module_s {
 	char trackername[24];
 	#endif
 
-	char __pad[3];
+	char __pad[1];
 };
 typedef struct xm_module_s xm_module_t;
 
@@ -296,10 +299,8 @@ struct xm_channel_context_s {
 	bool sustained;
 	bool muted;
 
-	#if XM_TIMING_FUNCTIONS || UINTPTR_MAX == UINT32_MAX
-	char __pad[1];
-	#else
-	char __pad[5];
+	#if !XM_TIMING_FUNCTIONS && UINTPTR_MAX == UINT64_MAX
+	char __pad[4];
 	#endif
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
@@ -342,9 +343,9 @@ struct xm_context_s {
 	uint8_t loop_count;
 	uint8_t max_loop_count;
 
-	#if XM_TIMING_FUNCTIONS || UINTPTR_MAX == UINT32_MAX
-	char __pad[1];
+	#if XM_TIMING_FUNCTIONS
+	char __pad[5 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
 	#else
-	char __pad[5];
+	char __pad[1];
 	#endif
 };
