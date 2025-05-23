@@ -26,12 +26,12 @@ static uint8_t xm_envelope_lerp(const xm_envelope_point_t*, const xm_envelope_po
 static void xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16_t*, uint8_t*) __attribute__((nonnull));
 static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
-static uint16_t xm_linear_period(uint16_t) __attribute__((warn_unused_result));
+static uint16_t xm_linear_period(int16_t) __attribute__((warn_unused_result));
 static uint32_t xm_linear_frequency(xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static uint16_t xm_amiga_period(uint16_t) __attribute__((warn_unused_result));
+static uint16_t xm_amiga_period(int16_t) __attribute__((warn_unused_result));
 static uint32_t xm_amiga_frequency(xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
 
-static uint16_t xm_period(xm_context_t*, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static uint16_t xm_period(xm_context_t*, int16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static uint32_t xm_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
 
 static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
@@ -314,7 +314,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	}
 }
 
-[[maybe_unused]] static uint16_t xm_linear_period(uint16_t note) {
+[[maybe_unused]] static uint16_t xm_linear_period(int16_t note) {
 	assert(7680 - note / 2 > 0);
 	return 7680 - note / 2; /* XXX: we lose 1 bit of finetune information
 	                           here? investigate */
@@ -328,7 +328,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	return (uint32_t)(8363.f * exp2f((4608.f - (float)p) / 768.f));
 }
 
-[[maybe_unused]] static uint16_t xm_amiga_period(uint16_t note) {
+[[maybe_unused]] static uint16_t xm_amiga_period(int16_t note) {
 	/* Values obtained via exponential regression over the period tables in
 	   modfil10.txt */
 	return 32.f * 855.9563438f * exp2f(-0.0832493329f * note / 128.f);
@@ -345,7 +345,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	return (uint32_t)(4.f * 7093789.2f / (p * 2.f));
 }
 
-static uint16_t xm_period([[maybe_unused]] xm_context_t* ctx, uint16_t note) {
+static uint16_t xm_period([[maybe_unused]] xm_context_t* ctx, int16_t note) {
 	#if XM_FREQUENCY_TYPES == 1
 	return xm_linear_period(note);
 	#elif XM_FREQUENCY_TYPES == 2
@@ -413,19 +413,20 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	if(NOTE_IS_KEY_OFF(s->note)) {
 		/* Key Off */
 		xm_key_off(ctx, ch);
-	} else if(s->note) {
+	} else if(s->note && ch->sample) {
 		/* Yes, the real note number is s->note -1. Try finding
 		 * THAT in any of the specs! :-) */
-		uint16_t new_period = ch->sample != NULL ?
-			xm_period(ctx, 128 * (s->note
-			                      + ch->sample->relative_note - 1)
-			          + ch->sample->finetune) : 0;
-
-		if(HAS_TONE_PORTAMENTO(ch->current)) {
-			ch->tone_portamento_target_period = new_period;
-		} else {
-			ch->orig_period = new_period;
-			xm_trigger_note(ctx, ch);
+		int16_t note = (int16_t)(s->note + ch->sample->relative_note);
+		if(note > 0 && note < 120) {
+			uint16_t new_period =
+				xm_period(ctx, (int16_t)(128 * (note - 1) +
+				                         ch->sample->finetune));
+			if(HAS_TONE_PORTAMENTO(ch->current)) {
+				ch->tone_portamento_target_period = new_period;
+			} else {
+				ch->orig_period = new_period;
+				xm_trigger_note(ctx, ch);
+			}
 		}
 	}
 
@@ -883,7 +884,9 @@ static void xm_tick(xm_context_t* ctx) {
 			xm_tick_effects(ctx, ch);
 		}
 
-		ch->step = xm_frequency(ctx, ch);
+		if(ch->period) {
+			ch->step = xm_frequency(ctx, ch);
+		}
 		/* Guard against uint32_t overflow */
 		static_assert(SAMPLE_MICROSTEPS <= 1 << 12);
 		/* For A#9 and +127 finetune, frequency is about 535K */
