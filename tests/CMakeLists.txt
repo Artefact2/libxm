@@ -21,6 +21,8 @@ add_test(NAME test_key_off COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/key-off.xm)
 add_test(NAME test_note_delay COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/note-delay.xm)
+add_test(NAME test_note_limits COMMAND test-libxm
+	channelpairs_eq ${CMAKE_SOURCE_DIR}/note-limits.xm)
 add_test(NAME test_pattern_delay COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/pattern-delay.xm)
 add_test(NAME test_pitch_slides COMMAND test-libxm
