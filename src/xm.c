@@ -167,30 +167,46 @@ void xm_get_playing_speed(const xm_context_t* ctx,
 }
 
 void xm_get_position(const xm_context_t* ctx, uint8_t* pattern_index,
-                     uint8_t* pattern, uint8_t* row, uint64_t* samples) {
+                     uint8_t* pattern, uint8_t* row, uint32_t* samples) {
 	if(pattern_index) *pattern_index = ctx->current_table_index;
 	if(pattern) *pattern = ctx->module.pattern_table[ctx->current_table_index];
 	if(row) *row = ctx->current_row - 1;
-	if(samples) *samples = ctx->generated_samples;
+	if(samples) {
+		#if XM_TIMING_FUNCTIONS
+		*samples = ctx->generated_samples;
+		#else
+		*samples = 0;
+		#endif
+	}
 }
 
-uint64_t xm_get_latest_trigger_of_instrument(const xm_context_t* ctx,
+#if XM_TIMING_FUNCTIONS
+uint32_t xm_get_latest_trigger_of_instrument(const xm_context_t* ctx,
                                              uint16_t instr) {
 	CHECK_INSTRUMENT(ctx, instr);
 	return ctx->instruments[instr-1].latest_trigger;
 }
-
-uint64_t xm_get_latest_trigger_of_sample(const xm_context_t* ctx,
+uint32_t xm_get_latest_trigger_of_sample(const xm_context_t* ctx,
                                          uint16_t instr, uint16_t sample) {
 	CHECK_SAMPLE(ctx, instr, sample);
 	return ctx->samples[ctx->instruments[instr-1].samples_index + sample].latest_trigger;
 }
-
-uint64_t xm_get_latest_trigger_of_channel(const xm_context_t* ctx,
+uint32_t xm_get_latest_trigger_of_channel(const xm_context_t* ctx,
                                           uint16_t chn) {
 	CHECK_CHANNEL(ctx, chn);
 	return ctx->channels[chn - 1].latest_trigger;
 }
+#else
+uint32_t xm_get_latest_trigger_of_instrument([[maybe_unused]] const xm_context_t* ctx, [[maybe_unused]] uint16_t instr) {
+	return 0;
+}
+uint32_t xm_get_latest_trigger_of_sample([[maybe_unused]] const xm_context_t* ctx, [[maybe_unused]] uint16_t instr, [[maybe_unused]] uint16_t sample) {
+	return 0;
+}
+uint32_t xm_get_latest_trigger_of_channel([[maybe_unused]] const xm_context_t* ctx, [[maybe_unused]] uint16_t chn) {
+	return 0;
+}
+#endif
 
 bool xm_is_channel_active(const xm_context_t* ctx, uint16_t chn) {
 	CHECK_CHANNEL(ctx, chn);

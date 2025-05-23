@@ -56,11 +56,11 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **4076 bytes** (Linux
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **3993 bytes** (Linux
 x86_64).
 
 ~~~
-cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_DEFENSIVE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF -DXM_SAMPLE_TYPE=float -Bbuild-libxmize -Sexamples/libxmize
+cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_DEFENSIVE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF -DXM_TIMING_FUNCTIONS=OFF -DXM_SAMPLE_TYPE=float -Bbuild-libxmize -Sexamples/libxmize
 make -C build-libxmize libxmtoau
 strip -R .eh_frame_hdr -R .eh_frame build-libxmize/libxmtoau
 xzcrush build-libxmize/libxmtoau

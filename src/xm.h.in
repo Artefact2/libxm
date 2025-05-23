@@ -320,7 +320,7 @@ __attribute__((nonnull(1)));
  * generated audio)
  */
 void xm_get_position(const xm_context_t*, uint8_t* pattern_index,
-                     uint8_t* pattern, uint8_t* row, uint64_t* samples)
+                     uint8_t* pattern, uint8_t* row, uint32_t* samples)
 __attribute__((nonnull(1)));
 
 /** Get the latest time (in number of generated samples) when a
@@ -329,7 +329,7 @@ __attribute__((nonnull(1)));
  * @note Instrument numbers go from 1 to
  * xm_get_number_of_instruments(...).
  */
-uint64_t xm_get_latest_trigger_of_instrument(const xm_context_t*, uint16_t)
+uint32_t xm_get_latest_trigger_of_instrument(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -342,7 +342,7 @@ __attribute__((nonnull));
  * @note Sample numbers go from 0 to
  * xm_get_nubmer_of_samples(...,instr)-1.
  */
-uint64_t xm_get_latest_trigger_of_sample(const xm_context_t*, uint16_t instr,
+uint32_t xm_get_latest_trigger_of_sample(const xm_context_t*, uint16_t instr,
                                          uint16_t sample)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
@@ -352,7 +352,7 @@ __attribute__((nonnull));
  *
  * @note Channel numbers go from 1 to xm_get_number_of_channels(...).
  */
-uint64_t xm_get_latest_trigger_of_channel(const xm_context_t*, uint16_t)
+uint32_t xm_get_latest_trigger_of_channel(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 

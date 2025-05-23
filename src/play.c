@@ -662,7 +662,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	}
 }
 
-static void xm_trigger_instrument(xm_context_t* ctx, xm_channel_context_t* ch) {
+static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
+                                  xm_channel_context_t* ch) {
 	if(ch->sample == NULL) return;
 
 	ch->volume = ch->sample->volume;
@@ -683,12 +684,15 @@ static void xm_trigger_instrument(xm_context_t* ctx, xm_channel_context_t* ch) {
 		ch->tremolo_ticks = 0;
 	}
 
+	#if XM_TIMING_FUNCTIONS
 	ch->latest_trigger = ctx->generated_samples;
 	assert(ch->instrument != NULL);
 	ch->instrument->latest_trigger = ctx->generated_samples;
+	#endif
 }
 
-static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
+static void xm_trigger_note([[maybe_unused]] xm_context_t* ctx,
+                            xm_channel_context_t* ch) {
 	if(ch->sample == NULL) return;
 	/* Can be called by eg, key off note with EDy */
 	if(NOTE_IS_KEY_OFF(ch->current->note)) return;
@@ -702,8 +706,10 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	   inst trigger?*/
 	//ch->tremor_on = false;
 
+	#if XM_TIMING_FUNCTIONS
 	ch->latest_trigger = ctx->generated_samples;
 	ch->sample->latest_trigger = ctx->generated_samples;
+	#endif
 }
 
 static void xm_cut_note(xm_channel_context_t* ch) {
@@ -1380,7 +1386,9 @@ static void xm_sample(xm_context_t* ctx, float* out_lr) {
 void xm_generate_samples(xm_context_t* ctx,
                          float* output,
                          uint16_t numsamples) {
+	#if XM_TIMING_FUNCTIONS
 	ctx->generated_samples += numsamples;
+	#endif
 	for(uint16_t i = 0; i < numsamples; i++, output += 2) {
 		xm_sample(ctx, output);
 	}
@@ -1389,7 +1397,9 @@ void xm_generate_samples(xm_context_t* ctx,
 void xm_generate_samples_unmixed(xm_context_t* ctx,
                                  float* out,
                                  uint16_t numsamples) {
+	#if XM_TIMING_FUNCTIONS
 	ctx->generated_samples += numsamples;
+	#endif
 	for(uint16_t i = 0; i < numsamples;
 	    ++i, out += ctx->module.num_channels * 2) {
 		xm_sample_unmixed(ctx, out);

@@ -106,7 +106,7 @@ const GLbyte indices[] = {
 };
 
 struct channel_timing_info {
-	uint64_t latest_trigger; // in audio frames
+	uint32_t latest_trigger; // in audio frames
 	float frequency;
 	float volume;
 	float panning;
@@ -117,7 +117,7 @@ struct channel_timing_info {
 
 struct module_timing_info {
 	struct channel_timing_info channels[NUM_TIMING][MAX_CHANNELS]; // ring buffer
-	uint64_t audio_frames[NUM_TIMING]; // timestamps in audio frames of each cti
+	uint32_t audio_frames[NUM_TIMING]; // timestamps in audio frames of each cti
 	size_t latest_cti_idx;
 };
 

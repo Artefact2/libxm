@@ -22,7 +22,7 @@ set_target_properties(xm PROPERTIES
 	PUBLIC_HEADER ${CMAKE_CURRENT_BINARY_DIR}/xm.h)
 
 # Bump this when breaking public ABI
-set_target_properties(xm PROPERTIES SOVERSION 6)
+set_target_properties(xm PROPERTIES SOVERSION 7)
 
 find_library(MATH_LIBRARY m REQUIRED)
 target_include_directories(xm SYSTEM PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
@@ -53,15 +53,18 @@ option_and_define(XM_LIBXM_DELTA_SAMPLES
 	"Delta-code samples in libxm format (may improve compressibility, but adds some code size)"
 	"ON")
 
+option_and_define(XM_STRINGS
+	"Store module, instrument and sample names in context" "ON")
+
+option_and_define(XM_TIMING_FUNCTIONS
+	"Enable timing functions for instruments, samples and channels" "ON")
+
 set(XM_SAMPLE_TYPE "int16_t" CACHE STRING
 	"Sample type of internal samples (int8_t,int16_t,float)")
 
 set(XM_MICROSTEP_BITS "12" CACHE STRING
 	"Precision of sample stepping (8..12, higher = better pitch accuracy, lower = can load larger samples)")
 target_compile_definitions(xm PRIVATE XM_MICROSTEP_BITS=${XM_MICROSTEP_BITS})
-
-option_and_define(XM_STRINGS
-	"Store module, instrument and sample names in context" "ON")
 
 set(XM_FREQUENCY_TYPES "3" CACHE STRING
 	"Supported frequency types (1=Linear,2=Amiga,3=Both)")

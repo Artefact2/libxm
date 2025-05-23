@@ -118,7 +118,10 @@ struct xm_envelope_s {
 typedef struct xm_envelope_s xm_envelope_t;
 
 struct xm_sample_s {
-	uint64_t latest_trigger;
+	#if XM_TIMING_FUNCTIONS
+	uint32_t latest_trigger;
+	#endif
+
 	/* ctx->samples_data[index..(index+length)] */
 	uint32_t index;
 	uint32_t length; /* same as loop_end (seeking beyond a loop with 9xx is
@@ -141,7 +144,10 @@ struct xm_sample_s {
 typedef struct xm_sample_s xm_sample_t;
 
 struct xm_instrument_s {
-	uint64_t latest_trigger;
+	#if XM_TIMING_FUNCTIONS
+	uint32_t latest_trigger;
+	#endif
+
 	xm_envelope_t volume_envelope;
 	xm_envelope_t panning_envelope;
 	uint8_t sample_of_notes[NUM_NOTES];
@@ -160,7 +166,7 @@ struct xm_instrument_s {
 	char name[24];
 	#endif
 
-	char __pad[5];
+	char __pad[1];
 };
 typedef struct xm_instrument_s xm_instrument_t;
 
@@ -208,7 +214,6 @@ struct xm_module_s {
 typedef struct xm_module_s xm_module_t;
 
 struct xm_channel_context_s {
-	uint64_t latest_trigger;
 	xm_instrument_t* next_instrument; /* Last instrument seen in the
 	                                instrument column. Could be NULL */
 	xm_instrument_t* instrument; /* Last instrument triggered by a note.
@@ -216,6 +221,10 @@ struct xm_channel_context_s {
 	xm_sample_t* sample; /* Last sample triggered by a note. Could be
 	                        NULL */
 	xm_pattern_slot_t* current;
+
+	#if XM_TIMING_FUNCTIONS
+	uint32_t latest_trigger; /* In generated samples (1/ctx->rate secs) */
+	#endif
 
 	uint32_t sample_position; /* In microsteps */
 	uint32_t step; /* In microsteps */
@@ -286,13 +295,15 @@ struct xm_channel_context_s {
 	bool sustained;
 	bool muted;
 
+	#if XM_TIMING_FUNCTIONS || UINTPTR_MAX == UINT32_MAX
+	char __pad[1];
+	#else
 	char __pad[5];
+	#endif
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
 
 struct xm_context_s {
-	uint64_t generated_samples;
-
 	xm_pattern_t* patterns;
 	xm_pattern_slot_t* pattern_slots;
 	xm_instrument_t* instruments; /* Instrument 1 has index 0,
@@ -303,6 +314,10 @@ struct xm_context_s {
 	uint8_t* row_loop_count;
 
 	xm_module_t module;
+
+	#if XM_TIMING_FUNCTIONS
+	uint32_t generated_samples;
+	#endif
 
 	int32_t remaining_samples_in_tick; /* In 1/TICK_SUBSAMPLE increments */
 
@@ -326,5 +341,9 @@ struct xm_context_s {
 	uint8_t loop_count;
 	uint8_t max_loop_count;
 
+	#if XM_TIMING_FUNCTIONS || UINTPTR_MAX == UINT32_MAX
+	char __pad[1];
+	#else
 	char __pad[5];
+	#endif
 };
