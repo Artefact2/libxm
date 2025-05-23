@@ -45,11 +45,12 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	long xm_file_length = ftell(xm_file);
-	if(xm_file_length == -1) return 1;
+	static_assert(UINT32_MAX <= SIZE_MAX);
+	if(xm_file_length < 0 || xm_file_length > UINT32_MAX) return 1;
 	rewind(xm_file);
-	char* xm_file_data = malloc(xm_file_length);
+	char* xm_file_data = malloc((size_t)xm_file_length);
 	if(xm_file_data == NULL) return 1;
-	if(fread(xm_file_data, xm_file_length, 1, xm_file) != 1) {
+	if(fread(xm_file_data, (size_t)xm_file_length, 1, xm_file) != 1) {
 		perror("fread");
 		return 1;
 	}
@@ -57,11 +58,13 @@ int main(int argc, char** argv) {
 
 	/* Allocate xm context and free xm file data */
 	xm_prescan_data_t* p = alloca(XM_PRESCAN_DATA_SIZE);
-	if(xm_prescan_module(xm_file_data, xm_file_length, p) == false) return 1;
+	if(!xm_prescan_module(xm_file_data, (uint32_t)xm_file_length, p)) {
+		return 1;
+	}
 	char* ctx_buffer = malloc(xm_size_for_context(p));
 	if(ctx_buffer == NULL) return 1;
 	xm_context_t* ctx = xm_create_context(ctx_buffer, p, xm_file_data,
-	                                      xm_file_length, 48000);
+	                                      (uint32_t)xm_file_length, 48000);
 	free(xm_file_data);
 
 	/* Perform the test */
