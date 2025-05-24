@@ -13,6 +13,8 @@ add_test(NAME test_arpeggio COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/arpeggio.xm)
 add_test(NAME test_effect_memory COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/effect-memory.xm)
+add_test(NAME test_finetune_precision COMMAND test-libxm
+	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/finetune-precision.xm)
 add_test(NAME test_ghosts COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/ghosts.xm)
 add_test(NAME test_instrument_fadeout COMMAND test-libxm
