@@ -257,7 +257,7 @@ struct xm_channel_context_s {
                                    or by any volume command. Shared by 7xy:
                                    Tremolo and Txy: Tremor. */
 	uint8_t panning; /* 0..MAX_PANNING  */
-
+	int8_t finetune;
 	uint8_t next_instrument; /* Last instrument seen in the
 	                            instrument column. Could be 0. */
 
@@ -299,8 +299,10 @@ struct xm_channel_context_s {
 	bool sustained;
 	bool muted;
 
-	#if !XM_TIMING_FUNCTIONS && UINTPTR_MAX == UINT64_MAX
-	char __pad[4];
+	#if XM_TIMING_FUNCTIONS
+	char __pad[7 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
+	#else
+	char __pad[3];
 	#endif
 };
 typedef struct xm_channel_context_s xm_channel_context_t;

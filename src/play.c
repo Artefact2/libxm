@@ -415,17 +415,31 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		/* Key Off */
 		xm_key_off(ctx, ch);
 	} else if(s->note && ch->sample) {
-		/* Yes, the real note number is s->note -1. Try finding
-		 * THAT in any of the specs! :-) */
 		int16_t note = (int16_t)(s->note + ch->sample->relative_note);
 		if(note > 0 && note < 120) {
-			uint16_t new_period =
-				xm_period(ctx, (int16_t)(16 * (note - 1) +
-				                         ch->sample->finetune));
+			/* Yes, the real note number is s->note -1. Try finding
+			 * THAT in any of the specs! :-) */
+			note = (int16_t)(16 * (note - 1));
 			if(HAS_TONE_PORTAMENTO(ch->current)) {
-				ch->tone_portamento_target_period = new_period;
+				/* 3xx/Mx ignores E5y, but will reuse whatever
+				   finetune was set when initially triggering
+				   the note */
+				ch->tone_portamento_target_period =
+					xm_period(ctx, note + ch->finetune);
 			} else {
-				ch->orig_period = new_period;
+				/* Handle E5y: Set note fine-tune here; this
+				   effect only works in tandem with a note and
+				   overrides the finetune value stored in the
+				   sample. If we have Mx in the volume column,
+				   it does nothing.*/
+				ch->finetune = ch->sample->finetune;
+				if(s->effect_type == 0x0E
+				   && s->effect_param >> 4 == 0x05) {
+					ch->finetune = (int8_t)
+						((s->effect_param & 0xF)*2-16);
+				}
+				ch->orig_period =
+					xm_period(ctx, note + ch->finetune);
 				xm_trigger_note(ctx, ch);
 			}
 		}
@@ -555,19 +569,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			ch->vibrato_control_param = s->effect_param;
 			break;
 
-		case 5: /* E5y: Set finetune */
-			if(NOTE_IS_VALID(ch->current->note) && ch->sample != NULL) {
-				/* XXX: consecutive E5y will not work, store
-				   finetune in channel context */
-				int16_t offset =
-					((s->effect_param & 0x0F) - 8) * 8
-					- ch->sample->finetune * 4;
-				if(ckd_add(&ch->period, ch->period, offset)) {
-					/* XXX */
-					assert(false);
-				}
-			}
-			break;
+		/* E5y: Set note fine-tune is handled in
+		   xm_handle_pattern_slot() directly. */
 
 		case 6: /* E6y: Pattern loop */
 			if(s->effect_param & 0x0F) {

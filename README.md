@@ -56,7 +56,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **3998 bytes** (Linux
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **4017 bytes** (Linux
 x86_64).
 
 ~~~
@@ -128,7 +128,6 @@ Other tests require manual checking, see the table below.
      Test                      |     Status     |     Tested against     | Extras
 -------------------------------+----------------+------------------------+------------------------------------------------
 autovibrato-turnoff.xm         | PASS           | MilkyTracker           | Same pitches should be heard twice in a row.
-finetune.xm                    | PASS           | MilkyTracker           | Left and right channels should sound identical.
 multiretrig-volume.xm          | PASS           | FT2, OpenMPT           | Should sound identical.
 panning-law.xm                 | PASS           | MilkyTracker, FT2clone | Should sound identical.
 pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
