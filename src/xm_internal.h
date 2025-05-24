@@ -134,7 +134,7 @@ struct xm_sample_s {
 	static_assert(MAX_VOLUME < (1<<7));
 	uint8_t volume:7; /* 0..=MAX_VOLUME  */
 	uint8_t panning; /* 0..MAX_PANNING */
-	int8_t finetune;
+	int8_t finetune; /* -16..15 (-1 semitone..+15/16 semitone) */
 	int8_t relative_note;
 
 	#if XM_STRINGS

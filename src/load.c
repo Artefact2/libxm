@@ -695,7 +695,10 @@ static uint32_t xm_load_sample_header(xm_sample_t* sample, bool* is_16bit,
 	static_assert(MAX_VOLUME <= 0x7F);
 	sample->volume = (unsigned)volume & 0x7F;
 
+	/* Finetune is stored as a signed int8, but always rounds down instead
+	   of the usual truncation */
 	sample->finetune = (int8_t)READ_U8(offset + 13);
+	sample->finetune = (int8_t)((sample->finetune - INT8_MIN) / 8 - 16);
 
 	/* The XM spec doesn't quite say what to do when bits 0 and 1
 	   are set, but FT2 loads it as ping-pong, so it seems bit 1 has

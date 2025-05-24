@@ -315,9 +315,9 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 }
 
 [[maybe_unused]] static uint16_t xm_linear_period(int16_t note) {
-	assert(7680 - note / 2 > 0);
-	return 7680 - note / 2; /* XXX: we lose 1 bit of finetune information
-	                           here? investigate */
+	assert(7680 - note * 4 > 0);
+	assert(7860 - note * 4 < UINT16_MAX);
+	return (uint16_t)(7680 - note * 4);
 }
 
 [[maybe_unused]] static uint32_t xm_linear_frequency(xm_channel_context_t* ch) {
@@ -331,7 +331,8 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 [[maybe_unused]] static uint16_t xm_amiga_period(int16_t note) {
 	/* Values obtained via exponential regression over the period tables in
 	   modfil10.txt */
-	return 32.f * 855.9563438f * exp2f(-0.0832493329f * note / 128.f);
+	return (uint16_t)
+		(32.f * 855.9563438f * exp2f(-0.0832493329f * note / 16.f));
 }
 
 [[maybe_unused]] static uint32_t xm_amiga_frequency(xm_channel_context_t* ch) {
@@ -419,7 +420,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		int16_t note = (int16_t)(s->note + ch->sample->relative_note);
 		if(note > 0 && note < 120) {
 			uint16_t new_period =
-				xm_period(ctx, (int16_t)(128 * (note - 1) +
+				xm_period(ctx, (int16_t)(16 * (note - 1) +
 				                         ch->sample->finetune));
 			if(HAS_TONE_PORTAMENTO(ch->current)) {
 				ch->tone_portamento_target_period = new_period;
@@ -556,8 +557,15 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		case 5: /* E5y: Set finetune */
 			if(NOTE_IS_VALID(ch->current->note) && ch->sample != NULL) {
-				/* XXX: test this */
-				ch->period = ch->orig_period - ch->sample->finetune + (((s->effect_param & 0x0F) - 8) << 4);
+				/* XXX: consecutive E5y will not work, store
+				   finetune in channel context */
+				int16_t offset =
+					((s->effect_param & 0x0F) - 8) * 8
+					- ch->sample->finetune * 4;
+				if(ckd_add(&ch->period, ch->period, offset)) {
+					/* XXX */
+					assert(false);
+				}
 			}
 			break;
 
