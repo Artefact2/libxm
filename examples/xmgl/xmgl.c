@@ -149,10 +149,8 @@ static void usage(const char* progname) {
 }
 
 static void generate_timing_frame(float* lbuf, float* rbuf, jack_nframes_t tframes) {
-	static float buffer[TIMING_FRAME_SIZE * 2];
-
 	mti.latest_cti_idx = (mti.latest_cti_idx + 1) % NUM_TIMING;
-	xm_generate_samples(xmctx, buffer, tframes);
+	xm_generate_samples_noninterleaved(xmctx, lbuf, rbuf, tframes);
 	xm_get_position(xmctx, NULL, NULL, NULL, &(mti.audio_frames[mti.latest_cti_idx]));
 	for(size_t k = 1; k <= channels; ++k) {
 		struct channel_timing_info* chn = &(mti.channels[mti.latest_cti_idx][k-1]);
@@ -162,11 +160,6 @@ static void generate_timing_frame(float* lbuf, float* rbuf, jack_nframes_t tfram
 		chn->volume = xm_get_volume_of_channel(xmctx, k);
 		chn->panning = xm_get_panning_of_channel(xmctx, k);
 		chn->latest_trigger = xm_get_latest_trigger_of_channel(xmctx, k);
-	}
-
-	for(size_t i = 0; i < tframes; ++i) {
-		lbuf[i] = buffer[i << 1];
-		rbuf[i] = buffer[(i << 1) + 1];
 	}
 }
 

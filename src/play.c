@@ -46,9 +46,9 @@ static void xm_tick(xm_context_t*) __attribute__((nonnull));
 
 static float xm_sample_at(const xm_context_t*, const xm_sample_t*, uint32_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static float xm_next_of_sample(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static void xm_next_of_channel(xm_context_t*, xm_channel_context_t*, float*) __attribute__((nonnull));
+static void xm_next_of_channel(xm_context_t*, xm_channel_context_t*, float*, float*) __attribute__((nonnull));
 static void xm_sample_unmixed(xm_context_t*, float*) __attribute__((nonnull));
-static void xm_sample(xm_context_t*, float*) __attribute__((nonnull));
+static void xm_sample(xm_context_t*, float*, float*) __attribute__((nonnull));
 
 /* ----- Other oddities ----- */
 
@@ -1323,9 +1323,7 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 }
 
 static void xm_next_of_channel(xm_context_t* ctx, xm_channel_context_t* ch,
-                               float* out_lr) {
-	out_lr[0] = 0.f;
-	out_lr[1] = 0.f;
+                               float* out_left, float* out_right) {
 	const float fval = xm_next_of_sample(ctx, ch) * AMPLIFICATION;
 
 	if(ch->muted || (ch->instrument != NULL && ch->instrument->muted)
@@ -1334,8 +1332,8 @@ static void xm_next_of_channel(xm_context_t* ctx, xm_channel_context_t* ch,
 		return;
 	}
 
-	out_lr[0] = fval * ch->actual_volume[0];
-	out_lr[1] = fval * ch->actual_volume[1];
+	*out_left += fval * ch->actual_volume[0];
+	*out_right += fval * ch->actual_volume[1];
 
 	#if XM_RAMPING
 	ch->frame_count++;
@@ -1353,7 +1351,11 @@ static void xm_sample_unmixed(xm_context_t* ctx, float* out_lr) {
 	ctx->remaining_samples_in_tick -= TICK_SUBSAMPLES;
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
-		xm_next_of_channel(ctx, ctx->channels + i, out_lr + 2*i);
+		out_lr[2*i] = 0.f;
+		out_lr[2*i+1] = 0.f;
+
+		xm_next_of_channel(ctx, ctx->channels + i,
+		                   out_lr + 2*i, out_lr + 2*i+1);
 
 		assert(out_lr[2*i] <= 1.f);
 		assert(out_lr[2*i] >= -1.f);
@@ -1367,30 +1369,27 @@ static void xm_sample_unmixed(xm_context_t* ctx, float* out_lr) {
 	}
 }
 
-static void xm_sample(xm_context_t* ctx, float* out_lr) {
+static void xm_sample(xm_context_t* ctx, float* out_left, float* out_right) {
 	if(ctx->remaining_samples_in_tick <= 0) {
 		xm_tick(ctx);
 	}
 	ctx->remaining_samples_in_tick -= TICK_SUBSAMPLES;
 
-	out_lr[0] = 0.f;
-	out_lr[1] = 0.f;
-	float out_ch[2];
+	*out_left = 0.f;
+	*out_right = 0.f;
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
-		xm_next_of_channel(ctx, ctx->channels + i, out_ch);
-		out_lr[0] += out_ch[0];
-		out_lr[1] += out_ch[1];
+		xm_next_of_channel(ctx, ctx->channels + i, out_left, out_right);
 	}
 
-	assert(out_lr[0] <= ctx->module.num_channels);
-	assert(out_lr[0] >= -ctx->module.num_channels);
-	assert(out_lr[1] <= ctx->module.num_channels);
-	assert(out_lr[1] >= -ctx->module.num_channels);
+	assert(*out_left <= ctx->module.num_channels);
+	assert(*out_left >= -ctx->module.num_channels);
+	assert(*out_right <= ctx->module.num_channels);
+	assert(*out_right >= -ctx->module.num_channels);
 
 	#if XM_DEFENSIVE
-	XM_CLAMP2F(out_lr[0], 1.f, -1.f);
-	XM_CLAMP2F(out_lr[1], 1.f, -1.f);
+	XM_CLAMP2F(*out_left, 1.f, -1.f);
+	XM_CLAMP2F(*out_right, 1.f, -1.f);
 	#endif
 }
 
@@ -1401,7 +1400,19 @@ void xm_generate_samples(xm_context_t* ctx,
 	ctx->generated_samples += numsamples;
 	#endif
 	for(uint16_t i = 0; i < numsamples; i++, output += 2) {
-		xm_sample(ctx, output);
+		xm_sample(ctx, output, output + 1);
+	}
+}
+
+void xm_generate_samples_noninterleaved(xm_context_t* ctx,
+                                        float* out_left,
+                                        float* out_right,
+                                        uint16_t numsamples) {
+	#if XM_TIMING_FUNCTIONS
+	ctx->generated_samples += numsamples;
+	#endif
+	for(uint16_t i = 0; i < numsamples; ++i) {
+		xm_sample(ctx, out_left++, out_right++);
 	}
 }
 

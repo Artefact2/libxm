@@ -144,6 +144,16 @@ __attribute__((nonnull));
 void xm_generate_samples(xm_context_t*, float* output, uint16_t numsamples)
 __attribute__((nonnull(1)));
 
+/** Same as xm_generate_samples(), but do not interleave audio frames.
+ *
+ * @param output_left[.numsamples] buffer of numsamples elements
+ * @param output_right[.numsamples] buffer of numsamples elements
+ */
+void xm_generate_samples_noninterleaved(xm_context_t*, float* output_left,
+                                        float* output_right,
+                                        uint16_t numsamples)
+__attribute__((nonnull(1)));
+
 /** Same as xm_generate_samples(), but does not mix down the channels. For
  * instance, for a 4-channel module, one audio frame is 8 floats (LRLRLRLR).
  *
