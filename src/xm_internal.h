@@ -43,10 +43,13 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 
 /* ----- XM constants ----- */
 
-#define SAMPLE_NAME_LENGTH 22
-#define INSTRUMENT_NAME_LENGTH 22
-#define MODULE_NAME_LENGTH 20
-#define TRACKER_NAME_LENGTH 20
+/* These are the lengths we store in the context, including the terminating
+   NUL, not necessarily the lengths of strings in loaded formats. */
+#define SAMPLE_NAME_LENGTH 24
+#define INSTRUMENT_NAME_LENGTH 24
+#define MODULE_NAME_LENGTH 24
+#define TRACKER_NAME_LENGTH 24
+
 #define PATTERN_ORDER_TABLE_LENGTH 256
 #define NUM_NOTES 96
 #define MAX_ENVELOPE_POINTS 12
@@ -138,10 +141,8 @@ struct xm_sample_s {
 	int8_t relative_note;
 
 	#if XM_STRINGS
-	/* Pad the name length to a multiple of 8, this makes struct packing
-	   easier */
-	static_assert(SAMPLE_NAME_LENGTH < 24); /* name[23] is for \0 */
-	char name[24];
+	static_assert(SAMPLE_NAME_LENGTH % 8 == 0);
+	char name[SAMPLE_NAME_LENGTH];
 	#endif
 };
 typedef struct xm_sample_s xm_sample_t;
@@ -165,8 +166,8 @@ struct xm_instrument_s {
 	bool muted;
 
 	#if XM_STRINGS
-	static_assert(INSTRUMENT_NAME_LENGTH < 24);
-	char name[24];
+	static_assert(INSTRUMENT_NAME_LENGTH % 8 == 0);
+	char name[INSTRUMENT_NAME_LENGTH];
 	#endif
 
 	char __pad[2];
@@ -206,10 +207,10 @@ struct xm_module_s {
 	} frequency_type;
 
 	#if XM_STRINGS
-	static_assert(MODULE_NAME_LENGTH < 24);
-	static_assert(TRACKER_NAME_LENGTH < 24);
-	char name[24];
-	char trackername[24];
+	static_assert(MODULE_NAME_LENGTH % 8 == 0);
+	static_assert(TRACKER_NAME_LENGTH % 8 == 0);
+	char name[MODULE_NAME_LENGTH];
+	char trackername[TRACKER_NAME_LENGTH];
 	#endif
 
 	char __pad[2];

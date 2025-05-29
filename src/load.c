@@ -457,10 +457,12 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 	xm_module_t* mod = &(ctx->module);
 
 	/* Read XM header */
-#if XM_STRINGS
-	READ_MEMCPY(mod->name, offset + 17, MODULE_NAME_LENGTH);
-	READ_MEMCPY(mod->trackername, offset + 38, TRACKER_NAME_LENGTH);
-#endif
+	#if XM_STRINGS
+	static_assert(MODULE_NAME_LENGTH >= 21); /* +1 for NUL */
+	static_assert(TRACKER_NAME_LENGTH >= 21);
+	READ_MEMCPY(mod->name, offset + 17, 20);
+	READ_MEMCPY(mod->trackername, offset + 38, 20);
+	#endif
 	offset += 60;
 
 	/* Read module header */
@@ -666,8 +668,8 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
                                           uint32_t moddata_length,
                                           uint32_t offset) {
 	#if XM_STRINGS
-	READ_MEMCPY(instr->name, offset + 4, INSTRUMENT_NAME_LENGTH);
-	instr->name[INSTRUMENT_NAME_LENGTH] = 0;
+	static_assert(INSTRUMENT_NAME_LENGTH >= 23); /* +1 for NUL */
+	READ_MEMCPY(instr->name, offset + 4, 22);
 	#endif
 
 	uint32_t ins_header_size = READ_U32(offset);
@@ -903,8 +905,8 @@ static uint32_t xm_load_xm0104_sample_header(xm_sample_t* sample, bool* is_16bit
 	sample->relative_note = (int8_t)READ_U8(offset + 16);
 
 	#if XM_STRINGS
-	READ_MEMCPY(sample->name, offset + 18, SAMPLE_NAME_LENGTH);
-	sample->name[SAMPLE_NAME_LENGTH] = 0;
+	static_assert(SAMPLE_NAME_LENGTH >= 23); /* +1 for NUL */
+	READ_MEMCPY(sample->name, offset + 18, 22);
 	#endif
 
 	*is_16bit = flags & SAMPLE_FLAG_16B;
