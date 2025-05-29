@@ -1091,8 +1091,15 @@ static bool xm_prescan_mod(const char* moddata, uint32_t moddata_length,
 
 	for(uint8_t i = 0; i < p->num_samples; ++i) {
 		static_assert(MAX_INSTRUMENTS * UINT16_MAX <= UINT32_MAX);
-		p->samples_data_length +=
-			(uint32_t)(READ_U16BE(20 + 30*i + 22) * 2);
+		uint32_t length = (uint32_t)(READ_U16BE(42 + 30*i) * 2);
+		uint32_t loop_start = (uint32_t)(READ_U16BE(46 + 30*i) * 2);
+		uint32_t loop_length = (uint32_t)(READ_U16BE(48 + 30*i) * 2);
+		if(loop_length > 2) {
+			length = TRIM_SAMPLE_LENGTH(length, loop_start,
+			                            loop_length,
+			                            SAMPLE_FLAG_FORWARD);
+		}
+		p->samples_data_length += length;
 	}
 
 	p->pot_length = READ_U8(950);
@@ -1147,10 +1154,6 @@ static void xm_load_mod(xm_context_t* ctx,
 		READ_MEMCPY(ins->name, offset, 22);
 		#endif
 
-		smp->length = (uint32_t)(READ_U16BE(offset + 22) * 2);
-		smp->index = ctx->module.samples_data_length;
-		ctx->module.samples_data_length += smp->length;
-
 		uint8_t finetune = READ_U8(offset + 24);
 		if(finetune >= 16) {
 			NOTICE("ignoring invalid finetune of sample %u (%u)",
@@ -1169,14 +1172,15 @@ static void xm_load_mod(xm_context_t* ctx,
 		smp->volume = (unsigned)volume & 0x7F;
 		smp->panning = MAX_PANNING/2;
 
+		smp->length = (uint32_t)(READ_U16BE(offset + 22) * 2);
+		smp->index = smp->length;
 		uint32_t loop_start = (uint32_t)(READ_U16BE(offset + 26) * 2);
 		uint32_t loop_length = (uint32_t)(READ_U16BE(offset + 28) * 2);
 		if(loop_length > 2) {
-			/* XXX: also do this logic in prescan */
-			/* smp->length = TRIM_SAMPLE_LENGTH(smp->length, */
-			/*                                  loop_start, */
-			/*                                  loop_length, */
-			/*                                  SAMPLE_FLAG_FORWARD); */
+			smp->length = TRIM_SAMPLE_LENGTH(smp->length,
+			                                 loop_start,
+			                                 loop_length,
+			                                 SAMPLE_FLAG_FORWARD);
 			smp->loop_length = loop_length;
 		}
 
@@ -1271,11 +1275,13 @@ static void xm_load_mod(xm_context_t* ctx,
 	/* Read sample data */
 	for(uint8_t i = 0; i < ctx->module.num_instruments; ++i) {
 		xm_sample_point_t* out = ctx->samples_data
-			+ ctx->samples[i].index;
-		for(uint32_t k = ctx->samples[i].length; k; --k) {
-			*out++ = SAMPLE_POINT_FROM_S8((int8_t)READ_U8(offset));
-			offset += 1;
+			+ ctx->module.samples_data_length;
+		for(uint32_t k = 0; k < ctx->samples[i].length; ++k) {
+			*out++ = SAMPLE_POINT_FROM_S8((int8_t)READ_U8(offset+k));
 		}
+		offset += ctx->samples[i].index;
+		ctx->samples[i].index = ctx->module.samples_data_length;
+		ctx->module.samples_data_length += ctx->samples[i].length;
 	}
 
 	xm_pattern_slot_t* slot = ctx->pattern_slots;
