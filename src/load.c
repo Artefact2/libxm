@@ -60,11 +60,20 @@
 	  (loop_start + (loop_start + loop_length > length ? 0 : loop_length)) \
 	   )) : length)
 
+#define SAMPLE_POINT_FROM_S8(v) \
+	_Generic((xm_sample_point_t){}, int8_t: v, int16_t: (v * 256), \
+	         float: (float)v / (float)INT8_MAX)
+
+#define SAMPLE_POINT_FROM_S16(v) \
+	_Generic((xm_sample_point_t){}, int8_t: xm_dither_16b_8b(v), \
+		int16_t: v, float: (float)v / (float)INT16_MAX)
+
 struct xm_prescan_data_s {
 	uint32_t context_size;
 	static_assert(MAX_PATTERNS * MAX_ROWS_PER_PATTERN <= 0xFFFFFF);
 	enum:uint8_t {
 		XM_FORMAT_XM0104,
+		XM_FORMAT_MOD,
 	} format;
 	uint32_t num_rows:24;
 	uint32_t samples_data_length;
@@ -93,6 +102,8 @@ static uint32_t xm_load_xm0104_sample_header(xm_sample_t*, bool*, const char*, u
 static void xm_load_xm0104_8b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 static void xm_load_xm0104_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 
+static bool xm_prescan_mod(const char*, uint32_t, xm_prescan_data_t*);
+static void xm_load_mod(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
 
 /* ----- Function definitions ----- */
 
@@ -117,11 +128,93 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length,
 	   && moddata[59] == 0x01
 	   && moddata[58] == 0x04) {
 		out->format = XM_FORMAT_XM0104;
-		return xm_prescan_xm0104(moddata, moddata_length, out);
+		if(xm_prescan_xm0104(moddata, moddata_length, out)) {
+			goto end;
+		} else {
+			return false;
+		}
+	}
+
+	/* XXX: detect 15 sample MODs? */
+	if(moddata_length >= 154+31*30) {
+		out->num_instruments = 31;
+		out->format = XM_FORMAT_MOD;
+		bool load = false;
+
+		const char chn = moddata[150+31*30];
+		const char chn2 = moddata[151+31*30];
+		const char chn3 = moddata[153+31*30];
+
+		if(memcmp("M.K.", moddata + 150+31*30, 4) == 0
+		   || memcmp("M!K!", moddata + 150+31*30, 4) == 0
+		   || memcmp("FLT4", moddata + 150+31*30, 4) == 0) {
+			out->num_channels = 4;
+			load = true;
+		} else if(memcmp("CD81", moddata + 150+31*30, 4) == 0
+		          || memcmp("OCTA", moddata + 150+31*30, 4) == 0
+		          || memcmp("OKTA", moddata + 150+31*30, 4) == 0
+		          || memcmp("FLT8", moddata + 150+31*30, 4) == 0) {
+			out->num_channels = 8;
+			load = true;
+		} else if(chn >= '1' && chn <= '9'
+		   && memcmp("CHN", moddata + 151+31*30, 3) == 0) {
+			out->num_channels = (uint8_t)(chn - '0');
+			load = true;
+		} else if(chn >= '1' && chn <= '9' && chn2 >= '0' && chn2 <= '9'
+		   && (memcmp("CH", moddata + 152+31*30, 2) == 0
+		       || memcmp("CN", moddata + 152+31*30, 2) == 0)) {
+			out->num_channels = (uint8_t)
+				(10 * (chn - '0') + chn2 - '0');
+			load = true;
+		} else if(chn3 >= '1' && chn3 <= '9'
+		   && memcmp("TDZ", moddata + 150+31*30, 3) == 0) {
+			out->num_channels = (uint8_t)(chn3 - '0');
+			load = true;
+		}
+
+		if(load) {
+			if(xm_prescan_mod(moddata, moddata_length, out)) {
+				goto end;
+			} else {
+				return false;
+			}
+		}
 	}
 
 	NOTICE("input data does not look like a supported module");
 	return false;
+
+ end:
+	uint32_t sz = sizeof(xm_context_t);
+	if(ckd_add(&sz, sz, sizeof(xm_pattern_t) * out->num_patterns)
+	   || ckd_add(&sz, sz, sizeof(xm_pattern_slot_t)
+	              * out->num_rows * out->num_channels)
+	   || ckd_add(&sz, sz, sizeof(xm_instrument_t) * out->num_instruments)
+	   || ckd_add(&sz, sz, sizeof(xm_sample_t) * out->num_samples)
+	   || ckd_add(&sz, sz, sizeof(xm_sample_point_t)
+	              * out->samples_data_length)
+	   || ckd_add(&sz, sz, sizeof(xm_channel_context_t) * out->num_channels)
+	   || ckd_add(&sz, sz, sizeof(uint8_t) * MAX_ROWS_PER_PATTERN
+	              * out->pot_length)) {
+		NOTICE("module too big for uint32");
+		return false;
+	}
+	if(XM_DEFENSIVE && sz > 128 << 20) {
+		NOTICE("module is suspiciously large (%u bytes), aborting load "
+		       "as this is probably a corrupt/malicious file, "
+		       "or a bug in libxm", sz);
+		return false;
+	}
+
+	out->context_size = (uint32_t)sz;
+
+	NOTICE("read %d patterns, %d channels, %d rows, %d instruments, "
+	       "%d samples, %d sample frames, %d pot length",
+	      out->num_patterns, out->num_channels, out->num_rows,
+	      out->num_instruments, out->num_samples,
+	      out->samples_data_length, out->pot_length);
+
+	return true;
 }
 
 xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
@@ -170,6 +263,10 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 	switch(p->format) {
 	case XM_FORMAT_XM0104:
 		xm_load_xm0104(ctx, moddata, moddata_length);
+		break;
+
+	case XM_FORMAT_MOD:
+		xm_load_mod(ctx, moddata, moddata_length, p);
 		break;
 
 	default:
@@ -436,35 +533,6 @@ static bool xm_prescan_xm0104(const char* moddata, uint32_t moddata_length,
 
 		offset += inst_samples_bytes;
 	}
-
-	uint32_t sz = sizeof(xm_context_t);
-	if(ckd_add(&sz, sz, sizeof(xm_pattern_t) * out->num_patterns)
-	   || ckd_add(&sz, sz, sizeof(xm_pattern_slot_t)
-	              * out->num_rows * out->num_channels)
-	   || ckd_add(&sz, sz, sizeof(xm_instrument_t) * out->num_instruments)
-	   || ckd_add(&sz, sz, sizeof(xm_sample_t) * out->num_samples)
-	   || ckd_add(&sz, sz, sizeof(xm_sample_point_t)
-	              * out->samples_data_length)
-	   || ckd_add(&sz, sz, sizeof(xm_channel_context_t) * out->num_channels)
-	   || ckd_add(&sz, sz, sizeof(uint8_t) * MAX_ROWS_PER_PATTERN
-	              * out->pot_length)) {
-		NOTICE("module too big for uint32");
-		return false;
-	}
-	if(XM_DEFENSIVE && sz > 128 << 20) {
-		NOTICE("module is suspiciously large (%u bytes), aborting load "
-		       "as this is probably a corrupt/malicious file, "
-		       "or a bug in libxm", sz);
-		return false;
-	}
-
-	out->context_size = (uint32_t)sz;
-
-	NOTICE("read %d patterns, %d channels, %d rows, %d instruments, "
-	       "%d samples, %d sample frames, %d pot length",
-	      out->num_patterns, out->num_channels, out->num_rows,
-	      out->num_instruments, out->num_samples,
-	      out->samples_data_length, out->pot_length);
 
 	return true;
 }
@@ -948,10 +1016,7 @@ static void xm_load_xm0104_8b_sample_data(uint32_t length,
 	for(uint32_t k = 0; k < length; ++k) {
 		s = READ_U8(offset + k);
 		v += (int8_t)s;
-		out[k] = _Generic((xm_sample_point_t){},
-		                  int8_t: v,
-		                  int16_t: (v * 256),
-		                  float: (float)v / (float)INT8_MAX);
+		out[k] = SAMPLE_POINT_FROM_S8(v);
 	}
 }
 
@@ -963,10 +1028,7 @@ static void xm_load_xm0104_16b_sample_data(uint32_t length,
 	int16_t v = 0;
 	for(uint32_t k = 0; k < length; ++k) {
 		v += (int16_t)READ_U16(offset + (k << 1));
-		out[k] = _Generic((xm_sample_point_t){},
-		                  int8_t: xm_dither_16b_8b(v),
-		                  int16_t: v,
-		                  float: (float)v / (float)INT16_MAX);
+		out[k] = SAMPLE_POINT_FROM_S16(v);
 	}
 }
 
@@ -1014,5 +1076,201 @@ static void xm_load_xm0104(xm_context_t* ctx,
 		offset = xm_load_xm0104_instrument(ctx, ctx->instruments + i,
 		                                   moddata, moddata_length,
 		                                   offset);
+	}
+}
+
+/* ----- Amiga .MOD (M.K., xCHN, etc.): big endian ------ */
+
+static bool xm_prescan_mod(const char* moddata, uint32_t moddata_length,
+                           xm_prescan_data_t* p) {
+	assert(p->num_instruments > 0 && p->num_instruments <= MAX_INSTRUMENTS);
+	assert(p->num_channels > 0 && p->num_channels <= MAX_CHANNELS);
+
+	p->num_samples = p->num_instruments;
+	p->samples_data_length = 0;
+
+	for(uint8_t i = 0; i < p->num_samples; ++i) {
+		static_assert(MAX_INSTRUMENTS * UINT16_MAX <= UINT32_MAX);
+		p->samples_data_length +=
+			(uint32_t)(READ_U16BE(20 + 30*i + 22) * 2);
+	}
+
+	p->pot_length = READ_U8(950);
+	p->num_patterns = 0;
+	for(uint8_t i = 0; i < 128; ++i) {
+		uint8_t pval = READ_U8(952 + i);
+		if(pval >= p->num_patterns) {
+			p->num_patterns = pval + 1;
+		}
+	}
+	p->num_rows = (uint32_t)(64u * p->num_patterns);
+
+	uint32_t min_sz = (uint32_t)(1084u + p->num_rows * p->num_channels * 4u
+	                             + p->samples_data_length);
+	if(moddata_length < min_sz) {
+		NOTICE("mod file too small, expected more bytes (%u < %u)",
+		       moddata_length, min_sz);
+		return false;
+	}
+
+	return true;
+}
+
+static void xm_load_mod(xm_context_t* ctx,
+                        const char* moddata, uint32_t moddata_length,
+                        const xm_prescan_data_t* p) {
+	#if XM_STRINGS
+	static_assert(MODULE_NAME_LENGTH >= 21); /* +1 for NUL */
+	READ_MEMCPY(ctx->module.name, 0, 20);
+	#endif
+
+	ctx->module.frequency_type = XM_AMIGA_FREQUENCIES;
+	ctx->bpm = 125;
+	ctx->tempo = 6;
+
+	ctx->module.num_channels = p->num_channels;
+	ctx->module.num_instruments = p->num_instruments;
+	ctx->module.num_samples = p->num_samples;
+	assert(p->num_instruments == p->num_samples);
+
+	uint32_t offset = 20;
+
+	/* Read instruments */
+	for(uint8_t i = 0; i < ctx->module.num_samples; ++i) {
+		xm_instrument_t* ins = ctx->instruments + i;
+		xm_sample_t* smp = ctx->samples + i;
+
+		#if XM_STRINGS
+		static_assert(INSTRUMENT_NAME_LENGTH >= 23); /* +1 for NUL */
+		READ_MEMCPY(ins->name, offset, 22);
+		#endif
+
+		smp->length = (uint32_t)(READ_U16BE(offset + 22) * 2);
+		smp->index = ctx->module.samples_data_length;
+		ctx->module.samples_data_length += smp->length;
+
+		uint8_t finetune = READ_U8(offset + 24);
+		if(finetune >= 16) {
+			NOTICE("ignoring invalid finetune of sample %u (%u)",
+			       i+1, finetune);
+			finetune = 8;
+		}
+		smp->finetune = (int8_t)((finetune < 8 ? finetune
+		                         : finetune - 16) * 2);
+
+		uint8_t volume = READ_U8(offset + 25);
+		if(volume > MAX_VOLUME) {
+			NOTICE("clamping volume of sample %u (%u -> %u)",
+			       i+1, volume, MAX_VOLUME);
+			volume = MAX_VOLUME;
+		}
+		smp->volume = (unsigned)volume & 0x7F;
+		smp->panning = MAX_PANNING/2;
+
+		uint32_t loop_start = (uint32_t)(READ_U16BE(offset + 26) * 2);
+		uint32_t loop_length = (uint32_t)(READ_U16BE(offset + 28) * 2);
+		if(loop_length > 2) {
+			/* XXX: also do this logic in prescan */
+			/* smp->length = TRIM_SAMPLE_LENGTH(smp->length, */
+			/*                                  loop_start, */
+			/*                                  loop_length, */
+			/*                                  SAMPLE_FLAG_FORWARD); */
+			smp->loop_length = loop_length;
+		}
+
+		ins->num_samples = 1;
+		ins->samples_index = i;
+		static_assert(MAX_ENVELOPE_POINTS < 128);
+		ins->volume_envelope.num_points = 128;
+		ins->panning_envelope.num_points = 128;
+
+		offset += 30;
+	}
+
+	ctx->module.length = p->pot_length;
+	ctx->module.num_patterns = p->num_patterns;
+	ctx->module.num_rows = p->num_rows;
+	static_assert(128 <= PATTERN_ORDER_TABLE_LENGTH);
+	READ_MEMCPY(ctx->module.pattern_table, offset + 2, 128);
+	offset += 134;
+
+	/* Read patterns */
+	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
+		xm_pattern_t* pat = ctx->patterns + i;
+		pat->num_rows = 64;
+		pat->rows_index = 64 * i;
+
+		for(uint16_t j = 0; j < ctx->module.num_channels * pat->num_rows; ++j) {
+			xm_pattern_slot_t* slot = ctx->pattern_slots
+				+ pat->rows_index * ctx->module.num_channels
+				+ j;
+			/* 0bSSSSppppppppppppSSSSeeeePPPPPPPP
+			     ^ upper nibble of sample number
+			                     ^ lower nibble of sample number
+			         ^ period
+			                         ^ effect type
+			                             ^ effect param */
+			uint32_t x = READ_U32BE(offset);
+			offset += 4;
+			slot->instrument = (uint8_t)
+				(((x & 0xF0000000) >> 24) | ((x >> 12) & 0x0F));
+			slot->effect_type = (uint8_t)((x >> 8) & 0x0F);
+			slot->effect_param = (uint8_t)(x & 0xFF);
+
+			/* XXX */
+			uint16_t period = (uint16_t)((x >> 16) & 0x0FFF);
+			switch(period) {
+			case 0: break;
+			case 113: slot->note = 72; break;
+			case 120: slot->note = 71; break;
+			case 127: slot->note = 70; break;
+			case 135: slot->note = 69; break;
+			case 143: slot->note = 68; break;
+			case 151: slot->note = 67; break;
+			case 160: slot->note = 66; break;
+			case 170: slot->note = 65; break;
+			case 180: slot->note = 64; break;
+			case 190: slot->note = 63; break;
+			case 202: slot->note = 62; break;
+			case 214: slot->note = 61; break;
+			case 226: slot->note = 60; break;
+			case 240: slot->note = 59; break;
+			case 254: slot->note = 58; break;
+			case 269: slot->note = 57; break;
+			case 285: slot->note = 56; break;
+			case 302: slot->note = 55; break;
+			case 320: slot->note = 54; break;
+			case 339: slot->note = 53; break;
+			case 360: slot->note = 52; break;
+			case 381: slot->note = 51; break;
+			case 404: slot->note = 50; break;
+			case 428: slot->note = 49; break;
+			case 453: slot->note = 48; break;
+			case 480: slot->note = 47; break;
+			case 508: slot->note = 46; break;
+			case 538: slot->note = 45; break;
+			case 570: slot->note = 44; break;
+			case 604: slot->note = 43; break;
+			case 640: slot->note = 42; break;
+			case 678: slot->note = 41; break;
+			case 720: slot->note = 40; break;
+			case 762: slot->note = 39; break;
+			case 808: slot->note = 38; break;
+			case 856: slot->note = 37; break;
+			default:
+				NOTICE("ignored period %u", period);
+				break;
+			}
+		}
+	}
+
+	/* Read sample data */
+	for(uint8_t i = 0; i < ctx->module.num_instruments; ++i) {
+		xm_sample_point_t* out = ctx->samples_data
+			+ ctx->samples[i].index;
+		for(uint32_t k = ctx->samples[i].length; k; --k) {
+			*out++ = SAMPLE_POINT_FROM_S8((int8_t)READ_U8(offset));
+			offset += 1;
+		}
 	}
 }
