@@ -1238,7 +1238,10 @@ static void xm_load_mod(xm_context_t* ctx,
 			uint16_t period = (uint16_t)((x >> 16) & 0x0FFF);
 			if(period > 0) {
 				/* XXX */
-				if(period >= 906) {
+				if(period >= 1820) {
+					period = (uint16_t)((period + 16) / 32);
+					slot->note = 13;
+				} else if(period >= 906) {
 					period = (uint16_t)((period + 8) / 16);
 					slot->note = 25;
 				} else if(period >= 452) {
