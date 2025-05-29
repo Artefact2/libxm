@@ -1217,49 +1217,32 @@ static void xm_load_mod(xm_context_t* ctx,
 			slot->effect_type = (uint8_t)((x >> 8) & 0x0F);
 			slot->effect_param = (uint8_t)(x & 0xFF);
 
-			/* XXX */
 			uint16_t period = (uint16_t)((x >> 16) & 0x0FFF);
-			switch(period) {
-			case 0: break;
-			case 113: slot->note = 72; break;
-			case 120: slot->note = 71; break;
-			case 127: slot->note = 70; break;
-			case 135: slot->note = 69; break;
-			case 143: slot->note = 68; break;
-			case 151: slot->note = 67; break;
-			case 160: slot->note = 66; break;
-			case 170: slot->note = 65; break;
-			case 180: slot->note = 64; break;
-			case 190: slot->note = 63; break;
-			case 202: slot->note = 62; break;
-			case 214: slot->note = 61; break;
-			case 226: slot->note = 60; break;
-			case 240: slot->note = 59; break;
-			case 254: slot->note = 58; break;
-			case 269: slot->note = 57; break;
-			case 285: slot->note = 56; break;
-			case 302: slot->note = 55; break;
-			case 320: slot->note = 54; break;
-			case 339: slot->note = 53; break;
-			case 360: slot->note = 52; break;
-			case 381: slot->note = 51; break;
-			case 404: slot->note = 50; break;
-			case 428: slot->note = 49; break;
-			case 453: slot->note = 48; break;
-			case 480: slot->note = 47; break;
-			case 508: slot->note = 46; break;
-			case 538: slot->note = 45; break;
-			case 570: slot->note = 44; break;
-			case 604: slot->note = 43; break;
-			case 640: slot->note = 42; break;
-			case 678: slot->note = 41; break;
-			case 720: slot->note = 40; break;
-			case 762: slot->note = 39; break;
-			case 808: slot->note = 38; break;
-			case 856: slot->note = 37; break;
-			default:
-				NOTICE("ignored period %u", period);
-				break;
+			if(period > 0) {
+				/* XXX */
+				if(period >= 906) {
+					period = (uint16_t)((period + 8) / 16);
+					slot->note = 25;
+				} else if(period >= 452) {
+					period = (uint16_t)((period + 4) / 8);
+					slot->note = 37;
+				} else if(period >= 225) {
+					period = (uint16_t)((period + 2) / 4);
+					slot->note = 49;
+				} else if(period >= 112) {
+					period = (uint16_t)((period + 1) / 2);
+					slot->note = 61;
+				} else {
+					slot->note = 73;
+				}
+
+				static uint8_t x[] =
+					{ 106, 100, 94, 89, 84, 79,
+					   75,  70, 66, 63, 59 };
+				assert(period < 113);
+				for(uint8_t i = 0;
+				    i < 11 && period < x[i];
+				    ++i, ++slot->note);
 			}
 		}
 	}
