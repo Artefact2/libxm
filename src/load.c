@@ -1195,6 +1195,7 @@ static void xm_load_mod(xm_context_t* ctx,
 	offset += 134;
 
 	/* Read patterns */
+	bool has_panning_effects = false;
 	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
 		xm_pattern_t* pat = ctx->patterns + i;
 		pat->num_rows = 64;
@@ -1216,6 +1217,18 @@ static void xm_load_mod(xm_context_t* ctx,
 				(((x & 0xF0000000) >> 24) | ((x >> 12) & 0x0F));
 			slot->effect_type = (uint8_t)((x >> 8) & 0x0F);
 			slot->effect_param = (uint8_t)(x & 0xFF);
+
+			/* Convert E8x to 8xx */
+			if(slot->effect_type == 0xE
+			   && slot->effect_param >> 4 == 0x8) {
+				slot->effect_type = 0x8;
+				slot->effect_param =
+					(slot->effect_param >> 4) * 0x11;
+			}
+
+			if(slot->effect_type == 0x8) {
+				has_panning_effects = true;
+			}
 
 			uint16_t period = (uint16_t)((x >> 16) & 0x0FFF);
 			if(period > 0) {
@@ -1254,6 +1267,19 @@ static void xm_load_mod(xm_context_t* ctx,
 		for(uint32_t k = ctx->samples[i].length; k; --k) {
 			*out++ = SAMPLE_POINT_FROM_S8((int8_t)READ_U8(offset));
 			offset += 1;
+		}
+	}
+
+	xm_pattern_slot_t* slot = ctx->pattern_slots;
+	for(uint32_t row = 0; row < ctx->module.num_rows; ++row) {
+		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+			/* Emulate hard panning (LRRL LRRL etc) */
+			if(!has_panning_effects && slot->instrument) {
+				slot->volume_column =
+					(((ch >> 1) ^ ch) & 1) ? 0xCF : 0xC0;
+			}
+
+			slot++;
 		}
 	}
 }
