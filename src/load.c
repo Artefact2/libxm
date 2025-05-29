@@ -1241,30 +1241,17 @@ static void xm_load_mod(xm_context_t* ctx,
 
 			uint16_t period = (uint16_t)((x >> 16) & 0x0FFF);
 			if(period > 0) {
-				/* XXX */
-				if(period >= 1820) {
-					period = (uint16_t)((period + 16) / 32);
-					slot->note = 13;
-				} else if(period >= 906) {
-					period = (uint16_t)((period + 8) / 16);
-					slot->note = 25;
-				} else if(period >= 452) {
-					period = (uint16_t)((period + 4) / 8);
-					slot->note = 37;
-				} else if(period >= 225) {
-					period = (uint16_t)((period + 2) / 4);
-					slot->note = 49;
-				} else if(period >= 112) {
-					period = (uint16_t)((period + 1) / 2);
-					slot->note = 61;
-				} else {
-					slot->note = 73;
+				slot->note = 73;
+				while(period >= 112) {
+					period += 1;
+					period /= 2;
+					slot->note -= 12;
 				}
 
-				static uint8_t x[] =
+				static const uint8_t x[] =
 					{ 106, 100, 94, 89, 84, 79,
 					   75,  70, 66, 63, 59 };
-				assert(period < 113);
+				assert(period < 112);
 				for(uint8_t i = 0;
 				    i < 11 && period < x[i];
 				    ++i, ++slot->note);

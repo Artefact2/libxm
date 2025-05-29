@@ -14,6 +14,9 @@ features:
 * Reasonable accuracy compared to Fasttracker 2. Deviations from FT2 playback,
   that aren't obviously bugs in FT2, are also libxm bugs.
 
+* Can load most XM/MOD files, however playback accuracy of non-XM is
+  best-effort.
+
 * Timing functions for synchronising against specific instruments,
   samples or channels.
 
