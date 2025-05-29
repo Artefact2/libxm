@@ -1293,6 +1293,37 @@ static void xm_load_mod(xm_context_t* ctx,
 					(((ch >> 1) ^ ch) & 1) ? 0xCF : 0xC0;
 			}
 
+			/* Imitate ProTracker 2/3 lacking effect memory for
+			   1xx/2xx/Axy (based on the MilkyTracker docs) */
+			if(slot->effect_param == 0) {
+				if(slot->effect_type == 0x1
+				   || slot->effect_type == 0x2
+				   || slot->effect_type == 0xA) {
+					slot->effect_type = 0;
+				}
+				if(slot->effect_type == 0x5
+				   || slot->effect_type == 0x6) {
+					slot->effect_type = 0x3;
+				}
+			}
+
+			/* Convert 0xy arpeggio from ProTracker 2/3 semantics to
+			   Fasttracker II semantics */
+			if(slot->effect_type == 0) {
+				/* 0xy -> 0yx */
+				slot->effect_param = (uint8_t)
+					((slot->effect_param << 4)
+					 | (slot->effect_param >> 4));
+			}
+
+			/* Convert E5y finetune from ProTracker 2/3 semantics to
+			   Fasttracker II semantics */
+			if(slot->effect_type == 0xE
+			   && slot->effect_param >> 4 == 0x5) {
+				/* E50 -> E58, E51 ->  E59, ..., E5F -> E57 */
+				slot->effect_param ^= 0b00001000;
+			}
+
 			slot++;
 		}
 	}
