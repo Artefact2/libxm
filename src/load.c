@@ -1130,6 +1130,8 @@ static void xm_load_mod(xm_context_t* ctx,
 
 	ctx->module.num_channels = p->num_channels;
 	ctx->module.num_instruments = p->num_instruments;
+	ctx->module.num_patterns = p->num_patterns;
+	ctx->module.num_rows = p->num_rows;
 	ctx->module.num_samples = p->num_samples;
 	assert(p->num_instruments == p->num_samples);
 
@@ -1187,9 +1189,12 @@ static void xm_load_mod(xm_context_t* ctx,
 		offset += 30;
 	}
 
-	ctx->module.length = p->pot_length;
-	ctx->module.num_patterns = p->num_patterns;
-	ctx->module.num_rows = p->num_rows;
+	ctx->module.length = READ_U8(offset);
+	/* Fasttracker reads byte 951 as the restart point */
+	ctx->module.restart_position = READ_U8(offset + 1);
+	if(ctx->module.restart_position >= ctx->module.length) {
+		ctx->module.restart_position = 0;
+	}
 	static_assert(128 <= PATTERN_ORDER_TABLE_LENGTH);
 	READ_MEMCPY(ctx->module.pattern_table, offset + 2, 128);
 	offset += 134;
