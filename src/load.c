@@ -21,19 +21,38 @@
 #define ASSERT_ALIGNED(ptr, type)                                       \
 	assert((uintptr_t)((void*)(ptr)) % alignof(type) == 0)
 
-/* Bounded reader macros (assume little-endian, .XM files always are).
+/* Bounded reader macros.
  * If we attempt to read the buffer out-of-bounds, pretend that the buffer is
  * infinitely padded with zeroes.
  */
-#define READ_U8_BOUND(offset, bound) ((uint8_t)(((offset) < (bound)) ? (*(uint8_t*)(moddata + (offset))) : 0))
-#define READ_U16_BOUND(offset, bound) ((uint16_t)((uint16_t)READ_U8_BOUND(offset, bound) | ((uint16_t)READ_U8_BOUND((offset) + 1, bound) << 8)))
-#define READ_U32_BOUND(offset, bound) ((uint32_t)((uint32_t)READ_U16_BOUND(offset, bound) | ((uint32_t)READ_U16_BOUND((offset) + 2, bound) << 16)))
-#define READ_MEMCPY_BOUND(ptr, offset, length, bound) memcpy_pad(ptr, length, moddata, bound, offset)
+#define READ_U8_BOUND(offset, bound) \
+	((uint8_t)(((uint32_t)(offset) < (uint32_t)(bound)) ? \
+	           (((uint8_t*)moddata)[offset]) : 0))
+
+#define READ_U16_BOUND(offset, bound) \
+	((uint16_t)((uint16_t)READ_U8_BOUND(offset, bound) \
+	            | ((uint16_t)READ_U8_BOUND((offset) + 1, bound) << 8)))
+#define READ_U16BE_BOUND(offset, bound) \
+	((uint16_t)(((uint16_t)READ_U8_BOUND(offset, bound) << 8) \
+	            | (uint16_t)READ_U8_BOUND((offset) + 1, bound)))
+
+#define READ_U32_BOUND(offset, bound) \
+	((uint32_t)((uint32_t)READ_U16_BOUND(offset, bound) \
+	            | ((uint32_t)READ_U16_BOUND((offset) + 2, bound) << 16)))
+#define READ_U32BE_BOUND(offset, bound) \
+	((uint32_t)(((uint32_t)READ_U16BE_BOUND(offset, bound) << 16) \
+	            | (uint32_t)READ_U16BE_BOUND((offset) + 2, bound)))
+
+#define READ_MEMCPY_BOUND(ptr, offset, length, bound) \
+	memcpy_pad(ptr, length, moddata, bound, offset)
 
 #define READ_U8(offset) READ_U8_BOUND(offset, moddata_length)
 #define READ_U16(offset) READ_U16_BOUND(offset, moddata_length)
+#define READ_U16BE(offset) READ_U16BE_BOUND(offset, moddata_length)
 #define READ_U32(offset) READ_U32_BOUND(offset, moddata_length)
-#define READ_MEMCPY(ptr, offset, length) READ_MEMCPY_BOUND(ptr, offset, length, moddata_length)
+#define READ_U32BE(offset) READ_U32BE_BOUND(offset, moddata_length)
+#define READ_MEMCPY(ptr, offset, length) \
+	READ_MEMCPY_BOUND(ptr, offset, length, moddata_length)
 
 #define TRIM_SAMPLE_LENGTH(length, loop_start, loop_length, flags) \
 	(flags & (SAMPLE_FLAG_PING_PONG | SAMPLE_FLAG_FORWARD) ?	\
@@ -274,7 +293,7 @@ xm_context_t* xm_create_context_from_libxm(char* data, uint16_t rate) {
 	return ctx;
 }
 
-/* ----- Fasttracker II (XM 0104) ----- */
+/* ----- Fasttracker II .XM (XM 0104): little endian ----- */
 
 static bool xm_prescan_xm0104(const char* moddata, uint32_t moddata_length,
                               xm_prescan_data_t* out) {
