@@ -329,9 +329,8 @@ struct xm_context_s {
 	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
 
 	uint8_t current_tick; /* Typically 0..(ctx->tempo) */
-	uint8_t extra_rows; /* Low nibble: how many times this row needs to be
-	                       repeated (EDy effect). High nibble: how many
-	                       times this row has been repeated already. */
+	uint8_t extra_rows;
+	uint8_t extra_rows_done;
 
 	uint8_t tempo; /* 0..MIN_BPM */
 	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
@@ -349,8 +348,8 @@ struct xm_context_s {
 	uint8_t max_loop_count;
 
 	#if XM_TIMING_FUNCTIONS
-	char __pad[5 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
+	char __pad[4 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
 	#else
-	char __pad[1];
+	//char __pad[0];
 	#endif
 };

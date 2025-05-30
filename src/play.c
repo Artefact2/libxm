@@ -344,7 +344,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 }
 
 [[maybe_unused]] static uint32_t xm_amiga_frequency(xm_channel_context_t* ch) {
-	if(ch->period == 0) return 0;
+	assert(ch->period > 0);
 	float p = (float)ch->period
 		* exp2f(-0.0832493329f * ((float)ch->arp_note_offset + (float)ch->autovibrato_note_offset / 64.f));
 	p -= (float)ch->vibrato_offset;
@@ -903,18 +903,17 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 static void xm_tick(xm_context_t* ctx) {
 	if(ctx->current_tick >= ctx->tempo) {
 		ctx->current_tick = 0;
-	}
-	if(ctx->current_tick == 0) {
-		ctx->extra_rows += 16;
+		ctx->extra_rows_done++;
 	}
 
 	/* Are we in the first tick of a new row? (Ie, not tick 0 of a repeated
 	   row with EDy) */
 	bool new_row_tick_zero = ctx->current_tick == 0
-		&& (ctx->extra_rows >> 4) > (ctx->extra_rows % 16);
+		&& (!ctx->extra_rows || ctx->extra_rows_done > ctx->extra_rows);
 
 	if(new_row_tick_zero) {
 		ctx->extra_rows = 0;
+		ctx->extra_rows_done = 0;
 		xm_row(ctx);
 	}
 
@@ -934,10 +933,9 @@ static void xm_tick(xm_context_t* ctx) {
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
+		if(!ch->period) continue;
 
-		if(ch->period) {
-			ch->step = xm_frequency(ctx, ch);
-		}
+		ch->step = xm_frequency(ctx, ch);
 		/* Guard against uint32_t overflow */
 		static_assert(SAMPLE_MICROSTEPS <= 1 << 12);
 		/* For A#9 and +127 finetune, frequency is about 535K */
