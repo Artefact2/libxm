@@ -192,7 +192,7 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	};
 
 	uint8_t y = ch->multi_retrig_param & 0x0F;
-	if(y == 0 || ctx->current_tick % y) return;
+	if(ch->instrument == NULL || y == 0 || ctx->current_tick % y) return;
 
 	xm_trigger_instrument(ctx, ch);
 
@@ -205,7 +205,8 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	static_assert(MAX_VOLUME <= (UINT8_MAX / 3));
 	uint8_t x = ch->multi_retrig_param >> 4;
 	if(ch->volume < sub[x]) ch->volume = sub[x];
-	ch->volume = ((ch->volume - sub[x] + add[x]) * mul[x]) / div[x];
+	ch->volume = (uint8_t)
+		(((ch->volume - sub[x] + add[x]) * mul[x]) / div[x]);
 	if(ch->volume > MAX_VOLUME) ch->volume = MAX_VOLUME;
 }
 
