@@ -628,6 +628,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			break;
 
 		case 0xE: /* EEy: Pattern delay */
+			/* Loop current row y times. Tick effects *are* applied
+			   on tick 0 of repeated rows. */
 			ctx->extra_rows = (ch->current->effect_param & 0x0F);
 			break;
 
@@ -889,7 +891,20 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 }
 
 static void xm_tick(xm_context_t* ctx) {
+	if(ctx->current_tick >= ctx->tempo) {
+		ctx->current_tick = 0;
+	}
 	if(ctx->current_tick == 0) {
+		ctx->extra_rows += 16;
+	}
+
+	/* Are we in the first tick of a new row? (Ie, not tick 0 of a repeated
+	   row with EDy) */
+	bool new_row_tick_zero = ctx->current_tick == 0
+		&& (ctx->extra_rows >> 4) > (ctx->extra_rows % 16);
+
+	if(new_row_tick_zero) {
+		ctx->extra_rows = 0;
 		xm_row(ctx);
 	}
 
@@ -902,7 +917,7 @@ static void xm_tick(xm_context_t* ctx) {
 		xm_tick_envelopes(ch);
 		xm_autovibrato(ch);
 
-		if(ctx->current_tick > 0) {
+		if(!new_row_tick_zero) {
 			xm_tick_effects(ctx, ch);
 		}
 	}
@@ -921,8 +936,8 @@ static void xm_tick(xm_context_t* ctx) {
 		/* Don't truncate, actually round up or down, precision matters
 		   here (rounding lets us use 0.5 instead of 1 in the error
 		   formula, see SAMPLE_MICROSTEPS comment) */
-		ch->step = ch->step / ctx->rate
-			+ ((ch->step % ctx->rate) << 1 > ctx->rate);
+		ch->step += ctx->rate / 2;
+		ch->step /= ctx->rate;
 
 		uint8_t panning = (uint8_t)
 			(ch->panning
@@ -951,7 +966,7 @@ static void xm_tick(xm_context_t* ctx) {
 		float volume =  (float)base / (float)(INT32_MAX);
 		assert(volume >= 0.f && volume <= 1.f);
 
-#if XM_RAMPING
+		#if XM_RAMPING
 		/* See https://modarchive.org/forums/index.php?topic=3517.0
 		 * and https://github.com/Artefact2/libxm/pull/16 */
 		ch->target_volume[0] = volume
@@ -959,29 +974,16 @@ static void xm_tick(xm_context_t* ctx) {
 			        / (float)MAX_PANNING);
 		ch->target_volume[1] = volume
 			* sqrtf((float)panning / (float)MAX_PANNING);
-#else
+		#else
 		ch->actual_volume[0] = volume
 			* sqrtf((float)(MAX_PANNING - panning)
 			        / (float)MAX_PANNING);
 		ch->actual_volume[1] = volume * sqrtf((float)panning
 		                                      / (float)MAX_PANNING);
-#endif
+		#endif
 	}
 
 	ctx->current_tick++;
-	if(ctx->current_tick >= ctx->tempo) {
-		if(ctx->extra_rows) {
-			/* Only restart after one extra tick, and restart at
-			   tick 1 instead (this is important for
-			   xm_tick_effects()). */
-			if(ctx->current_tick > ctx->tempo) {
-				--ctx->extra_rows;
-				ctx->current_tick = 1;
-			}
-		} else {
-			ctx->current_tick = 0;
-		}
-	}
 
 	/* FT2 manual says number of ticks / second = BPM * 0.4 */
 	static_assert(_Generic(ctx->remaining_samples_in_tick,

@@ -329,7 +329,9 @@ struct xm_context_s {
 	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
 
 	uint8_t current_tick; /* Typically 0..(ctx->tempo) */
-	uint8_t extra_rows; /* See EEy Pattern Delay effect */
+	uint8_t extra_rows; /* Low nibble: how many times this row needs to be
+	                       repeated (EDy effect). High nibble: how many
+	                       times this row has been repeated already. */
 
 	uint8_t tempo; /* 0..MIN_BPM */
 	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
