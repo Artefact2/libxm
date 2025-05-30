@@ -8,7 +8,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang)$")
 	target_compile_options(xm_common INTERFACE
 		"$<$<CONFIG:MinSizeRel>:-Oz>"
 		"$<$<CONFIG:MinSizeRel>:-ffast-math>"
-		-Wall -Wextra -Wpedantic -Wpadded -Wdouble-promotion -Wvla
+		-Wall -Wextra -Wpedantic -Wconversion
+		-Wpadded -Wdouble-promotion -Wvla
 	)
 	target_link_options(xm_common INTERFACE
 		"$<$<CONFIG:MinSizeRel>:-z>"

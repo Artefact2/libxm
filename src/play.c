@@ -121,7 +121,9 @@ static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
 		return (step < 0x20) ? -sin_lut[idx] : sin_lut[idx];
 
 	case 1: /* Ramp down */
-		return INT8_MAX - step * 4;
+		assert(step < 0x40);
+		static_assert(INT8_MIN + 0x3F * 4 <= INT8_MAX);
+		return (int8_t)(INT8_MIN + step * 4);
 
 	case 3: /* Random */
 		/* Use the POSIX.1-2001 example, just to be deterministic
@@ -142,14 +144,16 @@ static void xm_autovibrato(xm_channel_context_t* ch) {
 	   and up. Its full range at depth F seems to be about the same as
 	   E24 (=4/16=1/4 semitone). */
 
-	ch->autovibrato_note_offset =
-		(xm_waveform(instr->vibrato_type,
-		             instr->vibrato_rate * ch->autovibrato_ticks >> 2)
-		 - 128) * instr->vibrato_depth / 256;
+	ch->autovibrato_note_offset = (int8_t)
+		(((int16_t)xm_waveform(instr->vibrato_type,
+		                       (uint8_t)(ch->autovibrato_ticks
+		                                 * instr->vibrato_rate / 4))
+		  - 128) * instr->vibrato_depth / 256);
 
 	if(ch->autovibrato_ticks < instr->vibrato_sweep) {
-		ch->autovibrato_note_offset = ch->autovibrato_note_offset
-			* ch->autovibrato_ticks / instr->vibrato_sweep;
+		ch->autovibrato_note_offset = (int8_t)
+			((int16_t)ch->autovibrato_note_offset
+			* ch->autovibrato_ticks / instr->vibrato_sweep);
 	}
 
 	ch->autovibrato_ticks++;
@@ -157,9 +161,10 @@ static void xm_autovibrato(xm_channel_context_t* ch) {
 
 static void xm_vibrato(xm_channel_context_t* ch) {
 	/* Depth 8 == 2 semitones amplitude (-1 then +1) */
-	ch->vibrato_offset =
-		xm_waveform(ch->vibrato_control_param, ch->vibrato_ticks)
-		* (ch->vibrato_param & 0x0F) / 0x10;
+	ch->vibrato_offset = (int8_t)
+		((int16_t)xm_waveform(ch->vibrato_control_param,
+		                      ch->vibrato_ticks)
+		 * (ch->vibrato_param & 0x0F) / 0x10);
 	ch->vibrato_ticks += (ch->vibrato_param >> 4);
 }
 
@@ -171,9 +176,10 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 	   row (has no effect on Spd=1). */
 	/* Like Txy: Tremor, tremolo effect *persists* after the end of the
 	   effect, but is reset after any volume command. */
-	ch->volume_offset =
-		-xm_waveform(ch->tremolo_control_param, ch->tremolo_ticks)
-		* (ch->tremolo_param & 0x0F) * 4 / 128;
+	ch->volume_offset = (int8_t)
+		(-(int16_t)xm_waveform(ch->tremolo_control_param,
+		                       ch->tremolo_ticks)
+		* (ch->tremolo_param & 0x0F) * 4 / 128);
 	ch->tremolo_ticks += (ch->tremolo_param >> 4);
 }
 
@@ -302,8 +308,11 @@ static uint8_t xm_envelope_lerp(const xm_envelope_point_t* restrict a,
 	assert(a->frame < b->frame);
 	static_assert(MAX_ENVELOPE_VALUE <= UINT8_MAX);
 	if(pos >= b->frame) return b->value;
-	return (b->value * (pos - a->frame) + a->value * (b->frame - pos))
-		/ (b->frame - a->frame);
+	uint32_t val = (uint32_t)
+		(b->value * (uint16_t)(pos - a->frame)
+		 + a->value * (uint16_t)(b->frame - pos));
+	val /= (uint16_t)(b->frame - a->frame);
+	return (uint8_t)val;
 }
 
 static void xm_post_pattern_change(xm_context_t* ctx) {
@@ -908,14 +917,13 @@ static void xm_tick(xm_context_t* ctx) {
 		ch->step = ch->step / ctx->rate
 			+ ((ch->step % ctx->rate) << 1 > ctx->rate);
 
-		uint8_t panning;
-		float volume;
-
-		panning = ch->panning
-			+ (ch->panning_envelope_panning - MAX_ENVELOPE_VALUE/2)
-			* (MAX_PANNING/2
-			   - __builtin_abs(ch->panning - MAX_PANNING/2))
-			/ (MAX_ENVELOPE_VALUE/2);
+		uint8_t panning = (uint8_t)
+			(ch->panning
+			 + (ch->panning_envelope_panning
+			    - MAX_ENVELOPE_VALUE / 2)
+			 * (MAX_PANNING/2
+			    - __builtin_abs(ch->panning - MAX_PANNING / 2))
+			 / (MAX_ENVELOPE_VALUE / 2));
 
 		assert(ch->volume <= MAX_VOLUME);
 		assert(ch->volume_offset >= -MAX_VOLUME
@@ -933,7 +941,7 @@ static void xm_tick(xm_context_t* ctx) {
 		base *= ch->fadeout_volume;
 		base /= 4;
 		base *= ctx->global_volume;
-		volume =  (float)base / (float)(INT32_MAX);
+		float volume =  (float)base / (float)(INT32_MAX);
 		assert(volume >= 0.f && volume <= 1.f);
 
 #if XM_RAMPING

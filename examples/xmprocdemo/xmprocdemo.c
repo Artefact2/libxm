@@ -16,7 +16,7 @@ static xm_context_t* ctx;
 static float buffer[256];
 int pipe_fd[2]; /* 0 => read end, 1 => write end */
 
-static alignas(max_align_t) char libxm_data[] = {
+static alignas(max_align_t) unsigned char libxm_data[] = {
 #embed "mus.libxm"
 };
 
@@ -74,7 +74,7 @@ int main() {
 
 	if(fork()) {
 		/* parent */
-		ctx = xm_create_context_from_libxm(libxm_data, 48000);
+		ctx = xm_create_context_from_libxm((char*)libxm_data, 48000);
 		gen_waveforms();
 
 		xm_set_max_loop_count(ctx, 1);
