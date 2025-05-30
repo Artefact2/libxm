@@ -503,14 +503,23 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 				| ((s->volume_column & 0x0F) << 4);
 			break;
 
+		case 0xF: /* Mx: Tone portamento */
+			/* Unlike most other effects, Mx/3xx memory *is* set
+			   even at Spd=1 */
+			if(s->volume_column & 0x0F) {
+				ch->tone_portamento_param =
+					(s->volume_column & 0x0F) * 0x11;
+			}
+
 		}
 	}
 
 	switch(s->effect_type) {
 
 	case 3: /* 3xx: Tone portamento */
+		/* Unlike most other effects, Mx/3xx memory *is* set even at
+		   Spd=1 */
 		if(s->effect_param > 0) {
-			/* XXX: test me */
 			ch->tone_portamento_param = s->effect_param;
 		}
 		break;
@@ -1038,10 +1047,6 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 0xF: /* Mx: Tone portamento */
-		if(ch->current->volume_column & 0x0F) {
-			ch->tone_portamento_param =
-				(ch->current->volume_column & 0x0F) * 0x11;
-		}
 		xm_tone_portamento(ch);
 		break;
 
