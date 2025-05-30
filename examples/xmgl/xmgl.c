@@ -17,15 +17,17 @@
 #include <string.h>
 #include <math.h>
 #include <assert.h>
+#include <limits.h>
 
 #define MAX_CHANNELS 32
-#define NUM_TIMING 32 // keep this many channel timing infos for latency
-		      // compensation
-#define TIMING_FRAME_SIZE 256 // record channel timing info every X generated audio
-			  // frames
-#define GL_FRAMES_AVG_COUNT 60 // measure display latency over this many video
-			       // frames (running average)
-#define AOT_TIMING_FRAMES 4 // pre-generate this many timing frames ahead of time, for latency compensation
+#define NUM_TIMING 32  /* keep this many channel timing infos for latency
+                          compensation */
+#define TIMING_FRAME_SIZE 256 /* record channel timing info every X generated
+                                 audio frames */
+#define GL_FRAMES_AVG_COUNT 60 /* measure display latency over this many video
+                                  frames (running average) */
+#define AOT_TIMING_FRAMES 4 /* pre-generate this many timing frames ahead of
+                               time, for latency compensation */
 
 static const char hlines_vs[] = {
 #embed "hlines.vs.c"
@@ -84,23 +86,27 @@ static bool paused = false;
 static jack_client_t* client;
 static jack_port_t* left;
 static jack_port_t* right;
-static unsigned int rate;
-static jack_nframes_t time_basis = 0; /* absolute time (from jack) at which we started rendering the first audio frames from libxm */
-static uint64_t jack_latency = 0;
+static jack_nframes_t rate;
+static jack_nframes_t time_basis = 0; /* absolute time (from jack) at which we
+                                         started rendering the first audio
+                                         frames from libxm */
+static jack_nframes_t jack_latency = 0;
 
 static xm_context_t* xmctx;
 static uint8_t loop = 1;
 
-static uint16_t channels, instruments;
+static uint8_t channels, instruments;
 
-static GLuint vertexn, elementn, programs[2], curprog = 0, varrayn, xmgu, xmdatau, xmciu;
-const GLfloat vertices[] = {
+static GLuint vertexn, elementn, programs[2], curprog = 0, varrayn;
+static GLint xmgu, xmdatau, xmciu;
+
+static const GLfloat vertices[] = {
 	-1.f, -1.f,
 	1.f, -1.f,
 	1.f, 1.f,
 	-1.f, 1.f,
 };
-const GLbyte indices[] = {
+static const GLbyte indices[] = {
 	0, 1, 2,
 	2, 3, 0
 };
@@ -110,14 +116,16 @@ struct channel_timing_info {
 	float frequency;
 	float volume;
 	float panning;
-	uint16_t instrument;
+	uint8_t instrument;
 	bool active;
-	char __pad[1];
+	char __pad[2];
 };
 
 struct module_timing_info {
-	struct channel_timing_info channels[NUM_TIMING][MAX_CHANNELS]; // ring buffer
-	uint32_t audio_frames[NUM_TIMING]; // timestamps in audio frames of each cti
+	/* ring buffer */
+	struct channel_timing_info channels[NUM_TIMING][MAX_CHANNELS];
+	/* timestamps in audio frames of each cti */
+	uint32_t audio_frames[NUM_TIMING];
 	size_t latest_cti_idx;
 };
 
@@ -130,8 +138,8 @@ static size_t first_aot_timing_frame_idx = 0;
 static jack_nframes_t glf_total = 0;
 static jack_nframes_t glf_times[GL_FRAMES_AVG_COUNT];
 static jack_nframes_t glf_last = 0;
-static uint64_t gl_framecount = 0;
-static uint64_t gl_latency = 0;
+static short unsigned int gl_framecount = 0;
+static jack_nframes_t gl_latency = 0;
 
 static void usage(const char* progname) {
 	fprintf(stderr,
@@ -150,9 +158,10 @@ static void usage(const char* progname) {
 
 static void generate_timing_frame(float* lbuf, float* rbuf, jack_nframes_t tframes) {
 	mti.latest_cti_idx = (mti.latest_cti_idx + 1) % NUM_TIMING;
-	xm_generate_samples_noninterleaved(xmctx, lbuf, rbuf, tframes);
+	assert(tframes <= UINT16_MAX);
+	xm_generate_samples_noninterleaved(xmctx, lbuf, rbuf, (uint16_t)tframes);
 	xm_get_position(xmctx, NULL, NULL, NULL, &(mti.audio_frames[mti.latest_cti_idx]));
-	for(size_t k = 1; k <= channels; ++k) {
+	for(uint8_t k = 1; k <= channels; ++k) {
 		struct channel_timing_info* chn = &(mti.channels[mti.latest_cti_idx][k-1]);
 		chn->active = xm_is_channel_active(xmctx, k);
 		chn->instrument = xm_get_instrument_of_channel(xmctx, k);
@@ -163,7 +172,7 @@ static void generate_timing_frame(float* lbuf, float* rbuf, jack_nframes_t tfram
 	}
 }
 
-int jack_process_callback(jack_nframes_t nframes, __attribute__((unused)) void* arg) {
+static int jack_process_callback(jack_nframes_t nframes, __attribute__((unused)) void* arg) {
 	float* lbuf = jack_port_get_buffer(left, nframes);
 	float* rbuf = jack_port_get_buffer(right, nframes);
 
@@ -178,7 +187,7 @@ int jack_process_callback(jack_nframes_t nframes, __attribute__((unused)) void* 
 		return 0;
 	}
 
-	size_t tframes;
+	jack_nframes_t tframes;
 	if(nframes >= TIMING_FRAME_SIZE) {
 		assert(nframes % TIMING_FRAME_SIZE == 0);
 		tframes = TIMING_FRAME_SIZE;
@@ -210,7 +219,7 @@ int jack_process_callback(jack_nframes_t nframes, __attribute__((unused)) void* 
 	return 0;
 }
 
-void jack_latency_callback(jack_latency_callback_mode_t mode, __attribute__((unused)) void* arg) {
+static void jack_latency_callback(jack_latency_callback_mode_t mode, __attribute__((unused)) void* arg) {
 	if(mode == JackCaptureLatency) return;
 
 	jack_latency_range_t range;
@@ -228,7 +237,7 @@ static void switch_program(void) {
 	glUseProgram(programs[curprog]);
 }
 
-void keyfun(GLFWwindow* window, int key, __attribute__((unused)) int scancode, int action, __attribute__((unused)) int mods) {
+static void keyfun(GLFWwindow* window, int key, __attribute__((unused)) int scancode, int action, __attribute__((unused)) int mods) {
 	if(action != GLFW_PRESS) return;
 
 	if(key == GLFW_KEY_ESCAPE) {
@@ -236,7 +245,7 @@ void keyfun(GLFWwindow* window, int key, __attribute__((unused)) int scancode, i
 	}
 }
 
-void charfun(GLFWwindow* window, unsigned int codepoint) {
+static void charfun(GLFWwindow* window, unsigned int codepoint) {
 	if(codepoint == 'q' || codepoint == 'Q') {
 		glfwSetWindowShouldClose(window, GL_TRUE);
 	} else if(codepoint == ' ') {
@@ -258,7 +267,7 @@ void charfun(GLFWwindow* window, unsigned int codepoint) {
 	}
 }
 
-static xm_context_t* create_context_from_file(uint32_t rate, const char* filename) {
+static xm_context_t* create_context_from_file(uint16_t rate, const char* filename) {
 	xm_context_t* ctx = NULL;
 	char* xm_data = NULL;
 	FILE* xmfile = NULL;
@@ -276,18 +285,28 @@ static xm_context_t* create_context_from_file(uint32_t rate, const char* filenam
 		goto end;
 	}
 
-	xm_data = malloc(size = ftell(xmfile));
+	size = ftell(xmfile);
+	if(size < 0) {
+		perror("ftell");
+		goto end;
+	}
+	static_assert(SIZE_MAX >= UINT32_MAX);
+	if(size > UINT32_MAX) {
+		fprintf(stderr, "module file too large\n");
+		goto end;
+	}
+	xm_data = malloc((size_t)size);
 	if(xm_data == NULL) goto end;
 
 	rewind(xmfile);
-	if(!fread(xm_data, size, 1, xmfile)) {
+	if(!fread(xm_data, (size_t)size, 1, xmfile)) {
 		perror("fread");
 		goto end;
 	}
 
 	prescan_data = alloca(XM_PRESCAN_DATA_SIZE);
 	xm_prescan_data_t* p = (xm_prescan_data_t*)prescan_data;
-	if(xm_prescan_module(xm_data, size, p) == false) {
+	if(xm_prescan_module(xm_data, (uint32_t)size, p) == false) {
 		fprintf(stderr, "xm_prescan_module() failed\n");
 		goto end;
 	}
@@ -295,12 +314,23 @@ static xm_context_t* create_context_from_file(uint32_t rate, const char* filenam
 	uint32_t ctx_size = xm_size_for_context(p);
 	char* ctx_data = malloc(ctx_size);
 	if(ctx_data == NULL) goto end;
-	ctx = xm_create_context(ctx_data, p, xm_data, size, rate);
+	ctx = xm_create_context(ctx_data, p, xm_data, (uint32_t)size, rate);
 
  end:
 	if(xm_data) free(xm_data);
 	if(xmfile) fclose(xmfile);
 	return ctx;
+}
+
+static int parse_int(char* s) {
+	char* end;
+	long a = strtol(s, &end, 0);
+	static_assert(LONG_MAX >= INT_MAX);
+	if(*s == 0 || *end != 0 || a >= INT_MAX || a <= INT_MIN) {
+		fprintf(stderr, "error parsing integer: '%s'\n", s);
+		exit(1);
+	}
+	return (int)a;
 }
 
 static void setup(int argc, char** argv) {
@@ -317,7 +347,7 @@ static void setup(int argc, char** argv) {
 				fprintf(stderr, "%s: expected argument after %s\n", argv[0], argv[i]);
 				exit(1);
 			}
-			width = strtoul(argv[i+1], NULL, 0);
+			width = parse_int(argv[i+1]);
 			++i;
 			continue;
 		}
@@ -327,7 +357,7 @@ static void setup(int argc, char** argv) {
 				fprintf(stderr, "%s: expected argument after %s\n", argv[0], argv[i]);
 				exit(1);
 			}
-			height = strtoul(argv[i+1], NULL, 0);
+			height = parse_int(argv[i+1]);
 			++i;
 			continue;
 		}
@@ -337,7 +367,7 @@ static void setup(int argc, char** argv) {
 				fprintf(stderr, "%s: expected argument after %s\n", argv[0], argv[i]);
 				exit(1);
 			}
-			interval = strtoul(argv[i+1], NULL, 0);
+			interval = parse_int(argv[i+1]);
 			++i;
 			continue;
 		}
@@ -367,7 +397,8 @@ static void setup(int argc, char** argv) {
 				fprintf(stderr, "%s: expected argument after %s\n", argv[0], argv[i]);
 				exit(1);
 			}
-			curprog = strtoul(argv[i+1], NULL, 0);
+			int x = parse_int(argv[i+1]);
+			curprog = x >= 0 ? (unsigned int)x : 0;
 			curprog %= sizeof(programs) / sizeof(programs[0]);
 			++i;
 			continue;
@@ -430,14 +461,24 @@ static void setup(int argc, char** argv) {
 	jack_set_process_callback(client, jack_process_callback, NULL);
 	jack_set_latency_callback(client, jack_latency_callback, NULL);
 	rate = jack_get_sample_rate(client);
-	printf("Using JACK sample rate: %d Hz\n", rate);
+	if(rate > UINT16_MAX) {
+		fprintf(stderr, "unsupported sample rate (%u > %u)\n",
+		        rate, UINT16_MAX);
+		exit(1);
+	}
+	printf("Using JACK sample rate: %u Hz\n", rate);
 
 	left = jack_port_register(client, "Left", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput | JackPortIsTerminal, 0);
 	right = jack_port_register(client, "Right", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput | JackPortIsTerminal, 0);
 
-	xmctx = create_context_from_file(rate, argv[filenameidx]);
+	xmctx = create_context_from_file((uint16_t)rate, argv[filenameidx]);
 	if(xmctx == NULL) exit(1);
 	channels = xm_get_number_of_channels(xmctx);
+	if(channels > MAX_CHANNELS) {
+		fprintf(stderr, "too many channels (%u > %u)\n",
+		        channels, MAX_CHANNELS);
+		exit(1);
+	}
 	instruments = xm_get_number_of_instruments(xmctx);
 	mti.latest_cti_idx = NUM_TIMING - 1;
 
@@ -530,7 +571,8 @@ static void render(void) {
 	glf_total += now - glf_last;
 	glf_last = now;
 	gl_latency = glf_total / GL_FRAMES_AVG_COUNT; // assume 1 display frame latency on average
-	gl_framecount = (gl_framecount + 1) % GL_FRAMES_AVG_COUNT;
+	gl_framecount += 1;
+	gl_framecount %= GL_FRAMES_AVG_COUNT;
 }
 
 int main(int argc, char** argv) {
