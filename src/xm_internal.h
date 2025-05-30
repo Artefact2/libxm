@@ -7,13 +7,11 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
 #include <xm.h>
-#include <stdlib.h>
 #include <math.h>
 #include <string.h>
-#include <assert.h>
 #include <stdckdint.h>
 
-#if XM_DEFENSIVE
+#if XM_VERBOSE
 #include <stdio.h>
 #define NOTICE(fmt, ...) do {                                           \
 		fprintf(stderr, "%s(): " fmt "\n", __func__ __VA_OPT__(,) __VA_ARGS__); \
@@ -23,9 +21,11 @@
 #define NOTICE(...)
 #endif
 
-#if NDEBUG || !XM_DEFENSIVE
+#if NDEBUG
 #define UNREACHABLE() __builtin_unreachable()
+#define assert(x) (void)(x)
 #else
+#include <assert.h>
 #define UNREACHABLE() assert(0)
 #endif
 

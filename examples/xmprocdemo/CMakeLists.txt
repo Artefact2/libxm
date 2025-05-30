@@ -5,7 +5,7 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 # Force a few options for this specific example (we're always playing back the
 # same module anyway)
-foreach(X XM_DEFENSIVE XM_LINEAR_INTERPOLATION
+foreach(X XM_VERBOSE XM_LINEAR_INTERPOLATION
 		XM_RAMPING XM_LIBXM_DELTA_SAMPLES XM_STRINGS)
 	set(${X} OFF CACHE BOOL "" FORCE)
 endforeach()

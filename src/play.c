@@ -1367,11 +1367,6 @@ static void xm_sample_unmixed(xm_context_t* ctx, float* out_lr) {
 		assert(out_lr[2*i] >= -1.f);
 		assert(out_lr[2*i+1] <= 1.f);
 		assert(out_lr[2*i+1] >= -1.f);
-
-		#if XM_DEFENSIVE
-		XM_CLAMP2F(out_lr[2*i], 1.f, -1.f);
-		XM_CLAMP2F(out_lr[2*i+1], 1.f, -1.f);
-		#endif
 	}
 }
 
@@ -1392,11 +1387,6 @@ static void xm_sample(xm_context_t* ctx, float* out_left, float* out_right) {
 	assert(*out_left >= -ctx->module.num_channels);
 	assert(*out_right <= ctx->module.num_channels);
 	assert(*out_right >= -ctx->module.num_channels);
-
-	#if XM_DEFENSIVE
-	XM_CLAMP2F(*out_left, 1.f, -1.f);
-	XM_CLAMP2F(*out_right, 1.f, -1.f);
-	#endif
 }
 
 void xm_generate_samples(xm_context_t* ctx,

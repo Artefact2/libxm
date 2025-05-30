@@ -38,8 +38,8 @@ function(option_and_define name description default_value)
 	endif()
 endfunction()
 
-option_and_define(XM_DEFENSIVE
-	"Defensively check XM data for errors/inconsistencies (do not play unknown files with this OFF)"
+option_and_define(XM_VERBOSE
+	"Print informational messages to stderr"
 	"ON")
 
 option_and_define(XM_LINEAR_INTERPOLATION

@@ -199,7 +199,7 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length,
 		NOTICE("module too big for uint32");
 		return false;
 	}
-	if(XM_DEFENSIVE && sz > 128 << 20) {
+	if(sz > 128 << 20) {
 		NOTICE("module is suspiciously large (%u bytes), aborting load "
 		       "as this is probably a corrupt/malicious file, "
 		       "or a bug in libxm", sz);
@@ -484,7 +484,6 @@ static bool xm_prescan_xm0104(const char* moddata, uint32_t moddata_length,
 		uint32_t inst_samples_bytes = 0;
 		out->num_samples += num_samples;
 
-		#if XM_DEFENSIVE
 		/* Notice that, even if there's a "sample header size" in the
 		   instrument header, that value seems ignored, and might even
 		   be wrong in some corrupted modules. */
@@ -494,7 +493,6 @@ static bool xm_prescan_xm0104(const char* moddata, uint32_t moddata_length,
 				NOTICE("ignoring dodgy sample header size (%d) for instrument %d", sample_header_size, i+1);
 			}
 		}
-		#endif
 
 		/* Instrument header size */
 		offset += READ_U32(offset);
@@ -512,11 +510,9 @@ static bool xm_prescan_xm0104(const char* moddata, uint32_t moddata_length,
 			                                   flags);
 			if(flags & SAMPLE_FLAG_16B) {
 				/* 16-bit sample data */
-				#if XM_DEFENSIVE
 				if(sample_length % 2) {
 					NOTICE("sample %d of instrument %d is 16-bit with an odd length!", j, i+1);
 				}
-				#endif
 				sample_length /= 2;
 			}
 			uint32_t max = MAX_SAMPLE_LENGTH;
@@ -588,11 +584,9 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 	mod->frequency_type = (flags & 1) ?
 		XM_LINEAR_FREQUENCIES : XM_AMIGA_FREQUENCIES;
 
-	#if XM_DEFENSIVE
 	if(flags & 0b11111110) {
 		NOTICE("unknown flags set in module header (%d)", flags);
 	}
-	#endif
 
 	uint16_t tempo = READ_U16(offset + 16);
 	uint16_t bpm = READ_U16(offset + 18);
@@ -626,12 +620,10 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 	xm_pattern_slot_t* slots = ctx->pattern_slots
 		+ pat->rows_index * ctx->module.num_channels;
 
-	#if XM_DEFENSIVE
 	uint8_t packing_type = READ_U8(offset + 4);
 	if(packing_type != 0) {
 		NOTICE("unknown packing type %d in pattern", packing_type);
 	}
-	#endif
 
 	/* Pattern header length */
 	offset += READ_U32(offset);
@@ -741,11 +733,9 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 		}
 	}
 
-	#if XM_DEFENSIVE
 	if(k != pat->num_rows * ctx->module.num_channels) {
 		NOTICE("incomplete packed pattern data for pattern %ld, expected %u slots, got %u", pat - ctx->patterns, pat->num_rows * ctx->module.num_channels, k);
 	}
-	#endif
 	return offset + packed_patterndata_size;
 }
 
@@ -769,13 +759,11 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	uint32_t orig_moddata_length = moddata_length;
 	moddata_length = offset + ins_header_size;
 
-	#if XM_DEFENSIVE
 	uint8_t type = READ_U8(offset + 26);
 	if(type != 0) {
 		NOTICE("ignoring non-zero type %d on instrument %ld",
 		       type, (instr - ctx->instruments) + 1);
 	}
-	#endif
 
 	/* Prescan already checked MAX_SAMPLES_PER_INSTRUMENT */
 	static_assert(MAX_SAMPLES_PER_INSTRUMENT <= UINT8_MAX);
@@ -982,11 +970,9 @@ static uint32_t xm_load_xm0104_sample_header(xm_sample_t* sample, bool* is_16bit
 		sample->loop_length = 0;
 	}
 
-	#if XM_DEFENSIVE
 	if(flags & 0b11101100) {
 		NOTICE("ignoring unknown flags (%d) in sample", flags);
 	}
-	#endif
 
 	sample->panning = READ_U8(offset + 15);
 	sample->relative_note = (int8_t)READ_U8(offset + 16);
