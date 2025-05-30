@@ -274,12 +274,10 @@ static void xm_tone_portamento(xm_channel_context_t* ch) {
 
 static void xm_pitch_slide(xm_channel_context_t* ch,
                            int16_t period_offset) {
-	if(ch->period < -period_offset) {
-		ch->period = 0;
-	} else {
-		ch->period += period_offset;
-	}
 	/* XXX: upper bound of period ? */
+	if(ckd_add(&ch->period, ch->period, period_offset)) {
+		ch->period = period_offset >= 0 ? UINT16_MAX : 0;
+	}
 }
 
 static void xm_param_slide(uint8_t* param, uint8_t rawval, uint8_t max) {
