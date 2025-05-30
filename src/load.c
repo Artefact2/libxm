@@ -731,6 +731,12 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 			slot->effect_type = 0;
 			slot->note = KEY_OFF_NOTE;
 		}
+
+		if(slot->volume_column == 0xA0) {
+			/* Delete S0, it does nothing and saves a check in
+			   play.c. */
+			slot->volume_column = 0;
+		}
 	}
 
 	if(k != pat->num_rows * ctx->module.num_channels) {

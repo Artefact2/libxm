@@ -498,6 +498,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			break;
 
 		case 0xA: /* Sx: Set vibrato speed */
+			/* S0 does nothing, but is deleted in load.c */
 			ch->vibrato_param = (ch->vibrato_param & 0x0F)
 				| ((s->volume_column & 0x0F) << 4);
 			break;
