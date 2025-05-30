@@ -1202,16 +1202,15 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		if(ch->current->effect_param > 0) {
 			ch->tremor_param = ch->current->effect_param;
 		}
-		if(ch->tremor_ticks == 0) {
+		if(ch->tremor_ticks-- == 0) {
 			ch->tremor_on = !ch->tremor_on;
 			if(ch->tremor_on) {
-				ch->tremor_ticks = (ch->tremor_param >> 4) + 1;
+				ch->tremor_ticks = ch->tremor_param >> 4;
 			} else {
-				ch->tremor_ticks = (ch->tremor_param & 0xF) + 1;
+				ch->tremor_ticks = ch->tremor_param & 0xF;
 			}
 		}
 		ch->volume_offset = ch->tremor_on ? 0 : -MAX_VOLUME;
-		ch->tremor_ticks--;
 		break;
 	}
 }
