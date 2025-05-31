@@ -177,7 +177,7 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 	/* Like Txy: Tremor, tremolo effect *persists* after the end of the
 	   effect, but is reset after any volume command. */
 	ch->volume_offset = (int8_t)
-		(-(int16_t)xm_waveform(ch->tremolo_control_param,
+		((int16_t)xm_waveform(ch->tremolo_control_param,
 		                       ch->tremolo_ticks)
 		* (ch->tremolo_param & 0x0F) * 4 / 128);
 	ch->tremolo_ticks += (ch->tremolo_param >> 4);
@@ -256,12 +256,9 @@ static void xm_tone_portamento(xm_channel_context_t* ch) {
 	 * target note. */
 	if(ch->tone_portamento_target_period == 0) return;
 
-	/* Already done, don't bother updating frequency */
-	if(ch->period == ch->tone_portamento_target_period) return;
-
 	uint16_t incr = 4 * ch->tone_portamento_param;
 	if(ch->period > ch->tone_portamento_target_period) {
-		if(ch->period <= incr) {
+		if(ch->period < incr) {
 			ch->period = 0;
 		} else {
 			ch->period -= incr;
@@ -455,27 +452,14 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 	/* These volume effects always work, even when called with a delay by
 	   EDy. */
-	switch(s->volume_column >> 4) {
-
-	case 0x5:
-		if(s->volume_column > 0x50) break;
-		[[fallthrough]];
-	case 0x1:
-		[[fallthrough]];
-	case 0x2:
-		[[fallthrough]];
-	case 0x3:
-		[[fallthrough]];
-	case 0x4:
+	if(s->volume_column >= 0x10 && s->volume_column <= 0x50) {
 		/* Set volume */
 		ch->volume_offset = 0;
 		ch->volume = s->volume_column - 0x10;
-		break;
-
-	case 0xC: /* Px: Set panning */
+	}
+	if(s->volume_column >> 4 == 0xC) {
+		/* Px: Set panning */
 		ch->panning = (s->volume_column & 0x0F) * 0x11;
-		break;
-
 	}
 
 	if(ctx->current_tick == 0) {
@@ -645,7 +629,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 
 	case 0xF: /* Fxx: Set tempo/BPM */
-		if(s->effect_param >= MIN_BPM) {
+		static_assert(MIN_BPM == 0b00100000);
+		if(s->effect_param & 0b11100000) {
 			ctx->bpm = s->effect_param;
 		} else {
 			ctx->tempo = s->effect_param;
@@ -763,16 +748,15 @@ static void xm_key_off(xm_context_t* ctx, xm_channel_context_t* ch) {
 }
 
 static void xm_row(xm_context_t* ctx) {
-	if(ctx->position_jump) {
-		ctx->current_table_index = ctx->jump_dest;
+	if(ctx->position_jump || ctx->pattern_break) {
+		if(ctx->position_jump) {
+			ctx->current_table_index = ctx->jump_dest;
+		} else {
+			ctx->current_table_index++;
+		}
+
 		ctx->current_row = ctx->jump_row;
 		ctx->position_jump = false;
-		ctx->pattern_break = false;
-		ctx->jump_row = 0;
-		xm_post_pattern_change(ctx);
-	} else if(ctx->pattern_break) {
-		ctx->current_table_index++;
-		ctx->current_row = ctx->jump_row;
 		ctx->pattern_break = false;
 		ctx->jump_row = 0;
 		xm_post_pattern_change(ctx);
@@ -802,9 +786,7 @@ static void xm_row(xm_context_t* ctx) {
 			in_a_loop = true;
 		}
 
-		if(ch->arp_note_offset) {
-			ch->arp_note_offset = 0;
-		}
+		ch->arp_note_offset = 0;
 
 		if(ch->should_reset_vibrato && !HAS_VIBRATO(ch->current)) {
 			ch->should_reset_vibrato = false;
@@ -906,10 +888,8 @@ static void xm_tick(xm_context_t* ctx) {
 
 	/* Are we in the first tick of a new row? (Ie, not tick 0 of a repeated
 	   row with EDy) */
-	bool new_row_tick_zero = ctx->current_tick == 0
-		&& (!ctx->extra_rows || ctx->extra_rows_done > ctx->extra_rows);
-
-	if(new_row_tick_zero) {
+	if(ctx->current_tick == 0
+	   && (!ctx->extra_rows || ctx->extra_rows_done > ctx->extra_rows)) {
 		ctx->extra_rows = 0;
 		ctx->extra_rows_done = 0;
 		xm_row(ctx);
@@ -924,7 +904,7 @@ static void xm_tick(xm_context_t* ctx) {
 		xm_tick_envelopes(ch);
 		xm_autovibrato(ch);
 
-		if(!new_row_tick_zero) {
+		if(ctx->current_tick || ctx->extra_rows_done) {
 			xm_tick_effects(ctx, ch);
 		}
 	}
@@ -955,14 +935,14 @@ static void xm_tick(xm_context_t* ctx) {
 
 		assert(ch->volume <= MAX_VOLUME);
 		assert(ch->volume_offset >= -MAX_VOLUME
-		       && ch->volume_offset < MAX_VOLUME);
+		       && ch->volume_offset <= MAX_VOLUME);
 
 		static_assert(MAX_VOLUME == 1<<6);
 		static_assert(MAX_ENVELOPE_VALUE == 1<<6);
 		static_assert(MAX_FADEOUT_VOLUME == 1<<15);
 
 		/* 6 + 6 + 15 - 2 + 6 => 31 bits of range */
-		int32_t base = ch->volume + ch->volume_offset;
+		int32_t base = ch->volume - ch->volume_offset;
 		if(base < 0) base = 0;
 		else if(base > MAX_VOLUME) base = MAX_VOLUME;
 		base *= ch->volume_envelope_volume;
@@ -993,11 +973,11 @@ static void xm_tick(xm_context_t* ctx) {
 
 	/* FT2 manual says number of ticks / second = BPM * 0.4 */
 	static_assert(_Generic(ctx->remaining_samples_in_tick,
-	                       int32_t: true, default: false));
+	                       uint32_t: true, default: false));
 	static_assert(_Generic(ctx->rate, uint16_t: true, default: false));
 	static_assert(TICK_SUBSAMPLES % 4 == 0);
-	static_assert(10 * (TICK_SUBSAMPLES / 4) * UINT16_MAX <= INT32_MAX);
-	int32_t samples_in_tick = ctx->rate;
+	static_assert(10 * (TICK_SUBSAMPLES / 4) * UINT16_MAX <= UINT32_MAX);
+	uint32_t samples_in_tick = ctx->rate;
 	samples_in_tick *= 10 * TICK_SUBSAMPLES / 4;
 	samples_in_tick /= ctx->bpm;
 	ctx->remaining_samples_in_tick += samples_in_tick;
@@ -1227,7 +1207,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 				ch->tremor_ticks = ch->tremor_param & 0xF;
 			}
 		}
-		ch->volume_offset = ch->tremor_on ? 0 : -MAX_VOLUME;
+		ch->volume_offset = ch->tremor_on ? 0 : MAX_VOLUME;
 		break;
 	}
 }
@@ -1362,33 +1342,28 @@ static void xm_next_of_channel(xm_context_t* ctx, xm_channel_context_t* ch,
 }
 
 static void xm_sample_unmixed(xm_context_t* ctx, float* out_lr) {
-	if(ctx->remaining_samples_in_tick <= 0) {
+	if(ckd_sub(&ctx->remaining_samples_in_tick,
+	           ctx->remaining_samples_in_tick, TICK_SUBSAMPLES)) {
 		xm_tick(ctx);
 	}
-	ctx->remaining_samples_in_tick -= TICK_SUBSAMPLES;
 
-	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
-		out_lr[2*i] = 0.f;
-		out_lr[2*i+1] = 0.f;
-
+	for(uint8_t i = 0; i < ctx->module.num_channels; ++i, out_lr += 2) {
+		__builtin_memset(out_lr, 0, 2 * sizeof(float));
 		xm_next_of_channel(ctx, ctx->channels + i,
-		                   out_lr + 2*i, out_lr + 2*i+1);
+		                   out_lr, out_lr + 1);
 
-		assert(out_lr[2*i] <= 1.f);
-		assert(out_lr[2*i] >= -1.f);
-		assert(out_lr[2*i+1] <= 1.f);
-		assert(out_lr[2*i+1] >= -1.f);
+		assert(out_lr[0] <= 1.f);
+		assert(out_lr[0] >= -1.f);
+		assert(out_lr[1] <= 1.f);
+		assert(out_lr[1] >= -1.f);
 	}
 }
 
 static void xm_sample(xm_context_t* ctx, float* out_left, float* out_right) {
-	if(ctx->remaining_samples_in_tick <= 0) {
+	if(ckd_sub(&ctx->remaining_samples_in_tick,
+	           ctx->remaining_samples_in_tick, TICK_SUBSAMPLES)) {
 		xm_tick(ctx);
 	}
-	ctx->remaining_samples_in_tick -= TICK_SUBSAMPLES;
-
-	*out_left = 0.f;
-	*out_right = 0.f;
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_next_of_channel(ctx, ctx->channels + i, out_left, out_right);
@@ -1407,6 +1382,7 @@ void xm_generate_samples(xm_context_t* ctx,
 	ctx->generated_samples += numsamples;
 	#endif
 	for(uint16_t i = 0; i < numsamples; i++, output += 2) {
+		__builtin_memset(output, 0, 2 * sizeof(float));
 		xm_sample(ctx, output, output + 1);
 	}
 }
@@ -1419,6 +1395,8 @@ void xm_generate_samples_noninterleaved(xm_context_t* ctx,
 	ctx->generated_samples += numsamples;
 	#endif
 	for(uint16_t i = 0; i < numsamples; ++i) {
+		*out_left = 0.f;
+		*out_right = 0.f;
 		xm_sample(ctx, out_left++, out_right++);
 	}
 }

@@ -324,20 +324,20 @@ struct xm_context_s {
 	uint32_t generated_samples;
 	#endif
 
-	int32_t remaining_samples_in_tick; /* In 1/TICK_SUBSAMPLE increments */
+	uint32_t remaining_samples_in_tick; /* In 1/TICK_SUBSAMPLE increments */
 
 	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
 
 	uint8_t current_tick; /* Typically 0..(ctx->tempo) */
-	uint8_t extra_rows;
 	uint8_t extra_rows_done;
+	uint8_t current_row;
+	uint8_t extra_rows;
+
+	uint8_t current_table_index; /* 0..(module.length) */
+	uint8_t global_volume; /* 0..=MAX_VOLUME */
 
 	uint8_t tempo; /* 0..MIN_BPM */
 	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
-
-	uint8_t global_volume; /* 0..=MAX_VOLUME */
-	uint8_t current_table_index; /* 0..(module.length) */
-	uint8_t current_row;
 
 	bool position_jump;
 	bool pattern_break;
@@ -346,6 +346,7 @@ struct xm_context_s {
 
 	uint8_t loop_count;
 	uint8_t max_loop_count;
+
 
 	#if XM_TIMING_FUNCTIONS
 	char __pad[4 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
