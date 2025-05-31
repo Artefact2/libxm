@@ -222,32 +222,33 @@ static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
 	   reset. */
 	ch->vibrato_offset = 0;
 
-	uint8_t offset = ctx->tempo % 3;
-	switch(offset) {
-	case 2: /* 0 -> x -> 0 -> y -> x -> … */
-		if(ctx->current_tick == 1) {
-			ch->arp_note_offset = ch->current->effect_param >> 4;
-			return;
-		}
-		[[fallthrough]];
-	case 1: /* 0 -> 0 -> y -> x -> … */
-		if(ctx->current_tick == 0) {
-			ch->arp_note_offset = 0;
-			return;
-		}
-		break;
+	/* This can happen with eg EDy pattern delay */
+	if(ctx->current_tick == 0) {
+		ch->arp_note_offset = 0;
+		return;
 	}
 
-	switch((ctx->current_tick - offset) % 3) {
+	/* Emulate FT2 overflow quirk */
+	if(ctx->tempo - ctx->current_tick == 16) {
+		ch->arp_note_offset = 0;
+		return;
+	} else if(ctx->tempo - ctx->current_tick > 16) {
+		ch->arp_note_offset = ch->current->effect_param & 0x0F;
+		return;
+	}
+
+	switch((ctx->tempo - ctx->current_tick) % 3) {
 	case 0:
 		ch->arp_note_offset = 0;
 		break;
 	case 1:
-		ch->arp_note_offset = ch->current->effect_param & 0x0F;
-		break;
-	case 2:
 		ch->arp_note_offset = ch->current->effect_param >> 4;
 		break;
+	case 2:
+		ch->arp_note_offset = ch->current->effect_param & 0x0F;
+		break;
+	default:
+		UNREACHABLE();
 	}
 }
 
