@@ -448,6 +448,9 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 				xm_trigger_note(ctx, ch);
 			}
 		}
+	} else if(s->effect_type == 0x0E && s->effect_param == 0x90) {
+		/* E90 acts like a ghost note */
+		xm_trigger_note(ctx, ch);
 	}
 
 	/* These volume effects always work, even when called with a delay by
@@ -706,8 +709,6 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 static void xm_trigger_note([[maybe_unused]] xm_context_t* ctx,
                             xm_channel_context_t* ch) {
 	if(ch->sample == NULL) return;
-	/* Can be called by eg, key off note with EDy */
-	if(NOTE_IS_KEY_OFF(ch->current->note)) return;
 
 	ch->period = ch->orig_period;
 	ch->sample_position = 0;
@@ -1074,8 +1075,8 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		if(ch->current->effect_param > 0) {
 			ch->volume_slide_param = ch->current->effect_param;
 		}
-		ch->volume_offset = 0;
 		xm_tone_portamento(ch);
+		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
 		break;
 
@@ -1083,9 +1084,9 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		if(ch->current->effect_param > 0) {
 			ch->volume_slide_param = ch->current->effect_param;
 		}
-		ch->volume_offset = 0;
 		ch->should_reset_vibrato = true;
 		xm_vibrato(ch);
+		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
 		break;
 
@@ -1115,39 +1116,43 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		switch(ch->current->effect_param >> 4) {
 
 		case 0x9: /* E9y: Retrigger note */
-			/* XXX: what does E90 do? test this effect */
-			if(!(ch->current->effect_param & 0x0F)) break;
-			if(ctx->current_tick
-			   % (ch->current->effect_param & 0x0F)) break;
+			if((ch->current->effect_param & 0x0F) == 0
+			   || (ctx->current_tick
+			       % (ch->current->effect_param & 0x0F))) break;
+			/* XXX: refactor this, this is suspiciously similar to
+			   EDy, there is a simpler big picture  */
+			ch->volume_envelope_frame_count = 0;
+			ch->panning_envelope_frame_count = 0;
+			ch->sustained = true;
 			xm_trigger_note(ctx, ch);
 			xm_tick_envelopes(ch);
 			break;
 
 		case 0xC: /* ECy: Note cut */
 			/* XXX: test this effect */
-			if((ch->current->effect_param & 0x0F) == ctx->current_tick) {
-				xm_cut_note(ch);
-			}
+			if(ctx->current_tick
+			   != (ch->current->effect_param & 0x0F)) break;
+			xm_cut_note(ch);
 			break;
 
 		case 0xD: /* EDy: Note delay */
-			if(ch->note_delay_param == ctx->current_tick) {
-				xm_handle_pattern_slot(ctx, ch);
-				/* EDy (y>0) has a weird trigger mechanism,
-				   where it will reset sample position and
-				   period (except if we have a keyoff), and it
-				   will reset envelopes and sustain status but
-				   keep volume/panning (so it's not a true
-				   instrument trigger) */
-				ch->volume_envelope_frame_count = 0;
-				ch->panning_envelope_frame_count = 0;
-				ch->sustained = true;
+			if(ctx->current_tick != ch->note_delay_param) break;
+			xm_handle_pattern_slot(ctx, ch);
+			/* EDy (y>0) has a weird trigger mechanism, where it
+			   will reset sample position and period (except if we
+			   have a keyoff), and it will reset envelopes and
+			   sustain status but keep volume/panning (so it's not a
+			   true instrument trigger) */
+			ch->volume_envelope_frame_count = 0;
+			ch->panning_envelope_frame_count = 0;
+			ch->sustained = true;
+			if(!NOTE_IS_KEY_OFF(ch->current->note)) {
 				xm_trigger_note(ctx, ch);
-				xm_tick_envelopes(ch);
 			}
+			xm_tick_envelopes(ch);
 			break;
-
 		}
+
 		break;
 
 	case 17: /* Hxy: Global volume slide */
@@ -1159,9 +1164,8 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 20: /* Kxx: Key off (as tick effect) */
-		if(ctx->current_tick == ch->current->effect_param) {
-			xm_key_off(ctx, ch);
-		}
+		if(ctx->current_tick != ch->current->effect_param) break;
+		xm_key_off(ctx, ch);
 		break;
 
 	case 25: /* Pxy: Panning slide */
