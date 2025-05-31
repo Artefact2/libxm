@@ -90,6 +90,7 @@ const uint8_t XM_PRESCAN_DATA_SIZE = sizeof(xm_prescan_data_t);
 static void memcpy_pad(void*, size_t, const void*, size_t, size_t);
 static int8_t xm_dither_16b_8b(int16_t);
 static uint64_t xm_fnv1a(const unsigned char*, uint32_t);
+static void xm_fixup_context(xm_context_t*);
 
 static bool xm_prescan_xm0104(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_xm0104(xm_context_t*, const char*, uint32_t);
@@ -281,6 +282,8 @@ xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
 	assert(ctx->module.num_samples == p->num_samples);
 	assert(ctx->module.samples_data_length == p->samples_data_length);
 	assert(xm_context_size(ctx) == ctx_size);
+
+	xm_fixup_context(ctx);
 	return ctx;
 }
 
@@ -314,6 +317,79 @@ static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
 		h *= 1099511628211UL;
 	}
 	return h;
+}
+
+static void xm_fixup_context(xm_context_t* ctx) {
+	xm_pattern_slot_t* slot = ctx->pattern_slots;
+	static_assert(MAX_PATTERNS * MAX_ROWS_PER_PATTERN * MAX_CHANNELS
+	              <= UINT32_MAX);
+	for(uint32_t i = ctx->module.num_rows * ctx->module.num_channels;
+	    i; --i, ++slot) {
+		if(slot->note > 97) {
+			NOTICE("slot %lu: deleting invalid note %d",
+			       slot - ctx->pattern_slots, slot->note);
+			slot->note = 0;
+		} else if(slot->note == 97) {
+			slot->note = KEY_OFF_NOTE;
+		}
+
+		if(slot->effect_type == 0xB
+		   && slot->effect_param >= ctx->module.length) {
+			/* Convert invalid Bxx to B00 */
+			slot->effect_param = 0;
+		}
+
+		if(slot->effect_type == 0xC && slot->effect_param > MAX_VOLUME) {
+			/* Clamp Cxx */
+			slot->effect_param = MAX_VOLUME;
+		}
+
+		if(slot->effect_type == 0xE && slot->effect_param >> 4 == 8) {
+			/* Convert E8x to 8xx */
+			slot->effect_type = 8;
+			slot->effect_param = (slot->effect_param & 0xF) * 0x11;
+		}
+
+		if(slot->effect_type == 0xE && slot->effect_param == 0xC0) {
+			/* Convert EC0 to C00, this is exactly the same effect
+			   and saves us a switch case in play.c */
+			slot->effect_type = 0xC;
+			slot->effect_param = 0;
+		}
+
+		if(slot->effect_type == 0xE && slot->effect_param == 0xD0) {
+			/* Remove all ED0, these are completely useless and save
+			   us a check in play.c */
+			slot->effect_type = 0;
+			slot->effect_param = 0;
+		}
+
+		if(slot->effect_type == 0x0F && slot->effect_param == 0) {
+			/* Delete F00 (stops playback) */
+			slot->effect_type = 0;
+		}
+
+		if(slot->effect_type == 16 && slot->effect_param > MAX_VOLUME) {
+			/* Clamp Gxx */
+			slot->effect_param = MAX_VOLUME;
+		}
+
+		if(slot->effect_type == 20 && slot->effect_param == 0) {
+			/* Convert K00 to key off note. This is vital, as Kxx
+			   effect logic would otherwise be applied much later,
+			   and this has all kinds of nasty side effects when K00
+			   is used with either a note, or an instrument in the
+			   same slot. */
+			slot->effect_type = 0;
+			slot->note = KEY_OFF_NOTE;
+		}
+
+		if(slot->volume_column == 0xA0) {
+			/* Delete S0, it does nothing and saves a check in
+			   play.c. */
+			slot->volume_column = 0;
+		}
+	}
 }
 
 #define CALC_OFFSET(dest, orig) do { \
@@ -687,55 +763,6 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 			slot->effect_type = READ_U8(offset + j + 3);
 			slot->effect_param = READ_U8(offset + j + 4);
 			j += 5;
-		}
-
-		if(slot->note > 97) {
-			NOTICE("pattern %lu slot %lu: deleting invalid note %d",
-			       pat - ctx->patterns, slot - slots, slot->note);
-			slot->note = 0;
-		} else if(slot->note == 97) {
-			slot->note = KEY_OFF_NOTE;
-		}
-
-		if(slot->effect_type == 0x0E && slot->effect_param >> 4 == 8) {
-			/* Convert E8x to 8xx */
-			slot->effect_type = 8;
-			slot->effect_param = (slot->effect_param & 0xF) * 0x11;
-		}
-
-		if(slot->effect_type == 0xE && slot->effect_param == 0xC0) {
-			/* Convert EC0 to C00, this is exactly the same effect
-			   and saves us a switch case in play.c */
-			slot->effect_type = 0xC;
-			slot->effect_param = 0;
-		}
-
-		if(slot->effect_type == 0xE && slot->effect_param == 0xD0) {
-			/* Remove all ED0, these are completely useless and save
-			   us a check in play.c */
-			slot->effect_type = 0;
-			slot->effect_param = 0;
-		}
-
-		if(slot->effect_type == 0x0F && slot->effect_param == 0) {
-			/* Delete F00 (stops playback) */
-			slot->effect_type = 0;
-		}
-
-		if(slot->effect_type == 20 && slot->effect_param == 0) {
-			/* Convert K00 to key off note. This is vital, as Kxx
-			   effect logic would otherwise be applied much later,
-			   and this has all kinds of nasty side effects when K00
-			   is used with either a note, or an instrument in the
-			   same slot. */
-			slot->effect_type = 0;
-			slot->note = KEY_OFF_NOTE;
-		}
-
-		if(slot->volume_column == 0xA0) {
-			/* Delete S0, it does nothing and saves a check in
-			   play.c. */
-			slot->volume_column = 0;
 		}
 	}
 
@@ -1219,15 +1246,9 @@ static void xm_load_mod(xm_context_t* ctx,
 			slot->effect_type = (uint8_t)((x >> 8) & 0x0F);
 			slot->effect_param = (uint8_t)(x & 0xFF);
 
-			/* Convert E8x to 8xx */
-			if(slot->effect_type == 0xE
-			   && slot->effect_param >> 4 == 0x8) {
-				slot->effect_type = 0x8;
-				slot->effect_param =
-					(slot->effect_param >> 4) * 0x11;
-			}
-
-			if(slot->effect_type == 0x8) {
+			if(slot->effect_type == 0x8
+			   || (slot->effect_type == 0xE
+			       && slot->effect_param >> 4 == 0x8)) {
 				has_panning_effects = true;
 			}
 

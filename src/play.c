@@ -544,17 +544,15 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 
 	case 0xB: /* Bxx: Position jump */
-		if(s->effect_param < ctx->module.length) {
-			ctx->position_jump = true;
-			ctx->jump_dest = s->effect_param;
-			ctx->jump_row = 0;
-		}
+		ctx->position_jump = true;
+		ctx->jump_dest = s->effect_param;
+		ctx->jump_row = 0;
 		break;
 
 	case 0xC: /* Cxx: Set volume */
 		ch->volume_offset = 0;
-		ch->volume = s->effect_param > MAX_VOLUME ?
-			MAX_VOLUME : s->effect_param;
+		/* xx > MAX_VOLUME is already clamped in load.c */
+		ch->volume = s->effect_param;
 		break;
 
 	case 0xD: /* Dxx: Pattern break */
@@ -655,8 +653,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 
 	case 16: /* Gxx: Set global volume */
-		ctx->global_volume = (s->effect_param > MAX_VOLUME) ?
-			MAX_VOLUME : s->effect_param;
+		/* xx > MAX_VOLUME is already clamped in load.c */
+		ctx->global_volume = s->effect_param;
 		break;
 
 	case 21: /* Lxx: Set envelope position */
