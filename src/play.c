@@ -328,9 +328,17 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 [[maybe_unused]] static uint32_t xm_linear_frequency(xm_channel_context_t* ch) {
 	assert(ch->period > 0 && ch->period < INT16_MAX);
 	uint16_t p = ch->period;
-	p -= ch->arp_note_offset * 64;
-	p -= ch->vibrato_offset;
-	p -= ch->autovibrato_note_offset;
+	if(ch->arp_note_offset) {
+		/* XXX: test wraparound? */
+		p -= (uint16_t)(ch->arp_note_offset * 64);
+		/* 1540 is the period of note 95+15/16ths, the maximum
+		   FT2 will use for an arpeggio */
+		p = p < 1540 ? 1540 : p;
+	} else {
+		/* XXX: is it cumulative with arpeggio? */
+		p -= ch->vibrato_offset;
+		p -= ch->autovibrato_note_offset;
+	}
 	return (uint32_t)(8363.f * exp2f((4608.f - (float)p) / 768.f));
 }
 
@@ -340,11 +348,14 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 
 [[maybe_unused]] static uint32_t xm_amiga_frequency(xm_channel_context_t* ch) {
 	assert(ch->period > 0);
-	float p = (float)ch->period
-		* exp2f(((float)ch->arp_note_offset
-	            + (float)ch->autovibrato_note_offset / 64.f)
-	              / (-12.f))
-		- (float)ch->vibrato_offset;
+	float p = (float)ch->period;
+	if(ch->arp_note_offset) {
+		p *= exp2f((float)ch->arp_note_offset / (-12.f));
+		p = p < 107.f ? 107.f : p;
+	} else {
+		p *= exp2f((float)ch->autovibrato_note_offset / (-12.f * 64.f));
+		p -= (float)ch->vibrato_offset;
+	}
 
 	/* This is the PAL value. No reason to choose this one over the
 	 * NTSC value. */
