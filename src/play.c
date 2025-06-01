@@ -260,15 +260,14 @@ static void xm_tone_portamento(xm_channel_context_t* ch) {
 	uint16_t incr = 4 * ch->tone_portamento_param;
 	if(ch->period > ch->tone_portamento_target_period) {
 		if(ch->period < incr) {
-			ch->period = 0;
+			ch->period = ch->tone_portamento_target_period;
 		} else {
 			ch->period -= incr;
 		}
 		if(ch->period < ch->tone_portamento_target_period) {
 			ch->period = ch->tone_portamento_target_period;
 		}
-	}
-	if(ch->period < ch->tone_portamento_target_period) {
+	} else {
 		ch->period += incr;
 		if(ch->period > ch->tone_portamento_target_period) {
 			ch->period = ch->tone_portamento_target_period;
@@ -278,10 +277,10 @@ static void xm_tone_portamento(xm_channel_context_t* ch) {
 
 static void xm_pitch_slide(xm_channel_context_t* ch,
                            int16_t period_offset) {
-	/* XXX: upper bound of period ? */
-	if(ckd_add(&ch->period, ch->period, period_offset)) {
-		ch->period = period_offset >= 0 ? UINT16_MAX : 0;
-	}
+	/* Clamp period when sliding up (matches FT2 behaviour), wrap around
+	   when sliding down (albeit still in a broken way compared to FT2) */
+	ch->period = (ch->period + period_offset < 1)
+		? 1 : (uint16_t)(ch->period + period_offset);
 }
 
 static void xm_param_slide(uint8_t* param, uint8_t rawval, uint8_t max) {
@@ -327,6 +326,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 }
 
 [[maybe_unused]] static uint32_t xm_linear_frequency(xm_channel_context_t* ch) {
+	assert(ch->period > 0 && ch->period < INT16_MAX);
 	uint16_t p = ch->period;
 	p -= ch->arp_note_offset * 64;
 	p -= ch->vibrato_offset;
@@ -335,17 +335,16 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 }
 
 [[maybe_unused]] static uint16_t xm_amiga_period(int16_t note) {
-	/* Values obtained via exponential regression over the period tables in
-	   modfil10.txt */
-	return (uint16_t)
-		(32.f * 855.9563438f * exp2f(-0.0832493329f * note / 16.f));
+	return (uint16_t)(32.f * 856.f * exp2f((float)note / (-12.f * 16.f)));
 }
 
 [[maybe_unused]] static uint32_t xm_amiga_frequency(xm_channel_context_t* ch) {
 	assert(ch->period > 0);
 	float p = (float)ch->period
-		* exp2f(-0.0832493329f * ((float)ch->arp_note_offset + (float)ch->autovibrato_note_offset / 64.f));
-	p -= (float)ch->vibrato_offset;
+		* exp2f(((float)ch->arp_note_offset
+	            + (float)ch->autovibrato_note_offset / 64.f)
+	              / (-12.f))
+		- (float)ch->vibrato_offset;
 
 	/* This is the PAL value. No reason to choose this one over the
 	 * NTSC value. */
@@ -367,6 +366,7 @@ static uint16_t xm_period([[maybe_unused]] xm_context_t* ctx, int16_t note) {
 	UNREACHABLE();
 	#endif
 }
+
 static uint32_t xm_frequency([[maybe_unused]] xm_context_t* ctx,
                              xm_channel_context_t* ch) {
 	#if XM_FREQUENCY_TYPES == 1
@@ -915,17 +915,13 @@ static void xm_tick(xm_context_t* ctx) {
 		xm_channel_context_t* ch = ctx->channels + i;
 		if(!ch->period) continue;
 
-		ch->step = xm_frequency(ctx, ch);
-		/* Guard against uint32_t overflow */
-		static_assert(SAMPLE_MICROSTEPS <= 1 << 12);
-		/* For A#9 and +127 finetune, frequency is about 535K */
-		assert(ch->step < 1 << 20);
-		ch->step *= SAMPLE_MICROSTEPS;
 		/* Don't truncate, actually round up or down, precision matters
 		   here (rounding lets us use 0.5 instead of 1 in the error
 		   formula, see SAMPLE_MICROSTEPS comment) */
-		ch->step += ctx->rate / 2;
-		ch->step /= ctx->rate;
+		ch->step = (uint32_t)
+			(((uint64_t)xm_frequency(ctx, ch) * SAMPLE_MICROSTEPS
+			  + ctx->rate / 2)
+			 / ctx->rate);
 
 		uint8_t panning = (uint8_t)
 			(ch->panning
