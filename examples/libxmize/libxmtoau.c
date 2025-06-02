@@ -37,6 +37,7 @@ static void byteswap32(uint32_t* i) {
 }
 #endif
 
+__attribute__((noreturn))
 int ENTRY(void) {
 	static float buffer[4096];
 	/* Don't do this in real programs. We are just assuming a realistically

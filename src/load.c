@@ -89,7 +89,7 @@ const uint8_t XM_PRESCAN_DATA_SIZE = sizeof(xm_prescan_data_t);
 
 static void memcpy_pad(void*, size_t, const void*, size_t, size_t);
 static int8_t xm_dither_16b_8b(int16_t);
-static uint64_t xm_fnv1a(const unsigned char*, uint32_t);
+static uint64_t xm_fnv1a(const unsigned char*, uint32_t) __attribute__((const));
 static void xm_fixup_context(xm_context_t*);
 
 static bool xm_prescan_xm0104(const char*, uint32_t, xm_prescan_data_t*);
@@ -121,8 +121,8 @@ static void memcpy_pad(void* dst, size_t dst_len, const void* src, size_t src_le
 	__builtin_memset(dst_c + copy_bytes, 0, dst_len - copy_bytes);
 }
 
-bool xm_prescan_module(const char* moddata, uint32_t moddata_length,
-                       xm_prescan_data_t* out) {
+bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
+                       xm_prescan_data_t* restrict out) {
 	if(moddata_length >= 60
 	   && memcmp("Extended Module: ", moddata, 17) == 0
 	   && moddata[37] == 0x1A
@@ -218,8 +218,10 @@ bool xm_prescan_module(const char* moddata, uint32_t moddata_length,
 	return true;
 }
 
-xm_context_t* xm_create_context(char* mempool, const xm_prescan_data_t* p,
-                                const char* moddata, uint32_t moddata_length,
+xm_context_t* xm_create_context(char* restrict mempool,
+                                const xm_prescan_data_t* restrict p,
+                                const char* restrict moddata,
+                                uint32_t moddata_length,
                                 uint16_t rate) {
 	/* Make sure we are not misaligning data by accident */
 	ASSERT_ALIGNED(mempool, xm_context_t);
@@ -400,7 +402,7 @@ static void xm_fixup_context(xm_context_t* ctx) {
 		(dest) = (void*)((intptr_t)(dest) + (intptr_t)(orig)); \
 	} while(0)
 
-void xm_context_to_libxm(xm_context_t* ctx, char* out) {
+void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
 	/* Reset internal pointers and playback position to 0 (normally not
 	   needed with correct usage of this function) */
 	for(uint16_t i = 0; i < ctx->module.num_channels; ++i) {

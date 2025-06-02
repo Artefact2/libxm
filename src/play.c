@@ -22,17 +22,17 @@ static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnul
 static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
 static void xm_tick_effects(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
-static uint8_t xm_envelope_lerp(const xm_envelope_point_t*, const xm_envelope_point_t*, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static void xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16_t*, uint8_t*) __attribute__((nonnull));
+static uint8_t xm_envelope_lerp(const xm_envelope_point_t* restrict, const xm_envelope_point_t* restrict, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
+static void xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16_t* restrict, uint8_t* restrict) __attribute__((nonnull));
 static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
-static uint16_t xm_linear_period(int16_t) __attribute__((warn_unused_result));
-static uint32_t xm_linear_frequency(xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static uint16_t xm_amiga_period(int16_t) __attribute__((warn_unused_result));
-static uint32_t xm_amiga_frequency(xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static uint16_t xm_linear_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const));
+static uint32_t xm_linear_frequency(const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
+static uint16_t xm_amiga_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const))  __attribute__((const));
+static uint32_t xm_amiga_frequency(const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 
-static uint16_t xm_period(xm_context_t*, int16_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
-static uint32_t xm_frequency(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static uint16_t xm_period(const xm_context_t*, int16_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
+static uint32_t xm_frequency(const xm_context_t*, const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 
 static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_trigger_instrument(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
@@ -44,7 +44,7 @@ static void xm_post_pattern_change(xm_context_t*) __attribute__((nonnull));
 static void xm_row(xm_context_t*) __attribute__((nonnull));
 static void xm_tick(xm_context_t*) __attribute__((nonnull));
 
-static float xm_sample_at(const xm_context_t*, const xm_sample_t*, uint32_t) __attribute__((warn_unused_result)) __attribute__((nonnull));
+static float xm_sample_at(const xm_context_t*, const xm_sample_t*, uint32_t) __attribute__((warn_unused_result)) __attribute__((nonnull)) __attribute__((const));
 static float xm_next_of_sample(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
 static void xm_next_of_channel(xm_context_t*, xm_channel_context_t*, float*, float*) __attribute__((nonnull));
 static void xm_sample_unmixed(xm_context_t*, float*) __attribute__((nonnull));
@@ -81,20 +81,24 @@ static void xm_sample(xm_context_t*, float*, float*) __attribute__((nonnull));
 	}
 }
 
+__attribute__((const)) __attribute__((nonnull))
 static bool HAS_TONE_PORTAMENTO(const xm_pattern_slot_t* s) {
 	return s->effect_type == 3 || s->effect_type == 5
-		|| s->volume_column >> 4 == 0xF;
+		|| (s->volume_column >> 4) == 0xF;
 }
 
+__attribute__((const)) __attribute__((nonnull))
 static bool HAS_VIBRATO(const xm_pattern_slot_t* s) {
 	return s->effect_type == 4 || s->effect_type == 6
 		|| (s->volume_column >> 4) == 0xB;
 }
 
+__attribute__((const))
 static bool NOTE_IS_VALID(uint8_t n) {
 	return n & ~KEY_OFF_NOTE;
 }
 
+__attribute__((const))
 static bool NOTE_IS_KEY_OFF(uint8_t n) {
 	return n & KEY_OFF_NOTE;
 }
@@ -327,7 +331,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	return (uint16_t)(7680 - note * 4);
 }
 
-[[maybe_unused]] static uint32_t xm_linear_frequency(xm_channel_context_t* ch) {
+[[maybe_unused]] static uint32_t xm_linear_frequency(const xm_channel_context_t* ch) {
 	assert(ch->period > 0 && ch->period < INT16_MAX);
 	uint16_t p = ch->period;
 	if(ch->arp_note_offset) {
@@ -348,7 +352,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	return (uint16_t)(32.f * 856.f * exp2f((float)note / (-12.f * 16.f)));
 }
 
-[[maybe_unused]] static uint32_t xm_amiga_frequency(xm_channel_context_t* ch) {
+[[maybe_unused]] static uint32_t xm_amiga_frequency(const xm_channel_context_t* ch) {
 	assert(ch->period > 0);
 	float p = (float)ch->period;
 	if(ch->arp_note_offset) {
@@ -364,7 +368,8 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	return (uint32_t)(4.f * 7093789.2f / (p * 2.f));
 }
 
-static uint16_t xm_period([[maybe_unused]] xm_context_t* ctx, int16_t note) {
+static uint16_t xm_period([[maybe_unused]] const xm_context_t* ctx,
+                          int16_t note) {
 	#if XM_FREQUENCY_TYPES == 1
 	return xm_linear_period(note);
 	#elif XM_FREQUENCY_TYPES == 2
@@ -380,8 +385,8 @@ static uint16_t xm_period([[maybe_unused]] xm_context_t* ctx, int16_t note) {
 	#endif
 }
 
-static uint32_t xm_frequency([[maybe_unused]] xm_context_t* ctx,
-                             xm_channel_context_t* ch) {
+static uint32_t xm_frequency([[maybe_unused]] const xm_context_t* ctx,
+                             const xm_channel_context_t* ch) {
 	#if XM_FREQUENCY_TYPES == 1
 	return xm_linear_frequency(ch);
 	#elif XM_FREQUENCY_TYPES == 2
@@ -1402,8 +1407,7 @@ void xm_generate_samples(xm_context_t* ctx,
 }
 
 void xm_generate_samples_noninterleaved(xm_context_t* ctx,
-                                        float* out_left,
-                                        float* out_right,
+                                        float* out_left, float* out_right,
                                         uint16_t numsamples) {
 	#if XM_TIMING_FUNCTIONS
 	ctx->generated_samples += numsamples;

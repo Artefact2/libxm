@@ -49,8 +49,8 @@ typedef @XM_SAMPLE_TYPE@ xm_sample_point_t;
  *
  * @returns true on success, false on failure
  */
-bool xm_prescan_module(const char* moddata, uint32_t moddata_length,
-                       xm_prescan_data_t* out)
+bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
+                       xm_prescan_data_t* restrict out)
 __attribute__((warn_unused_result))
 __attribute__((nonnull(3)));
 
@@ -90,10 +90,13 @@ __attribute__((nonnull));
  *
  * @returns pool as xm_context_t* (it is your responsibility to free this)
  */
-xm_context_t* xm_create_context(char* pool, const xm_prescan_data_t* p,
-                                const char* moddata,
+xm_context_t* xm_create_context(char* restrict pool,
+                                const xm_prescan_data_t* restrict p,
+                                const char* restrict moddata,
                                 uint32_t moddata_length, uint16_t rate)
+__attribute__((assume_aligned(8)))
 __attribute__((warn_unused_result))
+__attribute__((returns_nonnull))
 __attribute__((nonnull));
 
 
@@ -113,7 +116,7 @@ __attribute__((nonnull));
  *  @param out[.xm_context_size()] a pool of allocated memory, at least
  *  xm_context_size(ctx) bytes long
  */
-void xm_context_to_libxm(xm_context_t* ctx, char* out)
+void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out)
 __attribute__((nonnull));
 
 /** Load a module from libxm format. This format is highly non-portable and is
@@ -130,6 +133,8 @@ __attribute__((nonnull));
  * returned by malloc())
  */
 xm_context_t* xm_create_context_from_libxm(char* data, uint16_t rate)
+__attribute__((assume_aligned(8)))
+__attribute__((returns_nonnull))
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -146,11 +151,14 @@ __attribute__((nonnull(1)));
 
 /** Same as xm_generate_samples(), but do not interleave audio frames.
  *
+ * If output_left == output_right, the buffer will contain L+R, can be helpful
+ * when downmixing to mono.
+ *
  * @param output_left[.numsamples] buffer of numsamples elements
  * @param output_right[.numsamples] buffer of numsamples elements
  */
-void xm_generate_samples_noninterleaved(xm_context_t*, float* output_left,
-                                        float* output_right,
+void xm_generate_samples_noninterleaved(xm_context_t*,
+                                        float* output_left, float* output_right,
                                         uint16_t numsamples)
 __attribute__((nonnull(1)));
 
@@ -226,6 +234,7 @@ __attribute__((nonnull));
 /** Get the tracker name as a NUL-terminated string. */
 const char* xm_get_tracker_name(const xm_context_t*)
 __attribute__((warn_unused_result))
+__attribute__((returns_nonnull))
 __attribute__((nonnull));
 
 /** Get an instrument name as a NUL-terminated string.
@@ -235,6 +244,7 @@ __attribute__((nonnull));
  * @returns pointer to a string, or NULL on invalid inputs */
 const char* xm_get_instrument_name(const xm_context_t*, uint8_t)
 __attribute__((warn_unused_result))
+__attribute__((returns_nonnull))
 __attribute__((nonnull));
 
 /** Get a sample name as a NUL-terminated string.
@@ -246,6 +256,7 @@ __attribute__((nonnull));
  * @returns pointer to a string, or NULL on invalid inputs */
 const char* xm_get_sample_name(const xm_context_t*, uint8_t i, uint8_t s)
 __attribute__((warn_unused_result))
+__attribute__((returns_nonnull))
 __attribute__((nonnull));
 
 
@@ -304,6 +315,7 @@ __attribute__((nonnull));
 xm_sample_point_t* xm_get_sample_waveform(xm_context_t*, uint8_t instr,
                                 uint8_t sample, uint32_t* out_length)
 __attribute__((warn_unused_result))
+__attribute__((returns_nonnull))
 __attribute__((nonnull));
 
 
