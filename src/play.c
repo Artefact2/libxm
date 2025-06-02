@@ -102,32 +102,34 @@ static bool NOTE_IS_KEY_OFF(uint8_t n) {
 /* ----- Function definitions ----- */
 
 static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
-	static uint32_t next_rand = 24492;
-	static const int8_t sin_lut[] = {
-		/* 128*sinf(2πx/64) for x in 0..16 */
-		0, 12, 24, 37, 48, 60, 71, 81,
-		90, 98, 106, 112, 118, 122, 125, 127,
-	};
-
 	step %= 0x40;
 
 	switch(waveform & 3) {
 
-	case 2: /* Square */
-		return (step < 0x20) ? INT8_MIN : INT8_MAX;
-
 	case 0: /* Sine */
+		static const int8_t sin_lut[] = {
+			/* 128*sinf(2πx/64) for x in 0..16 */
+			0, 12, 24, 37, 48, 60, 71, 81,
+			90, 98, 106, 112, 118, 122, 125, 127,
+		};
 		uint8_t idx = step & 0x10 ? 0xF - (step & 0xF) : (step & 0xF);
 		return (step < 0x20) ? -sin_lut[idx] : sin_lut[idx];
 
-	case 1: /* Ramp down */
-		assert(step < 0x40);
-		static_assert(INT8_MIN + 0x3F * 4 <= INT8_MAX);
-		return (int8_t)(INT8_MIN + step * 4);
+	case 2: /* Square */
+		return (step < 0x20) ? INT8_MIN : INT8_MAX;
+
+	case 1: /* Ramp */
+		/* Starts at zero, wraps around at the middle */
+		return (int8_t)(-step * 4 - 1);
 
 	case 3: /* Random */
+		/* This is not strict FT2 behaviour (would need to delete
+		   E43/E47/E73/E77 in load.c), but is probably nice to have
+		   regardless */
 		/* Use the POSIX.1-2001 example, just to be deterministic
 		 * across different machines */
+		static uint32_t next_rand = 24492; /* XXX: this is NOT
+		                                      re-entrant! */
 		next_rand = next_rand * 1103515245 + 12345;
 		return (int8_t)((next_rand >> 16) & 0xFF);
 
@@ -222,7 +224,7 @@ static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
 	   reset. */
 	ch->vibrato_offset = 0;
 
-	/* This can happen with eg EDy pattern delay */
+	/* This can happen with eg EEy pattern delay */
 	if(ctx->current_tick == 0) {
 		ch->arp_note_offset = 0;
 		return;
