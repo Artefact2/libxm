@@ -115,10 +115,10 @@ See [GitHub issues](https://github.com/Artefact2/libxm/issues?q=is%3Aissue%20sta
 Tests
 =====
 
-Some test XM files are in the `tests` directory. Their goal is to test
-a certain feature against regressions.
+Some test XM files are in the `tests` directory.
 
-A few tests can be automatically run:
+A few tests can be automatically run (failing tests marked XXX are not
+regressions, but bugs/inaccuracies that have yet to be fixed):
 
 ~~~
 cmake -Bbuild-tests -Stests
@@ -138,6 +138,7 @@ pos_jump.xm                    | PASS           | Milkytracker, OpenMPT  | Only 
 ramping.xm                     | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
 ramping2.xm                    | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
 tone-portamento.xm             | PASS           | MilkyTracker           | Should sound identical.
+vibrato-control.xm             | FAIL           | FT2clone               | Random waveform not supported in FT2, should sound identical otherwise.
 ~~~
 
 Thanks

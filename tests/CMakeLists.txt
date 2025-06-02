@@ -23,14 +23,20 @@ add_test(NAME test_key_off COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/key-off.xm)
 add_test(NAME test_note_delay COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/note-delay.xm)
+add_test(NAME XXX_test_note_delay_sample_change COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/note-delay-sample-change.xm)
 add_test(NAME test_note_limits COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/note-limits.xm)
 add_test(NAME test_pattern_delay COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/pattern-delay.xm)
-add_test(NAME test_period_limits COMMAND test-libxm
-	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/period-limits.xm)
-add_test(NAME test_period_limits_amiga COMMAND test-libxm
-	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/period-limits-amiga.xm)
+add_test(NAME test_period_clamp COMMAND test-libxm
+	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/period-clamp.xm)
+add_test(NAME test_period_clamp_amiga COMMAND test-libxm
+	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/period-clamp-amiga.xm)
+add_test(NAME XXX_test_period_wraparound COMMAND test-libxm
+	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/period-wraparound.xm)
+add_test(NAME XXX_test_period_wraparound_amiga COMMAND test-libxm
+	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/period-wraparound-amiga.xm)
 add_test(NAME test_pitch_slides COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/pitch-slides.xm)
 add_test(NAME test_pitch_slides_amiga COMMAND test-libxm
