@@ -17,7 +17,7 @@ static void xm_vibrato(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tremolo(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_arpeggio(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
-static void xm_tone_portamento(xm_channel_context_t*) __attribute__((nonnull));
+static void xm_tone_portamento(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnull));
 static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
 static void xm_tick_effects(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
@@ -258,31 +258,38 @@ static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 }
 
-static void xm_tone_portamento(xm_channel_context_t* ch) {
+static void xm_tone_portamento(const xm_context_t* ctx,
+                               xm_channel_context_t* ch) {
 	/* 3xx called without a note, wait until we get an actual
 	 * target note. */
 	if(ch->tone_portamento_target_period == 0) return;
 
 	uint16_t incr = 4 * ch->tone_portamento_param;
-	if(ch->period > ch->tone_portamento_target_period) {
-		if(ch->period < incr) {
-			ch->period = ch->tone_portamento_target_period;
-		} else {
-			ch->period -= incr;
-		}
-		if(ch->period < ch->tone_portamento_target_period) {
-			ch->period = ch->tone_portamento_target_period;
-		}
+	int32_t diff = ch->tone_portamento_target_period - ch->period;
+	diff = diff > incr ? incr : diff;
+	diff = diff < (-incr) ? (-incr) : diff;
+	xm_pitch_slide(ch, (int16_t)diff);
+
+	if(ch->glissando_control_param == 0) return;
+
+	if(XM_FREQUENCY_TYPES == 1
+	   || XM_FREQUENCY_TYPES == 3 && (!ctx->module.amiga_frequencies)) {
+		/* Round period to nearest semitone. Store rounding error in
+		   ch->glissando_control_error. */
+		/* With linear frequencies, 1 semitone is 64 period units. */
+		uint16_t new_period = (uint16_t)((ch->period + 32) & 0xFFC0);
+		ch->glissando_control_error = (int8_t)(ch->period - new_period);
+		ch->period = new_period;
 	} else {
-		ch->period += incr;
-		if(ch->period > ch->tone_portamento_target_period) {
-			ch->period = ch->tone_portamento_target_period;
-		}
+		/* XXX: implement for amiga frequencies */
 	}
 }
 
 static void xm_pitch_slide(xm_channel_context_t* ch,
                            int16_t period_offset) {
+	ch->period = (uint16_t)(ch->period + ch->glissando_control_error);
+	ch->glissando_control_error = 0;
+
 	/* Clamp period when sliding up (matches FT2 behaviour), wrap around
 	   when sliding down (albeit still in a broken way compared to FT2) */
 	ch->period = (ch->period + period_offset < 1)
@@ -375,13 +382,8 @@ static uint16_t xm_period([[maybe_unused]] const xm_context_t* ctx,
 	#elif XM_FREQUENCY_TYPES == 2
 	return xm_amiga_period(note);
 	#else
-	switch(ctx->module.frequency_type) {
-	case XM_LINEAR_FREQUENCIES:
-		return xm_linear_period(note);
-	case XM_AMIGA_FREQUENCIES:
-		return xm_amiga_period(note);
-	}
-	UNREACHABLE();
+	return ctx->module.amiga_frequencies ?
+		xm_amiga_period(note) : xm_linear_period(note);
 	#endif
 }
 
@@ -392,13 +394,8 @@ static uint32_t xm_frequency([[maybe_unused]] const xm_context_t* ctx,
 	#elif XM_FREQUENCY_TYPES == 2
 	return xm_amiga_frequency(ch);
 	#else
-	switch(ctx->module.frequency_type) {
-	case XM_LINEAR_FREQUENCIES:
-		return xm_linear_frequency(ch);
-	case XM_AMIGA_FREQUENCIES:
-		return xm_amiga_frequency(ch);
-	}
-	UNREACHABLE();
+	return ctx->module.amiga_frequencies ?
+		xm_amiga_frequency(ch) : xm_linear_frequency(ch);
 	#endif
 }
 
@@ -587,6 +584,10 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			xm_pitch_slide(ch, ch->fine_portamento_down_param);
 			break;
 
+		case 3: /* E3y: Set glissando control */
+			ch->glissando_control_param = s->effect_param & 0x0F;
+			break;
+
 		case 4: /* E4y: Set vibrato control */
 			ch->vibrato_control_param = s->effect_param;
 			break;
@@ -730,6 +731,7 @@ static void xm_trigger_note([[maybe_unused]] xm_context_t* ctx,
 	if(ch->sample == NULL) return;
 
 	ch->period = ch->orig_period;
+	ch->glissando_control_error = 0; /* XXX: test me */
 	ch->sample_position = 0;
 	ch->vibrato_offset = 0;
 
@@ -1039,7 +1041,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 0xF: /* Mx: Tone portamento */
-		xm_tone_portamento(ch);
+		xm_tone_portamento(ctx, ch);
 		break;
 
 	}
@@ -1068,7 +1070,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 3: /* 3xx: Tone portamento */
-		xm_tone_portamento(ch);
+		xm_tone_portamento(ctx, ch);
 		break;
 
 	case 4: /* 4xy: Vibrato */
@@ -1090,7 +1092,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		if(ch->current->effect_param > 0) {
 			ch->volume_slide_param = ch->current->effect_param;
 		}
-		xm_tone_portamento(ch);
+		xm_tone_portamento(ctx, ch);
 		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
 		break;

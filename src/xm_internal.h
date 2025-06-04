@@ -201,10 +201,7 @@ struct xm_module_s {
 	uint8_t num_instruments;
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 	uint8_t restart_position;
-	enum: uint8_t {
-		XM_LINEAR_FREQUENCIES = 0,
-		XM_AMIGA_FREQUENCIES = 1,
-	} frequency_type;
+	bool amiga_frequencies;
 
 	#if XM_STRINGS
 	static_assert(MODULE_NAME_LENGTH % 8 == 0);
@@ -275,6 +272,8 @@ struct xm_channel_context_s {
 	uint8_t fine_portamento_down_param;
 	uint8_t extra_fine_portamento_up_param;
 	uint8_t extra_fine_portamento_down_param;
+	uint8_t glissando_control_param;
+	int8_t glissando_control_error;
 	uint8_t tone_portamento_param;
 	uint8_t multi_retrig_param;
 	uint8_t note_delay_param;
@@ -301,9 +300,9 @@ struct xm_channel_context_s {
 	bool muted;
 
 	#if XM_TIMING_FUNCTIONS
-	char __pad[7 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
+	char __pad[5 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
 	#else
-	char __pad[3];
+	char __pad[1];
 	#endif
 };
 typedef struct xm_channel_context_s xm_channel_context_t;

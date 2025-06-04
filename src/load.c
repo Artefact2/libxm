@@ -659,8 +659,7 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 	}
 
 	uint16_t flags = READ_U16(offset + 14);
-	mod->frequency_type = (flags & 1) ?
-		XM_LINEAR_FREQUENCIES : XM_AMIGA_FREQUENCIES;
+	mod->amiga_frequencies = !(flags & 1);
 
 	if(flags & 0b11111110) {
 		NOTICE("unknown flags set in module header (%d)", flags);
@@ -1152,7 +1151,7 @@ static void xm_load_mod(xm_context_t* ctx,
 	READ_MEMCPY(ctx->module.name, 0, 20);
 	#endif
 
-	ctx->module.frequency_type = XM_AMIGA_FREQUENCIES;
+	ctx->module.amiga_frequencies = true;
 	ctx->bpm = 125;
 	ctx->tempo = 6;
 

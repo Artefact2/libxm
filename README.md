@@ -59,7 +59,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **4002 bytes** (Linux
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **4052 bytes** (Linux
 x86_64).
 
 ~~~
@@ -107,8 +107,17 @@ accuracy):
 * [Strobe - One for all](http://modarchive.org/module.php?161246)
 * [Strobe - Paralysicical death](http://modarchive.org/module.php?65817)
 
+Effect differences
+==================
+
+* Random waveform is supported for vibrato control (E43, E47) and tremolo control (E73, E77), FT2 does not support this waveform
+* E8y effect is supported, FT2 has no support for this command
+* Glissando control (E3y) with Amiga frequencies is not yet supported
+* Amiga filter toggle (E0y) is not supported, and is unlikely to be
+* Invert loop / funk repeat (EFy) is not supported, and is unlikely to be
+
 Known issues
-------------
+============
 
 See [GitHub issues](https://github.com/Artefact2/libxm/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug).
 
