@@ -103,6 +103,16 @@ static bool NOTE_IS_KEY_OFF(uint8_t n) {
 	return n & KEY_OFF_NOTE;
 }
 
+__attribute__((nonnull))
+static void UPDATE_EFFECT_MEMORY_XY(uint8_t* memory, uint8_t value) {
+	if(value & 0x0F) {
+		*memory = (*memory & 0xF0) | (value & 0x0F);
+	}
+	if(value & 0xF0) {
+		*memory = (*memory & 0x0F) | (value & 0xF0);
+	}
+}
+
 /* ----- Function definitions ----- */
 
 static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
@@ -502,8 +512,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		case 0xA: /* Sx: Set vibrato speed */
 			/* S0 does nothing, but is deleted in load.c */
-			ch->vibrato_param = (ch->vibrato_param & 0x0F)
-				| ((s->volume_column & 0x0F) << 4);
+			UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
+			                        s->volume_column << 4);
 			break;
 
 		case 0xF: /* Mx: Tone portamento */
@@ -1020,10 +1030,8 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 0xB: /* Vx: Vibrato */
-		if(ch->current->volume_column & 0x0F) {
-			ch->vibrato_param = (ch->vibrato_param & 0xF0)
-				| (ch->current->volume_column & 0x0F);
-		}
+		UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
+		                        ch->current->volume_column & 0x0F);
 		/* This vibrato *does not* reset pitch when the command
 		   is discontinued */
 		ch->should_reset_vibrato = false;
@@ -1074,16 +1082,8 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 4: /* 4xy: Vibrato */
-		if(ch->current->effect_param & 0x0F) {
-			/* Set vibrato depth */
-			ch->vibrato_param = (ch->vibrato_param & 0xF0)
-				| (ch->current->effect_param & 0x0F);
-		}
-		if(ch->current->effect_param >> 4) {
-			/* Set vibrato speed */
-			ch->vibrato_param = (ch->current->effect_param & 0xF0)
-				| (ch->vibrato_param & 0x0F);
-		}
+		UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
+		                        ch->current->effect_param);
 		ch->should_reset_vibrato = true;
 		xm_vibrato(ch);
 		break;
@@ -1108,16 +1108,8 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 7: /* 7xy: Tremolo */
-		if(ch->current->effect_param & 0x0F) {
-			/* Set tremolo depth */
-			ch->tremolo_param = (ch->tremolo_param & 0xF0)
-				| (ch->current->effect_param & 0x0F);
-		}
-		if(ch->current->effect_param >> 4) {
-			/* Set tremolo speed */
-			ch->tremolo_param = (ch->current->effect_param & 0xF0)
-				| (ch->tremolo_param & 0x0F);
-		}
+		UPDATE_EFFECT_MEMORY_XY(&ch->tremolo_param,
+		                        ch->current->effect_param);
 		xm_tremolo(ch);
 		break;
 
@@ -1194,14 +1186,8 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 27: /* Rxy: Multi retrig note */
-		if(ch->current->effect_param > 0) {
-			if((ch->current->effect_param >> 4) == 0) {
-				/* Keep previous x value */
-				ch->multi_retrig_param = (ch->multi_retrig_param & 0xF0) | (ch->current->effect_param & 0x0F);
-			} else {
-				ch->multi_retrig_param = ch->current->effect_param;
-			}
-		}
+		UPDATE_EFFECT_MEMORY_XY(&ch->multi_retrig_param,
+		                        ch->current->effect_param);
 		xm_multi_retrig_note(ctx, ch);
 		break;
 
