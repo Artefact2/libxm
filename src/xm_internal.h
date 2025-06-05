@@ -276,7 +276,7 @@ struct xm_channel_context_s {
 	int8_t glissando_control_error;
 	uint8_t tone_portamento_param;
 	uint8_t multi_retrig_param;
-	uint8_t note_delay_param;
+	uint8_t multi_retrig_ticks;
 	uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
 	uint8_t pattern_loop_count; /* How many loop passes have been done */
 	uint8_t sample_offset_param;

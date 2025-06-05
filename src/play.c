@@ -808,10 +808,6 @@ static void xm_row(xm_context_t* ctx) {
 		if(s->effect_type != 0xE || s->effect_param >> 4 != 0xD) {
 			/* No EDy note delay */
 			xm_handle_pattern_slot(ctx, ch);
-		} else {
-			/* Call xm_handle_pattern_slot() later, in
-			   xm_tick_effects() */
-			ch->note_delay_param = s->effect_param & 0x0F;
 		}
 
 		if(ch->pattern_loop_count > 0) {
@@ -1145,7 +1141,10 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 			break;
 
 		case 0xD: /* EDy: Note delay */
-			if(ctx->current_tick != ch->note_delay_param) break;
+			if(ctx->current_tick !=
+			   (ch->current->effect_param & 0x0F)) {
+				break;
+			}
 			xm_handle_pattern_slot(ctx, ch);
 			/* EDy (y>0) has a weird trigger mechanism, where it
 			   will reset sample position and period (except if we
