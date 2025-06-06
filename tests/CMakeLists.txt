@@ -47,6 +47,8 @@ add_test(NAME test_retrigger_effect COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/retrigger-effect.xm)
 add_test(NAME test_retrigger_effect_multi COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/retrigger-effect-multi.xm)
+add_test(NAME XXX_test_retrigger_effect_sample_change COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/retrigger-effect-sample-change.xm)
 add_test(NAME test_sample_offset COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/sample-offset.xm)
 add_test(NAME test_sample_offset_beyond_loop COMMAND test-libxm
