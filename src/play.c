@@ -219,49 +219,20 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* Fixed volume in volume column always has precedence */
 	if(ch->current->volume_column >= 0x10
 	   && ch->current->volume_column <= 0x50) {
-		ch->volume = ch->current->volume_column - 0x10;
 		return;
 	}
 
-	switch(ch->multi_retrig_param >> 4) {
-	case 0:
-	case 1:
-	case 2:
-	case 3:
-	case 4:
-	case 5:
-	case 8:
-	case 9:
-	case 0xA:
-	case 0xB:
-	case 0xC:
-	case 0xD:
-		uint8_t volume_delta =
-			16 >> (5 - ((ch->multi_retrig_param & 0x70) >> 4));
-		if(ch->multi_retrig_param & 0x80) {
-			ch->volume += volume_delta;
-		} else {
-			ch->volume -= volume_delta;
-		}
-		break;
-
-	case 0xE:
-		ch->volume *= 3;
-		[[fallthrough]];
-
-	case 7:
-		ch->volume /= 2;
-		break;
-
-	case 6:
-		ch->volume *= 2;
-		ch->volume /= 3;
-		break;
-
-	case 0xF:
-		ch->volume *= 2;
-		break;
-	}
+	static const uint8_t add[] = {
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 4, 8, 16, 0, 0,
+	};
+	static const uint8_t mul[] = {
+		1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 3, 2,
+	};
+	uint8_t x = (uint8_t)(ch->multi_retrig_param >> 4);
+	ch->volume += add[x];
+	ch->volume -= add[x ^ 8];
+	ch->volume *= mul[x];
+	ch->volume /= mul[x ^ 8];
 
 	static_assert(MAX_VOLUME + 16 <= UINT8_MAX);
 	static_assert(MAX_VOLUME * 3 <= UINT8_MAX - 16);
