@@ -43,8 +43,10 @@ add_test(NAME test_pitch_slides COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/pitch-slides.xm)
 add_test(NAME test_pitch_slides_amiga COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/pitch-slides-amiga.xm)
-add_test(NAME test_retrigger_effects COMMAND test-libxm
-	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/retrigger-effects.xm)
+add_test(NAME test_retrigger_effect COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/retrigger-effect.xm)
+add_test(NAME test_retrigger_effect_multi COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/retrigger-effect-multi.xm)
 add_test(NAME test_sample_offset COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/sample-offset.xm)
 add_test(NAME test_sample_offset_beyond_loop COMMAND test-libxm

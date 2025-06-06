@@ -200,6 +200,24 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 }
 
 static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
+	/* Seems to work similarly to Txy tremor effect. It uses an increasing
+	   counter and also runs on tick 0. */
+
+	UPDATE_EFFECT_MEMORY_XY(&ch->multi_retrig_param,
+	                        ch->current->effect_param);
+
+	if(++ch->multi_retrig_ticks < (ch->multi_retrig_param & 0x0F)) {
+		return;
+	}
+	ch->multi_retrig_ticks = 0;
+
+	/* XXX: refactor with E9y/EDy? */
+	ch->volume_envelope_frame_count = 0;
+	ch->panning_envelope_frame_count = 0;
+	ch->sustained = true;
+	xm_trigger_note(ctx, ch);
+	xm_tick_envelopes(ch);
+
 	static const uint8_t add[] = {
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 4, 8, 16, 0, 0
 	};
@@ -213,17 +231,15 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		1, 1, 1, 1, 1, 1, 3, 2, 1, 1, 1, 1, 1, 1, 2, 1
 	};
 
-	uint8_t y = ch->multi_retrig_param & 0x0F;
-	if(ch->instrument == NULL || y == 0 || ctx->current_tick % y) return;
-
-	xm_trigger_instrument(ctx, ch);
-
 	/* Rxy doesn't affect volume if there's a command in the volume
 	   column, or if the instrument has a volume envelope. */
-	if(ch->current->volume_column
+	if(ch->instrument == NULL
+	   || ch->current->volume_column
 	   || ch->instrument->volume_envelope.num_points <= MAX_ENVELOPE_POINTS)
 		return;
 
+	/* XXX: test and fix me (probably use ch->volume_offset instead of
+	   ch->volume) */
 	static_assert(MAX_VOLUME <= (UINT8_MAX / 3));
 	uint8_t x = ch->multi_retrig_param >> 4;
 	if(ch->volume < sub[x]) ch->volume = sub[x];
@@ -680,6 +696,10 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		ch->panning_envelope_frame_count = s->effect_param;
 		break;
 
+	case 27: /* Rxy: Multi retrig note */
+		xm_multi_retrig_note(ctx, ch);
+		break;
+
 	case 33: /* Xxy: Extra stuff */
 		switch(s->effect_param >> 4) {
 
@@ -718,6 +738,7 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 	ch->volume_envelope_frame_count = 0;
 	ch->panning_envelope_frame_count = 0;
 	ch->tremor_ticks = 0;
+	ch->multi_retrig_ticks = 0;
 	ch->autovibrato_ticks = 0;
 	ch->autovibrato_note_offset = 0;
 	ch->volume_offset = 0;
@@ -1185,8 +1206,6 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 27: /* Rxy: Multi retrig note */
-		UPDATE_EFFECT_MEMORY_XY(&ch->multi_retrig_param,
-		                        ch->current->effect_param);
 		xm_multi_retrig_note(ctx, ch);
 		break;
 
