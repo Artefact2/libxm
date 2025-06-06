@@ -17,6 +17,8 @@
 #define maybe_assert_eq(x, y) assert((x) == (y))
 #endif
 
+static_assert(sizeof(float) == sizeof(uint32_t));
+
 static const unsigned char header[] = {
 	'.', 's', 'n', 'd', /* .snd magic */
 	0, 0, 0, 28, /* header size */
@@ -27,19 +29,17 @@ static const unsigned char header[] = {
 	0, 0, 0, 0, /* description string (min 4 bytes) */
 };
 
-#if XM_LITTLE_ENDIAN
-static void byteswap32(uint32_t* i) {
+[[maybe_unused]] static void byteswap32(uint32_t* i) {
 	/* (optimised into single bswap instruction) */
 	*i = (*i << 24)
 		| (*i << 8 & 0xFF0000)
 		| (*i >> 8 & 0xFF00)
 		| (*i >> 24);
 }
-#endif
 
 __attribute__((noreturn))
 int ENTRY(void) {
-	static float buffer[4096];
+	static float buffer[60];
 	/* Don't do this in real programs. We are just assuming a realistically
 	   high upper bound for stdin, and also that the kernel only actually
 	   allocates memory on first access (Linux does) to save a few bytes of
@@ -51,7 +51,8 @@ int ENTRY(void) {
 
 	do {
 		buf_idx += (uint32_t)(r_ret = read(STDIN_FILENO,
-		                                   buf + buf_idx, 4096));
+		                                   buf + buf_idx,
+		                                   sizeof(buffer)));
 	} while(r_ret > 0);
 
 	ctx = xm_create_context_from_libxm(buf, 44100);
@@ -62,8 +63,10 @@ int ENTRY(void) {
 		xm_generate_samples(ctx, buffer, sizeof(buffer)
 		                    / (2 * sizeof(float)));
 		#if XM_LITTLE_ENDIAN
-		for(size_t k = 0; k < sizeof(buffer) / sizeof(float); ++k) {
-			byteswap32((uint32_t*)&(buffer[k]));
+		for(size_t k = sizeof(buffer) / sizeof(float); k; k--) {
+			byteswap32((uint32_t*)(buffer
+			                       + sizeof(buffer) / sizeof(float)
+			                       - k));
 		}
 		#endif
 		maybe_assert_eq(write(STDOUT_FILENO, buffer, sizeof(buffer)),

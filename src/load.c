@@ -43,16 +43,19 @@
 	((uint32_t)(((uint32_t)READ_U16BE_BOUND(offset, bound) << 16) \
 	            | (uint32_t)READ_U16BE_BOUND((offset) + 2, bound)))
 
-#define READ_MEMCPY_BOUND(ptr, offset, length, bound) \
-	memcpy_pad(ptr, length, moddata, bound, offset)
+#define READ_MEMCPY_BOUND(dest, offset, length, bound) \
+	__builtin_memcpy(dest, (uint8_t*)(moddata) + (offset), \
+	                 ((offset) + (length) <= (bound)) ? \
+	                 (length) : ((offset) >= (bound) ? \
+	                             0 : (bound) - (offset)))
 
 #define READ_U8(offset) READ_U8_BOUND(offset, moddata_length)
 #define READ_U16(offset) READ_U16_BOUND(offset, moddata_length)
 #define READ_U16BE(offset) READ_U16BE_BOUND(offset, moddata_length)
 #define READ_U32(offset) READ_U32_BOUND(offset, moddata_length)
 #define READ_U32BE(offset) READ_U32BE_BOUND(offset, moddata_length)
-#define READ_MEMCPY(ptr, offset, length) \
-	READ_MEMCPY_BOUND(ptr, offset, length, moddata_length)
+#define READ_MEMCPY(dest, offset, length) \
+	READ_MEMCPY_BOUND(dest, offset, length, moddata_length)
 
 #define TRIM_SAMPLE_LENGTH(length, loop_start, loop_length, flags) \
 	(flags & (SAMPLE_FLAG_PING_PONG | SAMPLE_FLAG_FORWARD) ?	\
@@ -87,7 +90,6 @@ const uint8_t XM_PRESCAN_DATA_SIZE = sizeof(xm_prescan_data_t);
 
 /* ----- Static functions ----- */
 
-static void memcpy_pad(void*, size_t, const void*, size_t, size_t);
 static int8_t xm_dither_16b_8b(int16_t);
 static uint64_t xm_fnv1a(const unsigned char*, uint32_t) __attribute__((const));
 static void xm_fixup_context(xm_context_t*);
@@ -107,19 +109,6 @@ static bool xm_prescan_mod(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_mod(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
 
 /* ----- Function definitions ----- */
-
-static void memcpy_pad(void* dst, size_t dst_len, const void* src, size_t src_len, size_t offset) {
-	uint8_t* dst_c = dst;
-	const uint8_t* src_c = src;
-
-	/* how many bytes can be copied without overrunning `src` */
-	size_t copy_bytes = (src_len >= offset) ? (src_len - offset) : 0;
-	copy_bytes = copy_bytes > dst_len ? dst_len : copy_bytes;
-
-	__builtin_memcpy(dst_c, src_c + offset, copy_bytes);
-	/* padded bytes */
-	__builtin_memset(dst_c + copy_bytes, 0, dst_len - copy_bytes);
-}
 
 bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
                        xm_prescan_data_t* restrict out) {
