@@ -23,7 +23,7 @@ static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
 static void xm_tick_effects(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
 static uint8_t xm_envelope_lerp(const xm_envelope_point_t* restrict, const xm_envelope_point_t* restrict, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
-static void xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16_t* restrict, uint8_t* restrict) __attribute__((nonnull));
+static uint8_t xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16_t*) __attribute__((nonnull)) __attribute__((warn_unused_result));
 static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
 static uint16_t xm_linear_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const));
@@ -855,15 +855,13 @@ static void xm_row(xm_context_t* ctx) {
 	}
 }
 
-static void xm_tick_envelope(xm_channel_context_t* ch,
-                             const xm_envelope_t* env,
-                             uint16_t* restrict counter,
-                             uint8_t* restrict outval) {
+static uint8_t xm_tick_envelope(xm_channel_context_t* ch,
+                                const xm_envelope_t* env,
+                                uint16_t* counter) {
 	/* Don't advance envelope position if we are sustaining */
 	if(ch->sustained && env->sustain_point <= MAX_ENVELOPE_POINTS &&
 	   *counter == env->points[env->sustain_point].frame) {
-		*outval = env->points[env->sustain_point].value;
-		return;
+		return env->points[env->sustain_point].value;
 	}
 
 	if(env->loop_start_point <= MAX_ENVELOPE_POINTS) {
@@ -882,11 +880,8 @@ static void xm_tick_envelope(xm_channel_context_t* ch,
 	assert(env->num_points >= 2);
 	for(uint8_t j = env->num_points - 1; j > 0; --j) {
 		if(*counter < env->points[j-1].frame) continue;
-		*outval = xm_envelope_lerp(env->points + j - 1,
-		                           env->points + j,
-		                           *counter);
-		(*counter)++;
-		return;
+		return xm_envelope_lerp(env->points + j - 1, env->points + j,
+		                        (*counter)++);
 	}
 
 	UNREACHABLE();
@@ -904,21 +899,17 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 		ch->fadeout_volume = MAX_FADEOUT_VOLUME-1;
 	}
 
-	if(inst->volume_envelope.num_points <= MAX_ENVELOPE_POINTS) {
-		xm_tick_envelope(ch, &(inst->volume_envelope),
-		                 &(ch->volume_envelope_frame_count),
-		                 &(ch->volume_envelope_volume));
-	} else {
-		ch->volume_envelope_volume = MAX_ENVELOPE_VALUE;
-	}
+	ch->volume_envelope_volume =
+		(inst->volume_envelope.num_points <= MAX_ENVELOPE_POINTS)
+		? xm_tick_envelope(ch, &(inst->volume_envelope),
+		                   &(ch->volume_envelope_frame_count))
+		: MAX_ENVELOPE_VALUE;
 
-	if(inst->panning_envelope.num_points <= MAX_ENVELOPE_POINTS) {
-		xm_tick_envelope(ch, &(inst->panning_envelope),
-		                 &(ch->panning_envelope_frame_count),
-		                 &(ch->panning_envelope_panning));
-	} else {
-		ch->panning_envelope_panning = MAX_ENVELOPE_VALUE/2;
-	}
+	ch->panning_envelope_panning =
+		(inst->panning_envelope.num_points <= MAX_ENVELOPE_POINTS)
+		? xm_tick_envelope(ch, &(inst->panning_envelope),
+		                   &(ch->panning_envelope_frame_count))
+		: MAX_ENVELOPE_VALUE / 2;
 }
 
 static void xm_tick(xm_context_t* ctx) {
