@@ -149,7 +149,7 @@ static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
 
 	}
 
-	UNREACHABLE();
+	assert(0);
 }
 
 static void xm_autovibrato(xm_channel_context_t* ch) {
@@ -272,7 +272,7 @@ static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
 		ch->arp_note_offset = ch->current->effect_param & 0x0F;
 		break;
 	default:
-		UNREACHABLE();
+		assert(0);
 	}
 }
 
@@ -531,6 +531,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			break;
 
 		case 0xA: /* Sx: Set vibrato speed */
+			/* XXX: test me (with note delay, with simultaneous
+			   4xy/40y) */
 			/* S0 does nothing, but is deleted in load.c */
 			UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
 			                        s->volume_column << 4);
@@ -709,6 +711,9 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			               ch->extra_fine_portamento_down_param);
 			break;
 
+		default:
+			assert(0);
+
 		}
 		break;
 
@@ -880,7 +885,7 @@ static uint8_t xm_tick_envelope(xm_channel_context_t* ch,
 		                        (*counter)++);
 	}
 
-	UNREACHABLE();
+	assert(0);
 }
 
 static void xm_tick_envelopes(xm_channel_context_t* ch) {
@@ -1218,7 +1223,6 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 static float xm_sample_at(const xm_context_t* ctx,
                           const xm_sample_t* sample, uint32_t k) {
-	assert(sample != NULL);
 	assert(k < sample->length);
 	assert(sample->index + k < ctx->module.samples_data_length);
 	return _Generic((xm_sample_point_t){},

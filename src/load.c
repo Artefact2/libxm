@@ -262,7 +262,7 @@ xm_context_t* xm_create_context(char* restrict mempool,
 		break;
 
 	default:
-		UNREACHABLE();
+		assert(0);
 	}
 
 	assert(ctx->module.num_channels == p->num_channels);
@@ -373,6 +373,13 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			   same slot. */
 			slot->effect_type = 0;
 			slot->note = KEY_OFF_NOTE;
+		}
+
+		if(slot->effect_type == 33 &&
+		   (slot->effect_param < 0x10 || slot->effect_param >= 0x30)) {
+			/* Delete unknown X effect */
+			slot->effect_type = 0;
+			slot->effect_param = 0;
 		}
 
 		if(slot->volume_column == 0xA0) {

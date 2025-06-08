@@ -21,12 +21,12 @@
 #define NOTICE(...)
 #endif
 
+#define assume(x) do { if(!(x)) { __builtin_unreachable(); } } while(0)
+
 #if NDEBUG
-#define UNREACHABLE() __builtin_unreachable()
-#define assert(x) (void)(x)
+#define assert(x) assume(x)
 #else
 #include <assert.h>
-#define UNREACHABLE() assert(0)
 #endif
 
 static_assert(XM_FREQUENCY_TYPES >= 1 && XM_FREQUENCY_TYPES <= 3,
