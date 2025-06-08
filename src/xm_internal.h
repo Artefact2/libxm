@@ -239,8 +239,6 @@ struct xm_channel_context_s {
 	#endif
 
 	uint16_t period; /* 1/64 semitone increments (linear frequencies) */
-	uint16_t orig_period; /* As initially read when first triggering the
-	                         note. Used by retrigger effects. */
 	uint16_t tone_portamento_target_period;
 
 	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
@@ -255,6 +253,7 @@ struct xm_channel_context_s {
                                    or by any volume command. Shared by 7xy:
                                    Tremolo and Txy: Tremor. */
 	uint8_t panning; /* 0..MAX_PANNING  */
+	uint8_t orig_note; /* Last valid note seen in a slot. Could be 0. */
 	int8_t finetune;
 	uint8_t next_instrument; /* Last instrument seen in the
 	                            instrument column. Could be 0. */
@@ -300,9 +299,9 @@ struct xm_channel_context_s {
 	bool muted;
 
 	#if XM_TIMING_FUNCTIONS
-	char __pad[5 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
+	char __pad[6 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
 	#else
-	char __pad[1];
+	char __pad[2];
 	#endif
 };
 typedef struct xm_channel_context_s xm_channel_context_t;

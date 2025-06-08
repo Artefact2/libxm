@@ -35,6 +35,7 @@ static uint16_t xm_period(const xm_context_t*, int16_t) __attribute__((warn_unus
 static uint32_t xm_frequency(const xm_context_t*, const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 
 static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+static void xm_tone_portamento_target(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_trigger_instrument(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_trigger_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_cut_note(xm_channel_context_t*) __attribute__((nonnull));
@@ -91,11 +92,6 @@ __attribute__((const)) __attribute__((nonnull))
 static bool HAS_VIBRATO(const xm_pattern_slot_t* s) {
 	return s->effect_type == 4 || s->effect_type == 6
 		|| (s->volume_column >> 4) == 0xB;
-}
-
-__attribute__((const))
-static bool NOTE_IS_VALID(uint8_t n) {
-	return n & ~KEY_OFF_NOTE;
 }
 
 __attribute__((const))
@@ -357,7 +353,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 }
 
 [[maybe_unused]] static uint32_t xm_linear_frequency(const xm_channel_context_t* ch) {
-	assert(ch->period > 0 && ch->period < INT16_MAX);
+	assert(ch->period > 0);
 	uint16_t p = ch->period;
 	if(ch->arp_note_offset) {
 		/* XXX: test wraparound? */
@@ -425,24 +421,23 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		ch->next_instrument = s->instrument;
 	}
 
-	if(NOTE_IS_VALID(s->note)) {
-		/* Non-zero note, also not key off. Assume note is valid, since
-		   invalid notes are deleted in load.c. */
+	if(!NOTE_IS_KEY_OFF(s->note)) {
+		if(s->note) {
+			/* Non-zero note, also not key off. Assume note is
+			   valid, since invalid notes are deleted in load.c. */
 
-		/* Update ch->sample and ch->instrument */
-		xm_instrument_t* next = ctx->instruments
-			+ ch->next_instrument - 1;
-		if(ch->next_instrument
-		   && ch->next_instrument - 1 < ctx->module.num_instruments
-		   && next->sample_of_notes[s->note - 1] < next->num_samples) {
-			ch->instrument = next;
-			ch->sample = ctx->samples
-				+ ch->instrument->samples_index
-				+ ch->instrument->sample_of_notes[s->note - 1];
-		} else {
-			ch->instrument = NULL;
-			ch->sample = NULL;
-			xm_cut_note(ch);
+			if(HAS_TONE_PORTAMENTO(ch->current)) {
+				xm_tone_portamento_target(ctx, ch);
+			} else {
+				/* Orig note (used for retriggers) is not
+				   updated by tone portas */
+				ch->orig_note = s->note;
+				xm_trigger_note(ctx, ch);
+			}
+
+		} else if(s->effect_type == 0x0E && s->effect_param == 0x90) {
+			/* E90 acts like a ghost note */
+			xm_trigger_note(ctx, ch);
 		}
 	}
 
@@ -453,38 +448,6 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	if(NOTE_IS_KEY_OFF(s->note)) {
 		/* Key Off */
 		xm_key_off(ctx, ch);
-	} else if(s->note && ch->sample) {
-		int16_t note = (int16_t)(s->note + ch->sample->relative_note);
-		if(note > 0 && note < 120) {
-			/* Yes, the real note number is s->note -1. Try finding
-			 * THAT in any of the specs! :-) */
-			note = (int16_t)(16 * (note - 1));
-			if(HAS_TONE_PORTAMENTO(ch->current)) {
-				/* 3xx/Mx ignores E5y, but will reuse whatever
-				   finetune was set when initially triggering
-				   the note */
-				ch->tone_portamento_target_period =
-					xm_period(ctx, note + ch->finetune);
-			} else {
-				/* Handle E5y: Set note fine-tune here; this
-				   effect only works in tandem with a note and
-				   overrides the finetune value stored in the
-				   sample. If we have Mx in the volume column,
-				   it does nothing.*/
-				ch->finetune = ch->sample->finetune;
-				if(s->effect_type == 0x0E
-				   && s->effect_param >> 4 == 0x05) {
-					ch->finetune = (int8_t)
-						((s->effect_param & 0xF)*2-16);
-				}
-				ch->orig_period =
-					xm_period(ctx, note + ch->finetune);
-				xm_trigger_note(ctx, ch);
-			}
-		}
-	} else if(s->effect_type == 0x0E && s->effect_param == 0x90) {
-		/* E90 acts like a ghost note */
-		xm_trigger_note(ctx, ch);
 	}
 
 	/* These volume effects always work, even when called with a delay by
@@ -705,9 +668,29 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	}
 }
 
+static void xm_tone_portamento_target(const xm_context_t* ctx,
+                                      xm_channel_context_t* ch) {
+	assert(HAS_TONE_PORTAMENTO(ch->current));
+	if(ch->sample == NULL) return;
+
+	/* Tone porta uses the relative note of whatever sample we have, even if
+	   the target note belongs to another sample with another relative
+	   note. */
+	int16_t note = (int16_t)(ch->current->note + ch->sample->relative_note);
+
+	/* Invalid notes keep whatever target period was there before. */
+	if(note <= 0 || note >= 120) return;
+
+	/* 3xx/Mx ignores E5y, but will reuse whatever finetune was set when
+	   initially triggering the note */
+	/* XXX: refactor note+finetune logic with xm_trigger_note() */
+	ch->tone_portamento_target_period =
+		xm_period(ctx, (int16_t)(16 * (note - 1) + ch->finetune));
+}
+
 static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
                                   xm_channel_context_t* ch) {
-	if(ch->sample == NULL) return;
+	if(ch->instrument == NULL || ch->sample == NULL) return;
 
 	ch->volume = ch->sample->volume;
 	ch->panning = ch->sample->panning;
@@ -730,24 +713,62 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 
 	#if XM_TIMING_FUNCTIONS
 	ch->latest_trigger = ctx->generated_samples;
-	assert(ch->instrument != NULL);
 	ch->instrument->latest_trigger = ctx->generated_samples;
 	#endif
 }
 
-static void xm_trigger_note([[maybe_unused]] xm_context_t* ctx,
-                            xm_channel_context_t* ch) {
-	if(ch->sample == NULL) return;
+static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
+	/* Update ch->sample and ch->instrument */
+	ch->instrument = ctx->instruments + ch->next_instrument - 1;
+	if(ch->next_instrument == 0
+	   || ch->next_instrument > ctx->module.num_instruments) {
+		ch->instrument = NULL;
+		ch->sample = NULL;
+		xm_cut_note(ch);
+		return;
+	}
+
+	if(ch->instrument->sample_of_notes[ch->orig_note - 1]
+	   >= ch->instrument->num_samples) {
+		/* XXX: does it also reset instrument? cut the note? zero the
+		   period? */
+		ch->sample = NULL;
+		return;
+	}
+
+	ch->sample = ctx->samples
+		+ ch->instrument->samples_index
+		+ ch->instrument->sample_of_notes[ch->orig_note - 1];
+
+	/* Update period */
+	int16_t note = (int16_t)(ch->orig_note + ch->sample->relative_note);
+	if(note <= 0 || note >= 120) {
+		ch->period = 0;
+		return;
+	}
+
+	/* Handle E5y: Set note fine-tune here; this effect only works in tandem
+	   with a note and overrides the finetune value stored in the sample. If
+	   we have Mx in the volume column, it does nothing. */
+	if(ch->current->effect_type == 0xE
+	   && (ch->current->effect_param >> 4) == 0x5) {
+		ch->finetune = (int8_t)
+			((ch->current->effect_param & 0xF) * 2 - 16);
+	} else {
+		ch->finetune = ch->sample->finetune;
+	}
+	ch->period = xm_period(ctx, (int16_t)(16 * (note - 1) + ch->finetune));
 
 	/* Handle 9xx: Sample offset here, since it does nothing outside of a
-	   note trigger (ie, called on its own without a note). */
+	   note trigger (ie, called on its own without a note). If we have Mx in
+	   the volume column, it does nothing. */
 	if(ch->current->effect_type == 9) {
 		if(ch->current->effect_param > 0) {
 			ch->sample_offset_param = ch->current->effect_param;
 		}
 		ch->sample_position = ch->sample_offset_param * 256;
 		if(ch->sample_position >= ch->sample->length) {
-			ch->sample = NULL;
+			ch->period = 0;
 			return;
 		}
 	} else {
@@ -755,7 +776,6 @@ static void xm_trigger_note([[maybe_unused]] xm_context_t* ctx,
 	}
 
 	ch->sample_position *= SAMPLE_MICROSTEPS;
-	ch->period = ch->orig_period;
 	ch->glissando_control_error = 0; /* XXX: test me */
 	ch->vibrato_offset = 0;
 
@@ -766,6 +786,7 @@ static void xm_trigger_note([[maybe_unused]] xm_context_t* ctx,
 
 	#if XM_RAMPING
 	ch->frame_count = 0;
+	/* XXX: fill end of previous sample *before* updating ch->sample */
 	#endif
 
 	#if XM_TIMING_FUNCTIONS
