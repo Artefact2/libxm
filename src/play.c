@@ -28,7 +28,7 @@ static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
 static uint16_t xm_linear_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const));
 static uint32_t xm_linear_frequency(const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
-static uint16_t xm_amiga_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const))  __attribute__((const));
+static uint16_t xm_amiga_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const));
 static uint32_t xm_amiga_frequency(const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 
 static uint16_t xm_period(const xm_context_t*, int16_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
@@ -496,7 +496,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	}
 	if(s->volume_column >> 4 == 0xC) {
 		/* Px: Set panning */
-		ch->panning = (s->volume_column & 0x0F) * 0x11;
+		ch->panning = s->volume_column << 4;
 	}
 
 	if(ctx->current_tick == 0) {
@@ -529,7 +529,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			   even at Spd=1 */
 			if(s->volume_column & 0x0F) {
 				ch->tone_portamento_param =
-					(s->volume_column & 0x0F) * 0x11;
+					s->volume_column << 4;
 			}
 
 		}
