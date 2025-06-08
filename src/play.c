@@ -547,21 +547,6 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		ch->panning = s->effect_param;
 		break;
 
-	case 9: /* 9xx: Sample offset */
-		/* 9xx is ignored unless we have a note */
-		if(ch->sample == NULL || !NOTE_IS_VALID(s->note))
-			break;
-		if(s->effect_param > 0) {
-			ch->sample_offset_param = s->effect_param;
-		}
-		ch->sample_position = ch->sample_offset_param * 256;
-		if(ch->sample_position >= ch->sample->length) {
-			ch->sample = NULL;
-		}
-		static_assert(256 * SAMPLE_MICROSTEPS * UINT8_MAX <= UINT32_MAX);
-		ch->sample_position *= SAMPLE_MICROSTEPS;
-		break;
-
 	case 0xB: /* Bxx: Position jump */
 		ctx->position_jump = true;
 		ctx->jump_dest = s->effect_param;
@@ -754,15 +739,34 @@ static void xm_trigger_note([[maybe_unused]] xm_context_t* ctx,
                             xm_channel_context_t* ch) {
 	if(ch->sample == NULL) return;
 
+	/* Handle 9xx: Sample offset here, since it does nothing outside of a
+	   note trigger (ie, called on its own without a note). */
+	if(ch->current->effect_type == 9) {
+		if(ch->current->effect_param > 0) {
+			ch->sample_offset_param = ch->current->effect_param;
+		}
+		ch->sample_position = ch->sample_offset_param * 256;
+		if(ch->sample_position >= ch->sample->length) {
+			ch->sample = NULL;
+			return;
+		}
+	} else {
+		ch->sample_position = 0;
+	}
+
+	ch->sample_position *= SAMPLE_MICROSTEPS;
 	ch->period = ch->orig_period;
 	ch->glissando_control_error = 0; /* XXX: test me */
-	ch->sample_position = 0;
 	ch->vibrato_offset = 0;
 
 	/* XXX: is this reset by a note trigger or inst trigger? does it matter
 	   since tremor_on touches volume_offest anyway, and it gets reset by an
 	   inst trigger?*/
 	//ch->tremor_on = false;
+
+	#if XM_RAMPING
+	ch->frame_count = 0;
+	#endif
 
 	#if XM_TIMING_FUNCTIONS
 	ch->latest_trigger = ctx->generated_samples;
@@ -982,20 +986,17 @@ static void xm_tick(xm_context_t* ctx) {
 		assert(volume >= 0.f && volume <= 1.f);
 
 		#if XM_RAMPING
+		float* out = ch->target_volume;
+		#else
+		float* out = ch->actual_volume;
+		#endif
+
 		/* See https://modarchive.org/forums/index.php?topic=3517.0
 		 * and https://github.com/Artefact2/libxm/pull/16 */
-		ch->target_volume[0] = volume
-			* sqrtf((float)(MAX_PANNING - panning)
-			        / (float)MAX_PANNING);
-		ch->target_volume[1] = volume
-			* sqrtf((float)panning / (float)MAX_PANNING);
-		#else
-		ch->actual_volume[0] = volume
-			* sqrtf((float)(MAX_PANNING - panning)
-			        / (float)MAX_PANNING);
-		ch->actual_volume[1] = volume * sqrtf((float)panning
-		                                      / (float)MAX_PANNING);
-		#endif
+		out[0] = volume * sqrtf((float)(MAX_PANNING - panning)
+		                        / (float)MAX_PANNING);
+		out[1] = volume * sqrtf((float)panning
+		                        / (float)MAX_PANNING);
 	}
 
 	ctx->current_tick++;
@@ -1235,12 +1236,13 @@ static float xm_sample_at(const xm_context_t* ctx,
 static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(ch->sample == NULL) {
 		#if XM_RAMPING
-		if(ch->frame_count < RAMPING_POINTS) {
-			return XM_LERP(ch->end_of_previous_sample[ch->frame_count], .0f,
-			               (float)ch->frame_count / (float)RAMPING_POINTS);
-		}
+		/* Smoothly transition between old sample and silence */
+		if(ch->frame_count >= RAMPING_POINTS) return 0.f;
+		return XM_LERP(ch->end_of_previous_sample[ch->frame_count], .0f,
+		               (float)ch->frame_count / (float)RAMPING_POINTS);
+		#else
+		return 0.f;
 		#endif
-		return .0f;
 	}
 
 	/* XXX: maybe do something about 0 length samples in load.c? */
