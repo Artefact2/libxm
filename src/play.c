@@ -499,6 +499,18 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		ch->panning = s->volume_column << 4;
 	}
 
+	/* Set tone portamento memory (even on tick 0) */
+	if(s->volume_column >> 4 == 0xF) {
+		/* Mx *always* has precedence, even M0 */
+		if(s->volume_column & 0x0F) {
+			ch->tone_portamento_param = s->volume_column << 4;
+		}
+	} else if(s->effect_type == 3) {
+		if(s->effect_param > 0) {
+			ch->tone_portamento_param = s->effect_param;
+		}
+	}
+
 	if(ctx->current_tick == 0) {
 		/* These effects are ONLY applied at tick 0. If a note delay
 		   effect (EDy), where y>0, uses this effect in its volume
@@ -524,26 +536,10 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			                        s->volume_column << 4);
 			break;
 
-		case 0xF: /* Mx: Tone portamento */
-			/* Unlike most other effects, Mx/3xx memory *is* set
-			   even at Spd=1 */
-			if(s->volume_column & 0x0F) {
-				ch->tone_portamento_param =
-					s->volume_column << 4;
-			}
-
 		}
 	}
 
 	switch(s->effect_type) {
-
-	case 3: /* 3xx: Tone portamento */
-		/* Unlike most other effects, Mx/3xx memory *is* set even at
-		   Spd=1 */
-		if(s->effect_param > 0) {
-			ch->tone_portamento_param = s->effect_param;
-		}
-		break;
 
 	case 8: /* 8xx: Set panning */
 		ch->panning = s->effect_param;
