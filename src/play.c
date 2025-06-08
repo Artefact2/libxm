@@ -280,7 +280,7 @@ static void xm_tone_portamento(const xm_context_t* ctx,
                                xm_channel_context_t* ch) {
 	/* 3xx called without a note, wait until we get an actual
 	 * target note. */
-	if(ch->tone_portamento_target_period == 0) return;
+	if(ch->tone_portamento_target_period == 0 || ch->period == 0) return;
 
 	uint16_t incr = 4 * ch->tone_portamento_param;
 	int32_t diff = ch->tone_portamento_target_period - ch->period;
