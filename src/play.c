@@ -152,15 +152,20 @@ static void xm_autovibrato(xm_channel_context_t* ch) {
 	xm_instrument_t* instr = ch->instrument;
 	if(instr == NULL) return;
 
-	/* Autovibrato, unlike 4xx vibrato, only bends pitch *down*, not down
-	   and up. Its full range at depth F seems to be about the same as
-	   E24 (=4/16=1/4 semitone). */
+	/* Autovibrato speed is 4x slower than equivalent 4xx effect (ie,
+	   autovibrato_rate of 4 is the same as 41y). */
+	/* Autovibrato depth is 8x smaller than equivalent 4xx effect (ie,
+	   autovibrato_depth of 8 is the same as 4x1). */
+	/* Autovibrato also starts at a different point in the waveform, or
+	   flips its sign (XXX: test this for non-sine waveforms) */
 
+	/* Depth 16 = 0.5 semitone amplitude (-0.25 then +0.25) */
+	/* Scale waveform from -128..127 to -16..15 at depth 16 */
 	ch->autovibrato_note_offset = (int8_t)
 		(((int16_t)xm_waveform(instr->vibrato_type,
 		                       (uint8_t)(ch->autovibrato_ticks
-		                                 * instr->vibrato_rate / 4))
-		  - 128) * instr->vibrato_depth / 256);
+		                                 * instr->vibrato_rate / 4)))
+		 * (-instr->vibrato_depth) / 128);
 
 	if(ch->autovibrato_ticks < instr->vibrato_sweep) {
 		ch->autovibrato_note_offset = (int8_t)
@@ -380,8 +385,8 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 		p *= exp2f((float)ch->arp_note_offset / (-12.f));
 		p = p < 107.f ? 107.f : p;
 	} else {
-		p *= exp2f((float)ch->autovibrato_note_offset / (-12.f * 64.f));
 		p -= (float)ch->vibrato_offset;
+		p -= (float)ch->autovibrato_note_offset;
 	}
 
 	/* This is the PAL value. No reason to choose this one over the

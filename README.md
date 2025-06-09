@@ -139,6 +139,7 @@ Other tests require manual checking, see the table below.
 ~~~
      Test                      |     Status     |     Tested against     | Extras
 -------------------------------+----------------+------------------------+------------------------------------------------
+autovibrato.xm                 | PASS           | FT2clone               | Patterns 0 and 1 should sound identical. Use a spectrogram as it is very hard to hear subtle changes in pitch.
 autovibrato-turnoff.xm         | PASS           | MilkyTracker           | Same pitches should be heard twice in a row.
 panning-law.xm                 | PASS           | MilkyTracker, FT2clone | Should sound identical.
 pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
