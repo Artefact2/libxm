@@ -822,7 +822,7 @@ static void xm_key_off(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	/* If no volume envelope is used, also cut the note */
 	if(ch->instrument == NULL
-	   || ch->instrument->volume_envelope.num_points > MAX_ENVELOPE_POINTS) {
+	   || ch->instrument->volume_envelope.num_points == 0) {
 		xm_cut_note(ch);
 	}
 }
@@ -893,26 +893,23 @@ static void xm_row(xm_context_t* ctx) {
 static uint8_t xm_tick_envelope(xm_channel_context_t* ch,
                                 const xm_envelope_t* env,
                                 uint16_t* counter) {
+	assert(env->num_points >= 2);
+	assert(env->sustain_point < env->num_points);
+	assert(env->loop_start_point < env->num_points);
+	assert(env->loop_end_point < env->num_points);
+
 	/* Don't advance envelope position if we are sustaining */
-	if(ch->sustained && env->sustain_point <= MAX_ENVELOPE_POINTS &&
-	   *counter == env->points[env->sustain_point].frame) {
+	if(ch->sustained && *counter == env->points[env->sustain_point].frame) {
 		return env->points[env->sustain_point].value;
 	}
 
-	if(env->loop_start_point <= MAX_ENVELOPE_POINTS) {
-		uint16_t loop_start = env->points[env->loop_start_point].frame;
-		uint16_t loop_end = env->points[env->loop_end_point].frame;
-		uint16_t loop_length = loop_end - loop_start;
-
-		/* Don't loop if we moved beyond the end point, with eg a
-		   Lxx effect */
-		if(*counter == loop_end) {
-			*counter -= loop_length;
-		}
+	/* Only loop if we are exactly at loop_end. Don't loop if we went past
+	   it, with eg a Lxx effect */
+	if(*counter == env->points[env->loop_end_point].frame) {
+		*counter = env->points[env->loop_start_point].frame;
 	}
 
 	/* Find points left and right of current envelope position */
-	assert(env->num_points >= 2);
 	for(uint8_t j = env->num_points - 1; j > 0; --j) {
 		if(*counter < env->points[j-1].frame) continue;
 		return xm_envelope_lerp(env->points + j - 1, env->points + j,
@@ -935,13 +932,13 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 	}
 
 	ch->volume_envelope_volume =
-		(inst->volume_envelope.num_points <= MAX_ENVELOPE_POINTS)
+		inst->volume_envelope.num_points
 		? xm_tick_envelope(ch, &(inst->volume_envelope),
 		                   &(ch->volume_envelope_frame_count))
 		: MAX_ENVELOPE_VALUE;
 
 	ch->panning_envelope_panning =
-		(inst->panning_envelope.num_points <= MAX_ENVELOPE_POINTS)
+		inst->panning_envelope.num_points
 		? xm_tick_envelope(ch, &(inst->panning_envelope),
 		                   &(ch->panning_envelope_frame_count))
 		: MAX_ENVELOPE_VALUE / 2;

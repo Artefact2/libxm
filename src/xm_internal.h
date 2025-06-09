@@ -113,12 +113,9 @@ struct xm_envelope_s {
 	xm_envelope_point_t points[MAX_ENVELOPE_POINTS];
 
 	static_assert(MAX_ENVELOPE_POINTS + 128 < UINT8_MAX);
-	uint8_t num_points; /* 2..MAX_ENVELOPE_POINTS, values above mean
-	                       envelope is disabled */
-	uint8_t sustain_point; /* 0..MAX_ENVELOPE_POINTS, values above mean no
-	                          sustain */
-	uint8_t loop_start_point; /* 0..MAX_ENVELOPE_POINTS, values above mean
-	                             no loop */
+	uint8_t num_points; /* either 0 or 2..MAX_ENVELOPE_POINTS */
+	uint8_t sustain_point;
+	uint8_t loop_start_point;
 	uint8_t loop_end_point;
 };
 typedef struct xm_envelope_s xm_envelope_t;

@@ -911,15 +911,13 @@ static void xm_check_and_fix_envelope(xm_envelope_t* env, uint8_t flags) {
 		env->num_points = MAX_ENVELOPE_POINTS;
 	}
 	if(!(flags & ENVELOPE_FLAG_ENABLED)) {
-		env->num_points += 128;
-		return;
+		goto kill_envelope;
 	}
 	if(env->num_points < 2) {
 		NOTICE("discarding invalid envelope data "
 		       "(needs 2 point at least, got %u)",
 		       env->num_points);
-		env->num_points += 128;
-		return;
+		goto kill_envelope;
 	}
 	for(uint8_t i = 1; i < env->num_points; ++i) {
 		if(env->points[i-1].frame < env->points[i].frame) continue;
@@ -927,30 +925,45 @@ static void xm_check_and_fix_envelope(xm_envelope_t* env, uint8_t flags) {
 		       "(point %u frame %X -> point %u frame %X)",
 		       i-1, env->points[i-1].frame,
 		       i, env->points[i].frame);
-		env->num_points += 128;
-		return;
+		goto kill_envelope;
 	}
+
 	if(env->loop_start_point >= env->num_points) {
-		NOTICE("clamped invalid envelope loop start point (%u -> %u)",
+		NOTICE("clearing invalid envelope loop (start point %u > %u)",
 		       env->loop_start_point, env->num_points - 1);
-		env->loop_start_point = env->num_points - 1;
+		env->loop_start_point = 0;
+		env->loop_end_point = 0;
 	}
-	if(env->loop_end_point >= env->num_points) {
-		NOTICE("clamped invalid envelope loop end point (%u -> %u)",
-		       env->loop_end_point, env->num_points - 1);
-		env->loop_end_point = env->num_points - 1;
+	if(env->loop_end_point >= env->num_points
+	   || env->loop_end_point < env->loop_start_point) {
+		NOTICE("clearing invalid envelope loop "
+		       "(end point %u, > %u or < %u)",
+		       env->loop_end_point, env->num_points - 1,
+		       env->loop_start_point);
+		env->loop_start_point = 0;
+		env->loop_end_point = 0;
 	}
-	if(!(flags & ENVELOPE_FLAG_LOOP)) {
-		env->loop_start_point += 128;
+	if(env->loop_start_point == env->loop_end_point
+	   || !(flags & ENVELOPE_FLAG_LOOP)) {
+		env->loop_start_point = 0;
+		env->loop_end_point = 0;
 	}
+
 	if(env->sustain_point >= env->num_points) {
-		NOTICE("clamped invalid envelope sustain point (%u -> %u)",
+		NOTICE("clearing invalid envelope sustain point (%u > %u)",
 		       env->sustain_point, env->num_points - 1);
 		env->sustain_point = env->num_points - 1;
 	}
 	if(!(flags & ENVELOPE_FLAG_SUSTAIN)) {
-		env->sustain_point += 128;
+		env->sustain_point = env->num_points - 1;
 	}
+
+	return;
+
+ kill_envelope:
+	/* Clear all the bits in the envelope (a lot of modules have instruments
+	   with unused points) for better compressibility with libxmize */
+	__builtin_memset(env, 0, sizeof(xm_envelope_t));
 }
 
 static uint32_t xm_load_xm0104_sample_header(xm_sample_t* sample, bool* is_16bit,
@@ -1202,10 +1215,6 @@ static void xm_load_mod(xm_context_t* ctx,
 
 		ins->num_samples = 1;
 		ins->samples_index = i;
-		static_assert(MAX_ENVELOPE_POINTS < 128);
-		ins->volume_envelope.num_points = 128;
-		ins->panning_envelope.num_points = 128;
-
 		offset += 30;
 	}
 
