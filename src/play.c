@@ -718,6 +718,20 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 }
 
 static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
+	#if XM_RAMPING
+	if(ch->sample && ch->period) {
+		static_assert(RAMPING_POINTS <= UINT8_MAX);
+		for(uint8_t i = 0; i < RAMPING_POINTS; ++i) {
+			ch->end_of_previous_sample[i] =
+				xm_next_of_sample(ctx, ch);
+		}
+	} else {
+		__builtin_memset(ch->end_of_previous_sample, 0,
+		                 RAMPING_POINTS * sizeof(float));
+	}
+	ch->frame_count = 0;
+	#endif
+
 	/* Update ch->sample and ch->instrument */
 	ch->instrument = ctx->instruments + ch->next_instrument - 1;
 	if(ch->next_instrument == 0
@@ -783,11 +797,6 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	   since tremor_on touches volume_offest anyway, and it gets reset by an
 	   inst trigger?*/
 	//ch->tremor_on = false;
-
-	#if XM_RAMPING
-	ch->frame_count = 0;
-	/* XXX: fill end of previous sample *before* updating ch->sample */
-	#endif
 
 	#if XM_TIMING_FUNCTIONS
 	ch->latest_trigger = ctx->generated_samples;

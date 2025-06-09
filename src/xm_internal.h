@@ -54,7 +54,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define NUM_NOTES 96
 #define MAX_ENVELOPE_POINTS 12
 #define MAX_ROWS_PER_PATTERN 256
-#define RAMPING_POINTS 31
+#define RAMPING_POINTS 255
 #define MAX_VOLUME 64
 #define MAX_FADEOUT_VOLUME 32768
 #define MAX_PANNING 256 /* cannot be stored in a uint8_t, this is ft2
@@ -74,7 +74,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 /* How much is a channel final volume allowed to change per audio frame; this is
    used to avoid abrubt volume changes which manifest as "clicks" in the
    generated sound. */
-#define RAMPING_VOLUME_RAMP (1.f/128.f)
+#define RAMPING_VOLUME_RAMP (1.f/256.f)
 
 /* Final amplification factor for the generated audio frames. This value is a
    compromise between too quiet output and clipping. */

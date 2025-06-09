@@ -143,8 +143,7 @@ autovibrato-turnoff.xm         | PASS           | MilkyTracker           | Same 
 panning-law.xm                 | PASS           | MilkyTracker, FT2clone | Should sound identical.
 pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
 pos_jump.xm                    | PASS           | Milkytracker, OpenMPT  | Only one beep should be heard.
-ramping.xm                     | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
-ramping2.xm                    | PASS           | MilkyTracker           | If XM_RAMPING is ON, no loud clicks should be heard.
+ramping.xm                     | PASS           | FT2clone               | If XM_RAMPING is ON, output should be mostly frame for frame identical.
 waveform-control-tremolo.xm    | MOSTLY (*)     | FT2clone               | (*) Random waveform not supported in FT2, should sound identical otherwise. Second half of the ramp waveform (E71/E75) is incorrect in libxm.
 waveform-control-vibrato.xm    | PASS (*)       | FT2clone               | (*) Random waveform not supported in FT2, should sound identical otherwise.
 ~~~

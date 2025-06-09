@@ -43,11 +43,11 @@ option_and_define(XM_VERBOSE
 	"ON")
 
 option_and_define(XM_LINEAR_INTERPOLATION
-	"Use linear interpolation (CPU hungry)"
+	"Use linear interpolation (FT2-like, CPU hungry)"
 	"ON")
 
 option_and_define(XM_RAMPING
-	"Enable ramping (smooth volume/panning transitions, CPU hungry)"
+	"Enable ramping (FT2-like, CPU hungry)"
 	"ON")
 
 option_and_define(XM_LIBXM_DELTA_SAMPLES
