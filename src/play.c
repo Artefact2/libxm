@@ -27,9 +27,9 @@ static uint8_t xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uin
 static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
 static uint16_t xm_linear_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const));
-static uint32_t xm_linear_frequency(const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
+static uint32_t xm_linear_frequency(uint16_t, uint8_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 static uint16_t xm_amiga_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const));
-static uint32_t xm_amiga_frequency(const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
+static uint32_t xm_amiga_frequency(uint16_t, uint8_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 
 static uint16_t xm_period(const xm_context_t*, int16_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 static uint32_t xm_frequency(const xm_context_t*, const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
@@ -239,7 +239,7 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* Arp effect always resets vibrato offset, even if it only runs for 1
 	   tick where the offset is 0 (eg spd=2 001). Tick counter isn't
-	   reset. */
+	   reset. Autovibrato is still applied. */
 	ch->vibrato_offset = 0;
 
 	/* This can happen with eg EEy pattern delay */
@@ -352,36 +352,28 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	return (uint16_t)(7680 - note * 4);
 }
 
-[[maybe_unused]] static uint32_t xm_linear_frequency(const xm_channel_context_t* ch) {
-	assert(ch->period > 0);
-	uint16_t p = ch->period;
-	if(ch->arp_note_offset) {
+[[maybe_unused]] static uint32_t xm_linear_frequency(uint16_t period,
+                                                     uint8_t arp_note_offset) {
+	if(arp_note_offset) {
 		/* XXX: test wraparound? */
-		p -= (uint16_t)(ch->arp_note_offset * 64);
+		period -= (uint16_t)(arp_note_offset * 64);
 		/* 1540 is the period of note 95+15/16ths, the maximum
 		   FT2 will use for an arpeggio */
-		p = p < 1540 ? 1540 : p;
-	} else {
-		/* XXX: is it cumulative with arpeggio? */
-		p -= ch->vibrato_offset;
-		p -= ch->autovibrato_offset;
+		period = period < 1540 ? 1540 : period;
 	}
-	return (uint32_t)(8363.f * exp2f((4608.f - (float)p) / 768.f));
+	return (uint32_t)(8363.f * exp2f((4608.f - (float)period) / 768.f));
 }
 
 [[maybe_unused]] static uint16_t xm_amiga_period(int16_t note) {
 	return (uint16_t)(32.f * 856.f * exp2f((float)note / (-12.f * 16.f)));
 }
 
-[[maybe_unused]] static uint32_t xm_amiga_frequency(const xm_channel_context_t* ch) {
-	assert(ch->period > 0);
-	float p = (float)ch->period;
-	if(ch->arp_note_offset) {
-		p *= exp2f((float)ch->arp_note_offset / (-12.f));
+[[maybe_unused]] static uint32_t xm_amiga_frequency(uint16_t period,
+                                                    uint8_t arp_note_offset) {
+	float p = (float)period;
+	if(arp_note_offset) {
+		p *= exp2f((float)arp_note_offset / (-12.f));
 		p = p < 107.f ? 107.f : p;
-	} else {
-		p -= (float)ch->vibrato_offset;
-		p -= (float)ch->autovibrato_offset;
 	}
 
 	/* This is the PAL value. No reason to choose this one over the
@@ -403,13 +395,19 @@ static uint16_t xm_period([[maybe_unused]] const xm_context_t* ctx,
 
 static uint32_t xm_frequency([[maybe_unused]] const xm_context_t* ctx,
                              const xm_channel_context_t* ch) {
+	assert(ch->period > 0);
+	/* XXX: test wraparound/overflow */
+	uint16_t period = (uint16_t)(ch->period - ch->vibrato_offset
+		- ch->autovibrato_offset);
+
 	#if XM_FREQUENCY_TYPES == 1
-	return xm_linear_frequency(ch);
+	return xm_linear_frequency(period, ch->arp_note_offset);
 	#elif XM_FREQUENCY_TYPES == 2
-	return xm_amiga_frequency(ch);
+	return xm_amiga_frequency(period, ch->arp_note_offset);
 	#else
-	return ctx->module.amiga_frequencies ?
-		xm_amiga_frequency(ch) : xm_linear_frequency(ch);
+	return ctx->module.amiga_frequencies
+		? xm_amiga_frequency(period, ch->arp_note_offset)
+		: xm_linear_frequency(period, ch->arp_note_offset);
 	#endif
 }
 
