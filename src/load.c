@@ -1326,7 +1326,7 @@ static void xm_load_mod(xm_context_t* ctx,
 				}
 				if(slot->effect_type == 0x5
 				   || slot->effect_type == 0x6) {
-					slot->effect_type = 0x3;
+					slot->effect_type -= 2;
 				}
 			}
 
