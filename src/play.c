@@ -895,15 +895,16 @@ static uint8_t xm_tick_envelope(xm_channel_context_t* ch,
 	assert(env->loop_start_point < env->num_points);
 	assert(env->loop_end_point < env->num_points);
 
+	/* Only loop if we are exactly at loop_end. Don't loop if we went past
+	   it, with eg a Lxx effect. Apply loop *before* sustain logic, in case
+	   the sustain point is also set as the loop end. */
+	if(*counter == env->points[env->loop_end_point].frame) {
+		*counter = env->points[env->loop_start_point].frame;
+	}
+
 	/* Don't advance envelope position if we are sustaining */
 	if(ch->sustained && *counter == env->points[env->sustain_point].frame) {
 		return env->points[env->sustain_point].value;
-	}
-
-	/* Only loop if we are exactly at loop_end. Don't loop if we went past
-	   it, with eg a Lxx effect */
-	if(*counter == env->points[env->loop_end_point].frame) {
-		*counter = env->points[env->loop_start_point].frame;
 	}
 
 	/* Find points left and right of current envelope position */
