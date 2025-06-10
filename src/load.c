@@ -969,10 +969,10 @@ static void xm_check_and_fix_envelope(xm_envelope_t* env, uint8_t flags) {
 	if(env->sustain_point >= env->num_points) {
 		NOTICE("clearing invalid envelope sustain point (%u > %u)",
 		       env->sustain_point, env->num_points - 1);
-		env->sustain_point = env->num_points - 1;
+		env->sustain_point = 128;
 	}
 	if(!(flags & ENVELOPE_FLAG_SUSTAIN)) {
-		env->sustain_point = env->num_points - 1;
+		env->sustain_point = 128;
 	}
 
 	return;
