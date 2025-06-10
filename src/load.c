@@ -330,8 +330,9 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			slot->effect_param = 0;
 		}
 
-		if(slot->effect_type == 0xC && slot->effect_param > MAX_VOLUME) {
-			/* Clamp Cxx */
+		if((slot->effect_type == 0xC || slot->effect_type == 16)
+		   && slot->effect_param > MAX_VOLUME) {
+			/* Clamp Cxx and Gxx */
 			slot->effect_param = MAX_VOLUME;
 		}
 
@@ -371,11 +372,6 @@ static void xm_fixup_context(xm_context_t* ctx) {
 		if(slot->effect_type == 0x0F && slot->effect_param == 0) {
 			/* Delete F00 (stops playback) */
 			slot->effect_type = 0;
-		}
-
-		if(slot->effect_type == 16 && slot->effect_param > MAX_VOLUME) {
-			/* Clamp Gxx */
-			slot->effect_param = MAX_VOLUME;
 		}
 
 		if(slot->effect_type == 20 && slot->effect_param == 0) {

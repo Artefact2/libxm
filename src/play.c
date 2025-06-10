@@ -1107,34 +1107,27 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 3: /* 3xx: Tone portamento */
+		[[fallthrough]];
+	case 5: /* 5xx: Tone portamento + Volume slide */
 		xm_tone_portamento(ctx, ch);
-		break;
+		if(ch->current->effect_type == 5) {
+			goto volume_slide;
+		} else {
+			break;
+		}
 
 	case 4: /* 4xy: Vibrato */
 		UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
 		                        ch->current->effect_param);
-		ch->should_reset_vibrato = true;
-		xm_vibrato(ch);
-		break;
-
-	case 5: /* 5xy: Tone portamento + Volume slide */
-		if(ch->current->effect_param > 0) {
-			ch->volume_slide_param = ch->current->effect_param;
-		}
-		xm_tone_portamento(ctx, ch);
-		ch->volume_offset = 0;
-		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
-		break;
-
+		[[fallthrough]];
 	case 6: /* 6xy: Vibrato + Volume slide */
-		if(ch->current->effect_param > 0) {
-			ch->volume_slide_param = ch->current->effect_param;
-		}
 		ch->should_reset_vibrato = true;
 		xm_vibrato(ch);
-		ch->volume_offset = 0;
-		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
-		break;
+		if(ch->current->effect_type == 6) {
+			goto volume_slide;
+		} else {
+			break;
+		}
 
 	case 7: /* 7xy: Tremolo */
 		UPDATE_EFFECT_MEMORY_XY(&ch->tremolo_param,
@@ -1142,6 +1135,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		xm_tremolo(ch);
 		break;
 
+	volume_slide:
 	case 0xA: /* Axy: Volume slide */
 		if(ch->current->effect_param > 0) {
 			ch->volume_slide_param = ch->current->effect_param;
