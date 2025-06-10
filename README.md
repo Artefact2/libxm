@@ -12,7 +12,8 @@ features:
   Big-endian compatible (tested on s390x).
 
 * Reasonable accuracy compared to Fasttracker 2. Deviations from FT2 playback,
-  that aren't obviously bugs in FT2, are also libxm bugs.
+  that aren't obviously bugs in FT2, are also libxm bugs. If you have a module
+  that plays incorrectly, please test it in FT2/FT2clone and open an issue!
 
 * Can load most XM/MOD files, however playback accuracy of non-XM is
   best-effort.
@@ -110,7 +111,6 @@ accuracy):
 Effect differences
 ==================
 
-* Random waveform is supported for vibrato control (E43, E47) and tremolo control (E73, E77), FT2 does not support this waveform
 * E8y effect is supported, FT2 has no support for this command
 * Glissando control (E3y) with Amiga frequencies is not yet supported
 * Amiga filter toggle (E0y) is not supported, and is unlikely to be
@@ -145,8 +145,8 @@ panning-law.xm                 | PASS           | MilkyTracker, FT2clone | Shoul
 pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
 pos_jump.xm                    | PASS           | Milkytracker, OpenMPT  | Only one beep should be heard.
 ramping.xm                     | PASS           | FT2clone               | If XM_RAMPING is ON, output should be mostly frame for frame identical.
-waveform-control-tremolo.xm    | MOSTLY (*)     | FT2clone               | (*) Random waveform not supported in FT2, should sound identical otherwise. Second half of the ramp waveform (E71/E75) is incorrect in libxm.
-waveform-control-vibrato.xm    | PASS (*)       | FT2clone               | (*) Random waveform not supported in FT2, should sound identical otherwise.
+waveform-control-tremolo.xm    | MOSTLY         | FT2clone               | Should sound identical. Second half of the ramp waveform (E71/E75) is incorrect in libxm.
+waveform-control-vibrato.xm    | PASS           | FT2clone               | Should sound identical.
 ~~~
 
 Thanks

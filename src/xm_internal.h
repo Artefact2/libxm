@@ -255,7 +255,7 @@ struct xm_channel_context_s {
 	uint8_t next_instrument; /* Last instrument seen in the
 	                            instrument column. Could be 0. */
 
-	int8_t autovibrato_note_offset; /* in 1/64 semitones */
+	int8_t autovibrato_offset; /* in 1/64 semitones */
 	uint8_t arp_note_offset; /* in semitones */
 	uint8_t volume_slide_param;
 	uint8_t fine_volume_slide_up_param;

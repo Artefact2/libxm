@@ -128,20 +128,14 @@ static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
 	case 2: /* Square */
 		return (step < 0x20) ? INT8_MIN : INT8_MAX;
 
-	case 1: /* Ramp */
+	case 1: /* Ramp down */
 		/* Starts at zero, wraps around at the middle */
 		return (int8_t)(-step * 4 - 1);
 
-	case 3: /* Random */
-		/* This is not strict FT2 behaviour (would need to delete
-		   E43/E47/E73/E77 in load.c), but is probably nice to have
-		   regardless */
-		/* Use the POSIX.1-2001 example, just to be deterministic
-		 * across different machines */
-		static uint32_t next_rand = 24492; /* XXX: this is NOT
-		                                      re-entrant! */
-		next_rand = next_rand * 1103515245 + 12345;
-		return (int8_t)((next_rand >> 16) & 0xFF);
+	case 3: /* Ramp up */
+		/* Only used by autovibrato, regular E4y/E7y will use a square
+		   wave instead (this is set by load.c) */
+		return (int8_t)(step * 4);
 
 	}
 
@@ -156,20 +150,21 @@ static void xm_autovibrato(xm_channel_context_t* ch) {
 	   autovibrato_rate of 4 is the same as 41y). */
 	/* Autovibrato depth is 8x smaller than equivalent 4xx effect (ie,
 	   autovibrato_depth of 8 is the same as 4x1). */
-	/* Autovibrato also starts at a different point in the waveform, or
-	   flips its sign (XXX: test this for non-sine waveforms) */
+	/* Autovibrato also flips the sign of the waveform. */
+	/* Autovibrato is cumulative with regular vibrato and is also a straight
+	   period offset for amiga frequencies. */
 
 	/* Depth 16 = 0.5 semitone amplitude (-0.25 then +0.25) */
 	/* Scale waveform from -128..127 to -16..15 at depth 16 */
-	ch->autovibrato_note_offset = (int8_t)
+	ch->autovibrato_offset = (int8_t)
 		(((int16_t)xm_waveform(instr->vibrato_type,
 		                       (uint8_t)(ch->autovibrato_ticks
 		                                 * instr->vibrato_rate / 4)))
 		 * (-instr->vibrato_depth) / 128);
 
 	if(ch->autovibrato_ticks < instr->vibrato_sweep) {
-		ch->autovibrato_note_offset = (int8_t)
-			((int16_t)ch->autovibrato_note_offset
+		ch->autovibrato_offset = (int8_t)
+			((int16_t)ch->autovibrato_offset
 			* ch->autovibrato_ticks / instr->vibrato_sweep);
 	}
 
@@ -369,7 +364,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	} else {
 		/* XXX: is it cumulative with arpeggio? */
 		p -= ch->vibrato_offset;
-		p -= ch->autovibrato_note_offset;
+		p -= ch->autovibrato_offset;
 	}
 	return (uint32_t)(8363.f * exp2f((4608.f - (float)p) / 768.f));
 }
@@ -386,7 +381,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 		p = p < 107.f ? 107.f : p;
 	} else {
 		p -= (float)ch->vibrato_offset;
-		p -= (float)ch->autovibrato_note_offset;
+		p -= (float)ch->autovibrato_offset;
 	}
 
 	/* This is the PAL value. No reason to choose this one over the
@@ -706,7 +701,6 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 	ch->tremor_ticks = 0;
 	ch->multi_retrig_ticks = 0;
 	ch->autovibrato_ticks = 0;
-	ch->autovibrato_note_offset = 0;
 	ch->volume_offset = 0;
 
 	if(!(ch->vibrato_control_param & 4)) {

@@ -335,6 +335,19 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			slot->effect_param = MAX_VOLUME;
 		}
 
+		if(slot->effect_type == 0xE &&
+		   (slot->effect_param >> 4 == 4
+		    || slot->effect_param >> 4 == 7)) {
+			/* Convert random waveform to square waveform (FT2
+			   behaviour, lets us reuse waveform 3 for
+			   autovibrato ramp) */
+			/* Also clear useless bit 3 */
+			slot->effect_param &=
+				((slot->effect_param & 0b11) == 0b11) ?
+				0b11110110 : 0b11110111;
+
+		}
+
 		if(slot->effect_type == 0xE && slot->effect_param >> 4 == 8) {
 			/* Convert E8x to 8xx */
 			slot->effect_type = 8;
@@ -826,10 +839,14 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	xm_check_and_fix_envelope(&(instr->panning_envelope), pan_env_flags);
 
 	instr->vibrato_type = READ_U8(offset + 235);
-	if(instr->vibrato_type == 2) {
-		instr->vibrato_type = 1;
-	} else if(instr->vibrato_type == 1) {
-		instr->vibrato_type = 2;
+	/* Swap around autovibrato waveforms to match xm_waveform() semantics */
+	/* FT2 values: 0 = Sine, 1 = Square, 2 = Ramp down, 3 = Ramp up */
+	/* Swap square and ramp */
+	static const uint8_t lut[] = { 0b00, 0b11, 0b11, 0b00 };
+	instr->vibrato_type ^= lut[instr->vibrato_type & 0b11];
+	/* Swap ramp types */
+	if(instr->vibrato_type & 1) {
+		instr->vibrato_type ^= 0b10;
 	}
 	instr->vibrato_sweep = READ_U8(offset + 236);
 	instr->vibrato_depth = READ_U8(offset + 237);
