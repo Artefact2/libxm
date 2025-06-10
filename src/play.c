@@ -922,6 +922,8 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 	xm_instrument_t* inst = ch->instrument;
 	if(inst == NULL) return;
 
+	xm_autovibrato(ch);
+
 	if(!ch->sustained) {
 		ch->fadeout_volume =
 			(ch->fadeout_volume < inst->volume_fadeout) ?
@@ -965,7 +967,6 @@ static void xm_tick(xm_context_t* ctx) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
 		xm_tick_envelopes(ch);
-		xm_autovibrato(ch);
 
 		if(ctx->current_tick || ctx->extra_rows_done) {
 			xm_tick_effects(ctx, ch);

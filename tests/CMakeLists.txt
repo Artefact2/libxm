@@ -11,6 +11,8 @@ target_link_libraries(test-libxm PRIVATE xm xm_common)
 
 add_test(NAME test_arpeggio COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/arpeggio.xm)
+add_test(NAME test_autovibrato_turnoff COMMAND test-libxm
+	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/autovibrato-turnoff.xm)
 add_test(NAME test_effect_memory COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/effect-memory.xm)
 add_test(NAME test_finetune COMMAND test-libxm
