@@ -378,8 +378,13 @@ static void xm_fixup_context(xm_context_t* ctx) {
 		}
 
 		if(slot->effect_type == 0x0F && slot->effect_param == 0) {
-			/* Delete F00 (stops playback) */
-			slot->effect_type = 0;
+			/* F00 is not great for a player, as it stops playback.
+			   Some modules use this to indicate the end of the
+			   song. Just loop back to the start of the module and
+			   let the user decide if they want to continue, based
+			   on max_loop_count. */
+			slot->effect_type = 0xB;
+			slot->effect_param = ctx->module.restart_position;
 		}
 
 		if(slot->effect_type == 20 && slot->effect_param == 0) {
