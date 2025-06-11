@@ -1242,7 +1242,7 @@ static void xm_load_mod(xm_context_t* ctx,
 	offset += 134;
 
 	/* Read patterns */
-	bool has_panning_effects = false;
+	[[maybe_unused]] bool has_panning_effects = false;
 	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
 		xm_pattern_t* pat = ctx->patterns + i;
 		pat->num_rows = 64;
@@ -1306,11 +1306,16 @@ static void xm_load_mod(xm_context_t* ctx,
 	xm_pattern_slot_t* slot = ctx->pattern_slots;
 	for(uint32_t row = 0; row < ctx->module.num_rows; ++row) {
 		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+			static_assert(XM_AMIGA_STEREO_SEPARATION >= 0);
+			static_assert(XM_AMIGA_STEREO_SEPARATION <= 7);
+			#if XM_AMIGA_STEREO_SEPARATION > 0
 			/* Emulate hard panning (LRRL LRRL etc) */
 			if(!has_panning_effects && slot->instrument) {
-				slot->volume_column =
-					(((ch >> 1) ^ ch) & 1) ? 0xCF : 0xC0;
+				slot->volume_column = (((ch >> 1) ^ ch) & 1)
+					? (0xC8 + XM_AMIGA_STEREO_SEPARATION)
+					: (0xC8 - XM_AMIGA_STEREO_SEPARATION);
 			}
+			#endif
 
 			/* Imitate ProTracker 2/3 lacking effect memory for
 			   1xx/2xx/Axy (based on the MilkyTracker docs) */

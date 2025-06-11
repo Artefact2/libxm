@@ -71,4 +71,8 @@ set(XM_FREQUENCY_TYPES "3" CACHE STRING
 	"Supported frequency types (1=Linear,2=Amiga,3=Both)")
 target_compile_definitions(xm PRIVATE XM_FREQUENCY_TYPES=${XM_FREQUENCY_TYPES})
 
+set(XM_AMIGA_STEREO_SEPARATION "7" CACHE STRING
+	"Stereo separation strength for MODs without panning effects (0=Mono to 7=Hard Amiga panning)")
+target_compile_definitions(xm PRIVATE XM_AMIGA_STEREO_SEPARATION=${XM_AMIGA_STEREO_SEPARATION})
+
 configure_file(xm.h.in xm.h @ONLY)
