@@ -416,7 +416,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	xm_pattern_slot_t* s = ch->current;
 
 	if(s->instrument) {
-		/* Update ch->next_instrument */
+		/* Always update next_instrument, even with a key-off note. */
 		ch->next_instrument = s->instrument;
 	}
 
@@ -433,20 +433,16 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 				ch->orig_note = s->note;
 				xm_trigger_note(ctx, ch);
 			}
-
 		} else if(s->effect_type == 0x0E && s->effect_param == 0x90) {
 			/* E90 acts like a ghost note */
 			xm_trigger_note(ctx, ch);
 		}
+	} else {
+		xm_key_off(ctx, ch);
 	}
 
 	if(s->instrument) {
 		xm_trigger_instrument(ctx, ch);
-	}
-
-	if(NOTE_IS_KEY_OFF(s->note)) {
-		/* Key Off */
-		xm_key_off(ctx, ch);
 	}
 
 	/* These volume effects always work, even when called with a delay by
@@ -693,6 +689,13 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 
 	ch->volume = ch->sample->volume;
 	ch->panning = ch->sample->panning;
+
+	if(NOTE_IS_KEY_OFF(ch->current->note)) {
+		/* XXX: instrument triggers with a key-off note are a bit weird,
+		   figure out the proper logic in xm_handle_pattern_slot()
+		   instead of hardcoding this check here */
+		return;
+	}
 
 	ch->sustained = true;
 	ch->volume_envelope_frame_count = 0;
