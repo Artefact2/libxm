@@ -758,18 +758,6 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		+ ch->instrument->sample_of_notes[ch->orig_note - 1];
 
 	if(ch->current->note == NOTE_SWITCH) {
-		/* XXX: refactor this into xm_next_of_sample() */
-		if(ch->sample->loop_length) {
-			assert(ch->sample->ping_pong == false);
-			while(ch->sample_position / SAMPLE_MICROSTEPS
-			   >= ch->sample->length) {
-				ch->sample_position -= ch->sample->loop_length
-					* SAMPLE_MICROSTEPS;
-			}
-		} else if(ch->sample_position / SAMPLE_MICROSTEPS
-		          >= ch->sample->length) {
-			ch->sample = NULL;
-		}
 		return;
 	}
 
@@ -1271,7 +1259,14 @@ static float xm_sample_at(const xm_context_t* ctx,
 
 /* XXX: rename me or merge with xm_next_of_channel */
 static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
-	if(ch->sample == NULL) {
+	const xm_sample_t* smp = ch->sample;
+	assert(smp == NULL || smp->loop_length <= smp->length);
+
+	/* Zero-length samples are also handled here, since loop_length will
+	   always be zero for these */
+	if(smp == NULL
+	   || (smp->loop_length == 0
+	       && ch->sample_position >= smp->length * SAMPLE_MICROSTEPS)) {
 		#if XM_RAMPING
 		/* Smoothly transition between old sample and silence */
 		if(ch->frame_count >= RAMPING_POINTS) return 0.f;
@@ -1282,72 +1277,53 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 		#endif
 	}
 
-	/* XXX: maybe do something about 0 length samples in load.c? */
-	if(ch->sample->length == 0) {
-		return .0f;
+	if(smp->loop_length
+	   && ch->sample_position >= smp->length * SAMPLE_MICROSTEPS) {
+		/* Remove extra loops. For ping-pong logic, the loop length is
+		   doubled, and the second half is the reverse of the looped
+		   part. */
+		uint32_t off = (uint32_t)
+			((smp->length - smp->loop_length) * SAMPLE_MICROSTEPS);
+		ch->sample_position -= off;
+		ch->sample_position %= smp->ping_pong
+			? smp->loop_length * SAMPLE_MICROSTEPS * 2
+			: smp->loop_length * SAMPLE_MICROSTEPS;
+		ch->sample_position += off;
 	}
 
-	xm_sample_t* smp = ch->sample;
 	uint32_t a = ch->sample_position / SAMPLE_MICROSTEPS;
-	[[maybe_unused]] float t = (float)(ch->sample_position % SAMPLE_MICROSTEPS) / (float)SAMPLE_MICROSTEPS;
+
+	[[maybe_unused]] const float t = (float)
+		(ch->sample_position % SAMPLE_MICROSTEPS)
+		/ (float)SAMPLE_MICROSTEPS;
 	[[maybe_unused]] uint32_t b;
-	ch->sample_position += ch->step;
 
-	if(ch->sample->loop_length == 0) {
-		if((ch->sample_position / SAMPLE_MICROSTEPS)
-		   >= ch->sample->length) {
-			ch->sample = NULL;
-			b = a;
-		} else {
-			b = (a+1 < ch->sample->length) ? (a+1) : a;
-		}
-	} else if(!ch->sample->ping_pong) {
-		/* If length=6, loop_length=4 */
-		/* 0 1 (2 3 4 5) (2 3 4 5) (2 3 4 5) ... */
-		assert(ch->sample->loop_length > 0);
-		while((ch->sample_position / SAMPLE_MICROSTEPS)
-		      >= ch->sample->length) {
-			ch->sample_position -= ch->sample->loop_length
-				* SAMPLE_MICROSTEPS;
-		}
-		b = (a+1 == ch->sample->length) ?
-			ch->sample->length - ch->sample->loop_length : (a+1);
-		assert(a < ch->sample->length);
-		assert(b < ch->sample->length);
+	/* Find the next sample point (for linear interpolation only) and also
+	   apply ping-pong logic */
+	if(smp->loop_length == 0) {
+		b = (a+1 < ch->sample->length) ? (a+1) : a;
+	} else if(!smp->ping_pong) {
+		b = (a+1 == smp->length) ?
+			smp->length - smp->loop_length : (a+1);
 	} else {
-		/* If length=6, loop_length=4 */
-		/* 0 1 (2 3 4 5 5 4 3 2) (2 3 4 5 5 4 3 2) ... */
-		assert(ch->sample->loop_length > 0);
-		while((ch->sample_position / SAMPLE_MICROSTEPS) >=
-		      ch->sample->length + ch->sample->loop_length) {
-			/* This will not overflow, loop_length size is checked
-			   in load.c */
-			ch->sample_position -= ch->sample->loop_length
-				* 2 * SAMPLE_MICROSTEPS;
-		}
-
-		if(a < ch->sample->length) {
+		if(a < smp->length) {
 			/* In the first half of the loop, go forwards */
-			b = (a+1 == ch->sample->length) ? a : (a+1);
+			b = (a+1 == smp->length) ? a : (a+1);
 		} else {
 			/* In the second half of the loop, go backwards */
 			/* loop_end -> loop_end - 1 */
 			/* loop_end + 1 -> loop_end - 2 */
 			/* etc. */
 			/* loop_end + loop_length - 1 -> loop_start */
-			a = ch->sample->length * 2 - 1 - a;
-			b = (a == ch->sample->length - ch->sample->loop_length) ?
-				a : (a-1);
-			assert(a >= ch->sample->length
-			       - ch->sample->loop_length);
-			assert(b >= ch->sample->length
-			       - ch->sample->loop_length);
+			a = smp->length * 2 - 1 - a;
+			b = (a == smp->length - smp->loop_length) ? a : (a-1);
+			assert(a >= smp->length - smp->loop_length);
+			assert(b >= smp->length - smp->loop_length);
 		}
-
-		assert(a < ch->sample->length);
-		assert(b < ch->sample->length);
 	}
 
+	assert(a < smp->length);
+	assert(b < smp->length);
 	float u = (float)xm_sample_at(ctx, smp, a);
 
 	#if XM_LINEAR_INTERPOLATION
@@ -1363,6 +1339,7 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 	#endif
 
+	ch->sample_position += ch->step;
 	return u;
 }
 
