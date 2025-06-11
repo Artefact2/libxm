@@ -311,6 +311,7 @@ static void xm_pitch_slide(xm_channel_context_t* ch,
 }
 
 static void xm_param_slide(uint8_t* param, uint8_t rawval, uint8_t max) {
+	/* In FT2, sliding up has precendence for "illegal" slides, eg A1F. */
 	if(rawval & 0xF0) {
 		/* Slide up */
 		if(ckd_add(param, *param, rawval >> 4) || *param > max) {
@@ -960,9 +961,6 @@ static void xm_tick(xm_context_t* ctx) {
 		xm_row(ctx);
 	}
 
-	/* Process effects of the entire row *before* moving on with the math,
-	   as some values like global volume can still change later in the
-	   row. */
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
@@ -971,10 +969,7 @@ static void xm_tick(xm_context_t* ctx) {
 		if(ctx->current_tick || ctx->extra_rows_done) {
 			xm_tick_effects(ctx, ch);
 		}
-	}
 
-	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
-		xm_channel_context_t* ch = ctx->channels + i;
 		if(!ch->period) continue;
 
 		/* Don't truncate, actually round up or down, precision matters
