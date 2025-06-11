@@ -60,7 +60,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **3974 bytes** (Linux
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **3975 bytes** (Linux
 x86_64).
 
 ~~~
@@ -111,7 +111,7 @@ accuracy):
 Effect differences
 ==================
 
-* E8y effect is supported, FT2 has no support for this command
+* E8y panning effect is supported, FT2 has no support for this command
 * Glissando control (E3y) with Amiga frequencies is not yet supported
 * Amiga filter toggle (E0y) is not supported, and is unlikely to be
 * Invert loop / funk repeat (EFy) is not supported, and is unlikely to be

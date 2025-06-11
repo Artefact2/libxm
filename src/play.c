@@ -96,7 +96,11 @@ static bool HAS_VIBRATO(const xm_pattern_slot_t* s) {
 
 __attribute__((const))
 static bool NOTE_IS_KEY_OFF(uint8_t n) {
-	return n & KEY_OFF_NOTE;
+	static_assert(NOTE_KEY_OFF == 128);
+	static_assert(MAX_NOTE < 128);
+	static_assert(NOTE_RETRIGGER < 128);
+	static_assert(NOTE_SWITCH < 128);
+	return n & 128;
 }
 
 __attribute__((nonnull))
@@ -422,20 +426,18 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 	if(!NOTE_IS_KEY_OFF(s->note)) {
 		if(s->note) {
-			/* Non-zero note, also not key off. Assume note is
-			   valid, since invalid notes are deleted in load.c. */
-
-			if(HAS_TONE_PORTAMENTO(ch->current)) {
-				xm_tone_portamento_target(ctx, ch);
+			if(s->note <= MAX_NOTE) {
+				if(HAS_TONE_PORTAMENTO(ch->current)) {
+					/* Orig note (used for retriggers) is
+					   not updated by tone portas */
+					xm_tone_portamento_target(ctx, ch);
+				} else {
+					ch->orig_note = s->note;
+					xm_trigger_note(ctx, ch);
+				}
 			} else {
-				/* Orig note (used for retriggers) is not
-				   updated by tone portas */
-				ch->orig_note = s->note;
 				xm_trigger_note(ctx, ch);
 			}
-		} else if(s->effect_type == 0x0E && s->effect_param == 0x90) {
-			/* E90 acts like a ghost note */
-			xm_trigger_note(ctx, ch);
 		}
 	} else {
 		xm_key_off(ctx, ch);
@@ -754,6 +756,22 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	ch->sample = ctx->samples
 		+ ch->instrument->samples_index
 		+ ch->instrument->sample_of_notes[ch->orig_note - 1];
+
+	if(ch->current->note == NOTE_SWITCH) {
+		/* XXX: refactor this into xm_next_of_sample() */
+		if(ch->sample->loop_length) {
+			assert(ch->sample->ping_pong == false);
+			while(ch->sample_position / SAMPLE_MICROSTEPS
+			   >= ch->sample->length) {
+				ch->sample_position -= ch->sample->loop_length
+					* SAMPLE_MICROSTEPS;
+			}
+		} else if(ch->sample_position / SAMPLE_MICROSTEPS
+		          >= ch->sample->length) {
+			ch->sample = NULL;
+		}
+		return;
+	}
 
 	/* Update period */
 	int16_t note = (int16_t)(ch->orig_note + ch->sample->relative_note);
@@ -1146,9 +1164,9 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		switch(ch->current->effect_param >> 4) {
 
 		case 0x9: /* E9y: Retrigger note */
-			if((ch->current->effect_param & 0x0F) == 0
-			   || (ctx->current_tick
-			       % (ch->current->effect_param & 0x0F))) break;
+			assert((ch->current->effect_param & 0x0F) > 0);
+			if(ctx->current_tick
+			   % (ch->current->effect_param & 0x0F)) break;
 			/* XXX: refactor this, this is suspiciously similar to
 			   EDy, there is a simpler big picture  */
 			ch->volume_envelope_frame_count = 0;

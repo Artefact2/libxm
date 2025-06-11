@@ -316,12 +316,8 @@ static void xm_fixup_context(xm_context_t* ctx) {
 	              <= UINT32_MAX);
 	for(uint32_t i = ctx->module.num_rows * ctx->module.num_channels;
 	    i; --i, ++slot) {
-		if(slot->note > 97) {
-			NOTICE("slot %lu: deleting invalid note %d",
-			       slot - ctx->pattern_slots, slot->note);
-			slot->note = 0;
-		} else if(slot->note == 97) {
-			slot->note = KEY_OFF_NOTE;
+		if(slot->note == 97) {
+			slot->note = NOTE_KEY_OFF;
 		}
 
 		if(slot->effect_type == 0xB
@@ -369,6 +365,18 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			slot->effect_param = 0;
 		}
 
+		if(slot->effect_type == 0xE && slot->effect_param == 0x90) {
+			if(slot->note) {
+				/* E90 with a note is completely redundant */
+			} else {
+				/* Convert E90 without a note to a special
+				   retrigger note */
+				slot->note = NOTE_RETRIGGER;
+			}
+			slot->effect_type = 0;
+			slot->effect_param = 0;
+		}
+
 		if(slot->effect_type == 0x0F && slot->effect_param == 0) {
 			/* Delete F00 (stops playback) */
 			slot->effect_type = 0;
@@ -381,7 +389,7 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			   is used with either a note, or an instrument in the
 			   same slot. */
 			slot->effect_type = 0;
-			slot->note = KEY_OFF_NOTE;
+			slot->note = NOTE_KEY_OFF;
 		}
 
 		if(slot->effect_type == 33 &&
@@ -812,7 +820,7 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	}
 
 	/* Read extra header properties */
-	READ_MEMCPY(instr->sample_of_notes, offset + 33, NUM_NOTES);
+	READ_MEMCPY(instr->sample_of_notes, offset + 33, MAX_NOTE);
 
 	xm_load_xm0104_envelope_points(&instr->volume_envelope,
 	                               moddata + offset + 129);
@@ -1026,7 +1034,8 @@ static uint32_t xm_load_xm0104_sample_header(xm_sample_t* sample, bool* is_16bit
 		sample->loop_length = 0;
 	}
 
-	if(flags & 0b11101100) {
+	if(flags & ~(SAMPLE_FLAG_PING_PONG | SAMPLE_FLAG_FORWARD
+	             | SAMPLE_FLAG_16B)) {
 		NOTICE("ignoring unknown flags (%d) in sample", flags);
 	}
 
@@ -1316,6 +1325,12 @@ static void xm_load_mod(xm_context_t* ctx,
 					: (0xC8 - XM_AMIGA_STEREO_SEPARATION);
 			}
 			#endif
+
+			if(slot->instrument && slot->note == 0) {
+				/* Ghost instruments in PT2 immediately switch
+				   to the new sample */
+				slot->note = NOTE_SWITCH;
+			}
 
 			/* Imitate ProTracker 2/3 lacking effect memory for
 			   1xx/2xx/Axy (based on the MilkyTracker docs) */

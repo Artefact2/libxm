@@ -49,7 +49,7 @@ add_test(NAME test_pitch_slides COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/pitch-slides.xm)
 add_test(NAME test_pitch_slides_amiga COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/pitch-slides-amiga.xm)
-add_test(NAME XXX_test_protracker_quirks COMMAND test-libxm
+add_test(NAME test_protracker_quirks COMMAND test-libxm
 	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/protracker-quirks.mod)
 add_test(NAME test_retrigger_effect COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/retrigger-effect.xm)

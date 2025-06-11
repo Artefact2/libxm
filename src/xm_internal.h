@@ -51,7 +51,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define TRACKER_NAME_LENGTH 24
 
 #define PATTERN_ORDER_TABLE_LENGTH 256
-#define NUM_NOTES 96
+#define MAX_NOTE 96
 #define MAX_ENVELOPE_POINTS 12
 #define MAX_ROWS_PER_PATTERN 256
 #define RAMPING_POINTS 255
@@ -69,7 +69,16 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 
 /* Not the original key off (97), this is the value used by libxm once a ctx
    has been loaded */
-#define KEY_OFF_NOTE 128
+#define NOTE_KEY_OFF 128
+
+/* A special note in libxm, this acts like a regular note trigger of whatever
+   note was last seen in the channel. Used by E90 retrigger effect. */
+#define NOTE_RETRIGGER (MAX_NOTE+1)
+
+/* A special note in libxm, this just immediately changes the sample based on
+   the last instrument seen, without resetting the period or the sample
+   position. Used for PT2-style ghost instruments. */
+#define NOTE_SWITCH (MAX_NOTE+2)
 
 /* How much is a channel final volume allowed to change per audio frame; this is
    used to avoid abrubt volume changes which manifest as "clicks" in the
@@ -151,7 +160,7 @@ struct xm_instrument_s {
 
 	xm_envelope_t volume_envelope;
 	xm_envelope_t panning_envelope;
-	uint8_t sample_of_notes[NUM_NOTES];
+	uint8_t sample_of_notes[MAX_NOTE];
 	/* ctx->samples[index..(index+num_samples)] */
 	uint16_t samples_index;
 	uint16_t volume_fadeout;
@@ -172,7 +181,7 @@ struct xm_instrument_s {
 typedef struct xm_instrument_s xm_instrument_t;
 
 struct xm_pattern_slot_s {
-	uint8_t note; /* 1..=96 = Notes 0..=95, KEY_OFF_NOTE = Key Off */
+	uint8_t note; /* 0..=MAX_NOTE or NOTE_KEY_OFF or NOTE_RETRIGGER */
 	uint8_t instrument; /* 1..=128 */
 	uint8_t volume_column;
 	uint8_t effect_type;
