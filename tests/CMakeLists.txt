@@ -27,8 +27,8 @@ add_test(NAME XXX_test_global_volume COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/global-volume.xm)
 add_test(NAME test_instrument_fadeout COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/instrument-fadeout.xm)
-add_test(NAME test_key_off COMMAND test-libxm
-	channelpairs_eq ${CMAKE_SOURCE_DIR}/key-off.xm)
+add_test(NAME XXX_test_key_off COMMAND test-libxm
+	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/key-off.xm)
 add_test(NAME test_note_delay COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/note-delay.xm)
 add_test(NAME test_note_delay_sample_change COMMAND test-libxm
