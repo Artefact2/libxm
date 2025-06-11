@@ -1154,8 +1154,8 @@ static bool xm_prescan_mod(const char* moddata, uint32_t moddata_length,
 	}
 	p->num_rows = (uint32_t)(64u * p->num_patterns);
 
-	uint32_t min_sz = (uint32_t)(1084u + p->num_rows * p->num_channels * 4u
-	                             + p->samples_data_length);
+	/* Pattern data may be truncated */
+	uint32_t min_sz = (uint32_t)(1084u + p->samples_data_length);
 	if(moddata_length < min_sz) {
 		NOTICE("mod file too small, expected more bytes (%u < %u)",
 		       moddata_length, min_sz);
@@ -1334,11 +1334,15 @@ static void xm_load_mod(xm_context_t* ctx,
 			/* Convert 0xy arpeggio from ProTracker 2/3 semantics to
 			   Fasttracker II semantics */
 			if(slot->effect_type == 0) {
+				/* XXX: this breaks down with spd=2 */
 				/* 0xy -> 0yx */
-				slot->effect_param = (uint8_t)
-					((slot->effect_param << 4)
-					 | (slot->effect_param >> 4));
+				/* slot->effect_param = (uint8_t) */
+				/* 	((slot->effect_param << 4) */
+				/* 	 | (slot->effect_param >> 4)); */
 			}
+
+			/* XXX: In PT2, 9xx beyond the end of a sample will
+			   still work for looped samples */
 
 			/* Convert E5y finetune from ProTracker 2/3 semantics to
 			   Fasttracker II semantics */
