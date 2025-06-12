@@ -17,8 +17,12 @@
 		fprintf(stderr, "%s(): " fmt "\n", __func__ __VA_OPT__(,) __VA_ARGS__); \
 		fflush(stderr); \
 	} while(0)
+#define TRACE(fmt, ...) NOTICE("pot %x row %x tick %x: " fmt, \
+                               ctx->current_table_index, ctx->current_row, \
+                               ctx->current_tick __VA_OPT__(,) __VA_ARGS__)
 #else
 #define NOTICE(...)
+#define TRACE(...)
 #endif
 
 #define assume(x) do { if(!(x)) { __builtin_unreachable(); } } while(0)
@@ -264,8 +268,6 @@ struct xm_channel_context_s {
 	uint8_t next_instrument; /* Last instrument seen in the
 	                            instrument column. Could be 0. */
 
-	int8_t autovibrato_offset; /* in 1/64 semitones */
-	uint8_t arp_note_offset; /* in semitones */
 	uint8_t volume_slide_param;
 	uint8_t fine_volume_slide_up_param;
 	uint8_t fine_volume_slide_down_param;
@@ -295,7 +297,11 @@ struct xm_channel_context_s {
 	uint8_t vibrato_control_param;
 	uint8_t vibrato_ticks;
 	int8_t vibrato_offset; /* in 1/64 semitone increments */
+	int8_t autovibrato_offset; /* in 1/64 semitone increments */
 	bool should_reset_vibrato;
+
+	bool should_reset_arpeggio;
+	uint8_t arp_note_offset; /* in full semitones */
 
 	uint8_t tremor_param;
 	uint8_t tremor_ticks; /* Decrements from max 16 */
@@ -305,9 +311,9 @@ struct xm_channel_context_s {
 	bool muted;
 
 	#if XM_TIMING_FUNCTIONS
-	char __pad[6 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
+	char __pad[5 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
 	#else
-	char __pad[2];
+	char __pad[1];
 	#endif
 };
 typedef struct xm_channel_context_s xm_channel_context_t;

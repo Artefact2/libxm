@@ -16,7 +16,7 @@ static void xm_autovibrato(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_vibrato(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tremolo(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
-static void xm_arpeggio(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+static void xm_arpeggio(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tone_portamento(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnull));
 static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
@@ -27,12 +27,16 @@ static uint8_t xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uin
 static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
 static uint16_t xm_linear_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const));
-static uint32_t xm_linear_frequency(uint16_t, uint8_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 static uint16_t xm_amiga_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const));
-static uint32_t xm_amiga_frequency(uint16_t, uint8_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
-
 static uint16_t xm_period(const xm_context_t*, int16_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
+
+static uint32_t xm_linear_frequency(uint16_t, uint8_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
+static uint32_t xm_amiga_frequency(uint16_t, uint8_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 static uint32_t xm_frequency(const xm_context_t*, const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
+
+static void xm_round_linear_period_to_semitone(xm_channel_context_t*) __attribute__((nonnull));
+static void xm_round_amiga_period_to_semitone(xm_channel_context_t*) __attribute__((nonnull));
+static void xm_round_period_to_semitone(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
 static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tone_portamento_target(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
@@ -176,6 +180,9 @@ static void xm_autovibrato(xm_channel_context_t* ch) {
 }
 
 static void xm_vibrato(xm_channel_context_t* ch) {
+	/* Reset glissando control error */
+	xm_pitch_slide(ch, 0);
+
 	/* Depth 8 == 2 semitones amplitude (-1 then +1) */
 	ch->vibrato_offset = (int8_t)
 		((int16_t)xm_waveform(ch->vibrato_control_param,
@@ -240,40 +247,31 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	else if(ch->volume > MAX_VOLUME) ch->volume = MAX_VOLUME;
 }
 
-static void xm_arpeggio(xm_context_t* ctx, xm_channel_context_t* ch) {
+static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* Arp effect always resets vibrato offset, even if it only runs for 1
 	   tick where the offset is 0 (eg spd=2 001). Tick counter isn't
 	   reset. Autovibrato is still applied. */
 	ch->vibrato_offset = 0;
 
-	/* This can happen with eg EEy pattern delay */
-	if(ctx->current_tick == 0) {
+	uint8_t t = ctx->tempo - ctx->current_tick;
+
+	if(ctx->current_tick == 0 /* This can happen with EEy */
+	   || t == 16 /* FT2 overflow quirk */
+	   || (t < 16 && t % 3 == 0) /* Normal case */) {
 		ch->arp_note_offset = 0;
 		return;
 	}
 
-	/* Emulate FT2 overflow quirk */
-	if(ctx->tempo - ctx->current_tick == 16) {
-		ch->arp_note_offset = 0;
-		return;
-	} else if(ctx->tempo - ctx->current_tick > 16) {
+	ch->should_reset_arpeggio = true;
+	xm_round_period_to_semitone(ctx, ch);
+
+	if(t > 16 /* FT2 overflow quirk */
+	   || t % 3 == 2 /* Normal case */) {
 		ch->arp_note_offset = ch->current->effect_param & 0x0F;
 		return;
 	}
 
-	switch((ctx->tempo - ctx->current_tick) % 3) {
-	case 0:
-		ch->arp_note_offset = 0;
-		break;
-	case 1:
-		ch->arp_note_offset = ch->current->effect_param >> 4;
-		break;
-	case 2:
-		ch->arp_note_offset = ch->current->effect_param & 0x0F;
-		break;
-	default:
-		assert(0);
-	}
+	ch->arp_note_offset = ch->current->effect_param >> 4;
 }
 
 static void xm_tone_portamento(const xm_context_t* ctx,
@@ -288,21 +286,8 @@ static void xm_tone_portamento(const xm_context_t* ctx,
 	diff = diff < (-incr) ? (-incr) : diff;
 	xm_pitch_slide(ch, (int16_t)diff);
 
-	if(ch->glissando_control_param == 0) return;
-
-	if(XM_FREQUENCY_TYPES == 1
-	   || (XM_FREQUENCY_TYPES == 3 && (!ctx->module.amiga_frequencies))) {
-		/* Round period to nearest semitone. Store rounding error in
-		   ch->glissando_control_error. */
-		/* With linear frequencies, 1 semitone is 64 period units and 16
-		   finetune units. */
-		uint16_t new_period = (uint16_t)
-			(((ch->period + ch->finetune * 4 + 32) & 0xFFC0)
-			 - ch->finetune * 4);
-		ch->glissando_control_error = (int8_t)(ch->period - new_period);
-		ch->period = new_period;
-	} else {
-		/* XXX: implement for amiga frequencies */
+	if(ch->glissando_control_param) {
+		xm_round_period_to_semitone(ctx, ch);
 	}
 }
 
@@ -416,6 +401,42 @@ static uint32_t xm_frequency([[maybe_unused]] const xm_context_t* ctx,
 	return ctx->module.amiga_frequencies
 		? xm_amiga_frequency(period, ch->arp_note_offset)
 		: xm_linear_frequency(period, ch->arp_note_offset);
+	#endif
+}
+
+static void xm_round_linear_period_to_semitone(xm_channel_context_t* ch) {
+	/* With linear frequencies, 1 semitone is 64 period units and 16
+	   finetune units. */
+	uint16_t new_period = (uint16_t)
+		(((ch->period + ch->finetune * 4 + 32) & 0xFFC0)
+		 - ch->finetune * 4);
+	ch->glissando_control_error = (int8_t)(ch->period - new_period);
+	ch->period = new_period;
+}
+
+static void xm_round_amiga_period_to_semitone([[maybe_unused]] xm_channel_context_t* ch) {
+	/* XXX: todo */
+}
+
+/* Round period to nearest semitone. Store rounding error in
+   ch->glissando_control_error. */
+static void xm_round_period_to_semitone([[maybe_unused]] const xm_context_t* ctx,
+                                        xm_channel_context_t* ch) {
+	/* Reset glissando control error */
+	xm_pitch_slide(ch, 0);
+
+	#if XM_FREQUENCY_TYPES == 1
+	xm_round_linear_period_to_semitone(ch);
+	#elif XM_FREQUENCY_TYPES == 2
+	TRACE();
+	xm_round_amiga_period_to_semitone(ch);
+	#else
+	if(ctx->module.amiga_frequencies) {
+		TRACE();
+		xm_round_amiga_period_to_semitone(ch);
+	} else {
+		xm_round_linear_period_to_semitone(ch);
+	}
 	#endif
 }
 
@@ -800,7 +821,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 
 	ch->sample_position *= SAMPLE_MICROSTEPS;
-	ch->glissando_control_error = 0; /* XXX: test me */
+	ch->glissando_control_error = 0;
 	ch->vibrato_offset = 0;
 
 	/* XXX: is this reset by a note trigger or inst trigger? does it matter
@@ -872,7 +893,12 @@ static void xm_row(xm_context_t* ctx) {
 			in_a_loop = true;
 		}
 
-		ch->arp_note_offset = 0;
+		if(ch->should_reset_arpeggio) {
+			/* Reset glissando control error */
+			xm_pitch_slide(ch, 0);
+			ch->should_reset_arpeggio = false;
+			ch->arp_note_offset = 0;
+		}
 
 		if(ch->should_reset_vibrato && !HAS_VIBRATO(ch->current)) {
 			ch->should_reset_vibrato = false;
@@ -1093,8 +1119,6 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 	switch(ch->current->effect_type) {
 
 	case 0: /* 0xy: Arpeggio */
-		/* Technically not necessary, since 000 arpeggio will do
-		   nothing, this is a performance optimisation. */
 		if(ch->current->effect_param == 0) break;
 		xm_arpeggio(ctx, ch);
 		break;
