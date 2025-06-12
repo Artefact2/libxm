@@ -294,8 +294,11 @@ static void xm_tone_portamento(const xm_context_t* ctx,
 	   || (XM_FREQUENCY_TYPES == 3 && (!ctx->module.amiga_frequencies))) {
 		/* Round period to nearest semitone. Store rounding error in
 		   ch->glissando_control_error. */
-		/* With linear frequencies, 1 semitone is 64 period units. */
-		uint16_t new_period = (uint16_t)((ch->period + 32) & 0xFFC0);
+		/* With linear frequencies, 1 semitone is 64 period units and 16
+		   finetune units. */
+		uint16_t new_period = (uint16_t)
+			(((ch->period + ch->finetune * 4 + 32) & 0xFFC0)
+			 - ch->finetune * 4);
 		ch->glissando_control_error = (int8_t)(ch->period - new_period);
 		ch->period = new_period;
 	} else {

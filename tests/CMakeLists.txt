@@ -22,7 +22,7 @@ add_test(NAME test_finetune COMMAND test-libxm
 add_test(NAME test_ghosts COMMAND test-libxm
 	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/ghosts.xm)
 add_test(NAME test_glissando_control COMMAND test-libxm
-	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/glissando-control.xm)
+	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/glissando-control.xm)
 add_test(NAME XXX_test_global_volume COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/global-volume.xm)
 add_test(NAME test_instrument_fadeout COMMAND test-libxm
