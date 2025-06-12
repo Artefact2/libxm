@@ -248,11 +248,6 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 }
 
 static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch) {
-	/* Arp effect always resets vibrato offset, even if it only runs for 1
-	   tick where the offset is 0 (eg spd=2 001). Tick counter isn't
-	   reset. Autovibrato is still applied. */
-	ch->vibrato_offset = 0;
-
 	uint8_t t = ctx->tempo - ctx->current_tick;
 
 	if(ctx->current_tick == 0 /* This can happen with EEy */
@@ -293,8 +288,11 @@ static void xm_tone_portamento(const xm_context_t* ctx,
 
 static void xm_pitch_slide(xm_channel_context_t* ch,
                            int16_t period_offset) {
+	/* All pitch slides seem to reset the glissando error, and also cancel
+	   any lingering vibrato effect */
 	ch->period = (uint16_t)(ch->period + ch->glissando_control_error);
 	ch->glissando_control_error = 0;
+	ch->vibrato_offset = 0;
 
 	/* Clamp period when sliding up (matches FT2 behaviour), wrap around
 	   when sliding down (albeit still in a broken way compared to FT2) */
@@ -468,7 +466,13 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	}
 
 	if(s->instrument) {
-		xm_trigger_instrument(ctx, ch);
+		if(ch->sample) {
+			ch->volume = ch->sample->volume;
+			ch->panning = ch->sample->panning;
+		}
+		if(!NOTE_IS_KEY_OFF(s->note)) {
+			xm_trigger_instrument(ctx, ch);
+		}
 	}
 
 	/* These volume effects always work, even when called with a delay by
@@ -711,18 +715,6 @@ static void xm_tone_portamento_target(const xm_context_t* ctx,
 
 static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
                                   xm_channel_context_t* ch) {
-	if(ch->instrument == NULL || ch->sample == NULL) return;
-
-	ch->volume = ch->sample->volume;
-	ch->panning = ch->sample->panning;
-
-	if(NOTE_IS_KEY_OFF(ch->current->note)) {
-		/* XXX: instrument triggers with a key-off note are a bit weird,
-		   figure out the proper logic in xm_handle_pattern_slot()
-		   instead of hardcoding this check here */
-		return;
-	}
-
 	ch->sustained = true;
 	ch->volume_envelope_frame_count = 0;
 	ch->panning_envelope_frame_count = 0;
@@ -740,7 +732,9 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 
 	#if XM_TIMING_FUNCTIONS
 	ch->latest_trigger = ctx->generated_samples;
-	ch->instrument->latest_trigger = ctx->generated_samples;
+	if(ch->instrument) {
+		ch->instrument->latest_trigger = ctx->generated_samples;
+	}
 	#endif
 }
 
@@ -1182,11 +1176,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 			assert((ch->current->effect_param & 0x0F) > 0);
 			if(ctx->current_tick
 			   % (ch->current->effect_param & 0x0F)) break;
-			/* XXX: refactor this, this is suspiciously similar to
-			   EDy, there is a simpler big picture  */
-			ch->volume_envelope_frame_count = 0;
-			ch->panning_envelope_frame_count = 0;
-			ch->sustained = true;
+			xm_trigger_instrument(ctx, ch);
 			xm_trigger_note(ctx, ch);
 			xm_tick_envelopes(ch);
 			break;
@@ -1204,14 +1194,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 				break;
 			}
 			xm_handle_pattern_slot(ctx, ch);
-			/* EDy (y>0) has a weird trigger mechanism, where it
-			   will reset sample position and period (except if we
-			   have a keyoff), and it will reset envelopes and
-			   sustain status but keep volume/panning (so it's not a
-			   true instrument trigger) */
-			ch->volume_envelope_frame_count = 0;
-			ch->panning_envelope_frame_count = 0;
-			ch->sustained = true;
+			xm_trigger_instrument(ctx, ch);
 			if(!NOTE_IS_KEY_OFF(ch->current->note)) {
 				xm_trigger_note(ctx, ch);
 			}

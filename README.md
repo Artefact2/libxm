@@ -140,7 +140,7 @@ Other tests require manual checking, see the table below.
      Test                      |     Status     |     Tested against     | Extras
 -------------------------------+----------------+------------------------+------------------------------------------------
 autovibrato.xm                 | PASS           | FT2clone               | Patterns 0 and 1 should sound identical. Use a spectrogram as it is very hard to hear subtle changes in pitch.
-autovibrato-triggers.xm        | FAIL           | FT2clone               | Should sound identical. Use a spectrogram as it is very hard to hear subtle changes in pitch.
+autovibrato-triggers.xm        | MOSTLY         | FT2clone               | Should sound identical. Use a spectrogram as it is very hard to hear subtle changes in pitch.
 panning-law.xm                 | PASS           | MilkyTracker, FT2clone | Should sound identical.
 pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
 pos_jump.xm                    | PASS           | Milkytracker, OpenMPT  | Only one beep should be heard.

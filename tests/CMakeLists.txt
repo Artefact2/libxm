@@ -73,6 +73,8 @@ add_test(NAME test_trigger_types COMMAND test-libxm
 	channelpairs_eq ${CMAKE_SOURCE_DIR}/trigger-types.xm)
 add_test(NAME test_vibrato COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/vibrato.xm)
+add_test(NAME XXX_test_vibrato_arp_reset COMMAND test-libxm
+	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/vibrato-arp-reset.xm)
 add_test(NAME test_vibrato_amiga COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/vibrato-amiga.xm)
 add_test(NAME test_volume_envelope COMMAND test-libxm
