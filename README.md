@@ -138,17 +138,17 @@ make -C build-tests all test
 Other tests require manual checking, see the table below.
 
 ~~~
-     Test                      |     Status     |     Tested against     | Extras
--------------------------------+----------------+------------------------+------------------------------------------------
-autovibrato.xm                 | PASS           | FT2clone               | Patterns 0 and 1 should sound identical. Use a spectrogram as it is very hard to hear subtle changes in pitch.
-autovibrato-triggers.xm        | MOSTLY         | FT2clone               | Should sound identical. Use a spectrogram as it is very hard to hear subtle changes in pitch.
-panning-law.xm                 | PASS           | MilkyTracker, FT2clone | Should sound identical.
-pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
-pos_jump.xm                    | PASS           | Milkytracker, OpenMPT  | Only one beep should be heard.
-ramping.xm                     | PASS           | FT2clone               | If XM_RAMPING is ON, output should be mostly frame for frame identical.
-waveform-control-combo.xm      | PASS           | FT2clone               | Should sound identical.
-waveform-control-tremolo.xm    | PASS           | FT2clone               | Should sound identical.
-waveform-control-vibrato.xm    | PASS           | FT2clone               | Should sound identical.
+Test                            | Status         | Tested against         | Extras
+--------------------------------+----------------+------------------------+------------------------------------------------
+autovibrato-triggers.xm         | MOSTLY         | FT2clone 1.94          | Should sound identical. Use a spectrogram as it is very hard to hear subtle changes in pitch.
+panning-law.xm                  | PASS           | MilkyTracker, FT2clone | Should sound identical.
+pattern-loop-quirk.xm           | PASS           | MilkyTracker           | Should play the same notes at the same time.
+pos_jump.xm                     | PASS           | Milkytracker, OpenMPT  | Only one beep should be heard.
+ramping.xm                      | PASS           | FT2clone 1.94          | If XM_RAMPING is ON, output should be mostly frame for frame identical.
+waveform-control-autovibrato.xm | PASS           | FT2clone 1.94          | Should sound identical. Patterns 0 and 1 should also sound identical. Use a spectrogram as it is very hard to hear subtle changes in pitch.
+waveform-control-combo.xm       | PASS           | FT2clone 1.94          | Should sound identical.
+waveform-control-tremolo.xm     | PASS           | FT2clone 1.94          | Should sound identical.
+waveform-control-vibrato.xm     | PASS           | FT2clone 1.94          | Should sound identical.
 ~~~
 
 Thanks
