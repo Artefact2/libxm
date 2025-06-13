@@ -60,7 +60,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **3969 bytes** (Linux
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **3988 bytes** (Linux
 x86_64).
 
 ~~~
@@ -108,18 +108,19 @@ accuracy):
 * [Strobe - One for all](http://modarchive.org/module.php?161246)
 * [Strobe - Paralysicical death](http://modarchive.org/module.php?65817)
 
-Effect differences
+Known inaccuracies
 ==================
 
 * E8y panning effect is supported, FT2 has no support for this command
 * Glissando control (E3y) with Amiga frequencies is not yet supported
 * Amiga filter toggle (E0y) is not supported, and is unlikely to be
 * Invert loop / funk repeat (EFy) is not supported, and is unlikely to be
+* Period wraparound after a long slide down (with eg, 2xx) is not accurate
+* Global volume effects (Gxx/Hxy) are subtly incorrect
+* Tone portamento (3xx/Mx) does not "lock" its direction
+* Arpeggio (0xy) does not reset vibrato offset (Vy) when Spd=1
 
-Known issues
-============
-
-See [GitHub issues](https://github.com/Artefact2/libxm/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug).
+To report more, please [open an issue](../../issues?q=is%3Aissue%20state%3Aopen%20label%3Abug).
 
 Tests
 =====
@@ -145,7 +146,8 @@ panning-law.xm                 | PASS           | MilkyTracker, FT2clone | Shoul
 pattern-loop-quirk.xm          | PASS           | MilkyTracker           | Should play the same notes at the same time.
 pos_jump.xm                    | PASS           | Milkytracker, OpenMPT  | Only one beep should be heard.
 ramping.xm                     | PASS           | FT2clone               | If XM_RAMPING is ON, output should be mostly frame for frame identical.
-waveform-control-tremolo.xm    | MOSTLY         | FT2clone               | Should sound identical. Second half of the ramp waveform (E71/E75) is incorrect in libxm.
+waveform-control-combo.xm      | PASS           | FT2clone               | Should sound identical.
+waveform-control-tremolo.xm    | PASS           | FT2clone               | Should sound identical.
 waveform-control-vibrato.xm    | PASS           | FT2clone               | Should sound identical.
 ~~~
 

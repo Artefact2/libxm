@@ -199,9 +199,20 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 	   row (has no effect on Spd=1). */
 	/* Like Txy: Tremor, tremolo effect *persists* after the end of the
 	   effect, but is reset after any volume command. */
+
+	uint8_t ticks = ch->tremolo_ticks % 0x40;
+	if(ch->tremolo_control_param & 1) {
+		/* FT2 quirk, ramp waveform with tremolo is weird and is also
+		   influenced by vibrato ticks... */
+		if(ticks >= 0x20) {
+			ticks = 0x20 - ticks;
+		}
+		if(ch->vibrato_ticks % 0x40 >= 0x20) {
+			ticks = 0x20 - ticks;
+		}
+	}
 	ch->volume_offset = (int8_t)
-		((int16_t)xm_waveform(ch->tremolo_control_param,
-		                       ch->tremolo_ticks)
+		((int16_t)xm_waveform(ch->tremolo_control_param, ticks)
 		* (ch->tremolo_param & 0x0F) * 4 / 128);
 	ch->tremolo_ticks += (ch->tremolo_param >> 4);
 }
