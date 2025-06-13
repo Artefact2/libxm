@@ -119,6 +119,7 @@ Known inaccuracies
 * Global volume effects (Gxx/Hxy) are subtly incorrect
 * Tone portamento (3xx/Mx) does not "lock" its direction
 * Arpeggio (0xy) does not reset vibrato offset (Vy) when Spd=1
+* (MOD only) Sample offset (9xx) beyond sample loop end will cut the note
 
 To report more, please [open an issue](../../issues?q=is%3Aissue%20state%3Aopen%20label%3Abug).
 
