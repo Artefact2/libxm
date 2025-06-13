@@ -16,8 +16,9 @@ static uint16_t modal_interpeak_distance(const float*, uint16_t, uint16_t);
 
 /* Checks generated audio samples for channel1==channel2, channel3==channel4,
    etc. If swap_lr is true, swaps LR channels of each odd channel before
-   comparing. */
-static int channelpairs_eq(xm_context_t*, bool swap_lr);
+   comparing. If left_only is true, only compare left part of the stereo
+   samples. */
+static int channelpairs_eq(xm_context_t*, bool swap_lr, bool left_only);
 
 /* Similar to channelpairs_eq(), but checks pitch of each channel pair. Assumes
    sawtooth samples only as pitch detection is really simplistic. */
@@ -69,9 +70,11 @@ int main(int argc, char** argv) {
 
 	/* Perform the test */
 	if(strcmp(argv[1], "channelpairs_eq") == 0) {
-		return channelpairs_eq(ctx, false);
+		return channelpairs_eq(ctx, false, false);
 	} else if(strcmp(argv[1], "channelpairs_lreqrl") == 0) {
-		return channelpairs_eq(ctx, true);
+		return channelpairs_eq(ctx, true, false);
+	} else if(strcmp(argv[1], "channelpairs_leql") == 0) {
+		return channelpairs_eq(ctx, false, true);
 	} else if(strcmp(argv[1], "channelpairs_pitcheq") == 0) {
 		return channelpairs_pitcheq(ctx);
 	} else if(strcmp(argv[1], "pat0_pat1_eq") == 0) {
@@ -91,7 +94,7 @@ static void print_position(const xm_context_t* ctx) {
 	        pot, pat, row);
 }
 
-static int channelpairs_eq(xm_context_t* ctx, bool swap_lr) {
+static int channelpairs_eq(xm_context_t* ctx, bool swap_lr, bool left_only) {
 	float frames[256];
 	uint16_t chans = xm_get_number_of_channels(ctx);
 	/* Make sure our buffer can at least fit one frame of unmixed data */
@@ -103,9 +106,11 @@ static int channelpairs_eq(xm_context_t* ctx, bool swap_lr) {
 		/* Read LRLR of a channel pair */
 		for(unsigned int i = 0; i < 256; i += 4) {
 			if(!swap_lr && frames[i] == frames[i+2]
-			   && frames[i+1] == frames[i+3]) continue;
+			   && (left_only || frames[i+1] == frames[i+3]))
+				continue;
 			if(swap_lr && frames[i] == frames[i+3]
-			   && frames[i+1] == frames[i+2]) continue;
+			   && (left_only || frames[i+1] == frames[i+2]))
+				continue;
 			fprintf(stderr, "Channel mismatch, LRLR=%f %f %f %f\n",
 			        (double)frames[i], (double)frames[i+1],
 			        (double)frames[i+2], (double)frames[i+3]);
