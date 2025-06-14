@@ -71,7 +71,7 @@ xzcrush build-libxmize/libxmtoau
 ~~~
 
 If you are using libxm to play a single module (like in a demo/intro), disable
-features as suggested by `libxmize` to save a few more bytes.
+features as suggested by `libxmize --analyze` to save a few more bytes.
 
 Examples
 ========

@@ -37,24 +37,9 @@ static void zero_waveforms(xm_context_t* ctx) {
 	NOTICE("%u bytes zeroed", total_zeroed_bytes);
 }
 
-/* XXX: this belongs in core libxm */
-/* static void analyze(const char* arg0, xm_context_t* ctx) { */
-/* 	printf("%s: detected features: cmake", arg0); */
-
-/* 	printf(" -D XM_FREQUENCY_TYPES=%d", */
-/* 	        #if XM_FREQUENCY_TYPES != 3 */
-/*                 XM_FREQUENCY_TYPES */
-/* 	        #else */
-/* 	        ctx->module.frequency_type == XM_LINEAR_FREQUENCIES ? 1 : 2 */
-/* 	        #endif */
-/* 	       ); */
-
-/* 	printf("\n"); */
-/* } */
-
 int main(int argc, char** argv) {
 	if(argc < 2) {
-		NOTICE("Usage: %s [--zero-all-waveforms] <in.xm>", argv[0]);
+		NOTICE("Usage: %s [--zero-all-waveforms] [--analyze] <in.xm>", argv[0]);
 		exit(1);
 	}
 
@@ -75,7 +60,7 @@ int main(int argc, char** argv) {
 		exit(1);
 	}
 	if(in_length > UINT32_MAX) {
-		fprintf(stderr, "Input file too large\n");
+		NOTICE("input file too large");
 		exit(1);
 	}
 	char* xmdata = malloc((size_t)in_length);
@@ -102,10 +87,23 @@ int main(int argc, char** argv) {
 
 	xm_context_t* ctx = xm_create_context(buf, p, xmdata,
 	                                      (uint32_t)in_length, 48000);
-	//analyze(argv[0], ctx);
 
-	if(!strcmp("--zero-all-waveforms", argv[1])) {
-		zero_waveforms(ctx);
+	for(int i = 1; i < argc - 1; ++i) {
+		if(!strcmp("--zero-all-waveforms", argv[i])) {
+			zero_waveforms(ctx);
+		} else if(!strcmp("--analyze", argv[i])) {
+			char* analyze_out =
+				malloc((size_t)XM_ANALYZE_OUTPUT_SIZE);
+			if(analyze_out == NULL) {
+				perror("malloc");
+				exit(1);
+			}
+			xm_analyze(ctx, analyze_out);
+			NOTICE("xm_analyze() : %s", analyze_out);
+		} else {
+			NOTICE("unknown command-line argument: %s", argv[i]);
+			exit(1);
+		}
 	}
 
 	xm_context_to_libxm(ctx, libxmized);

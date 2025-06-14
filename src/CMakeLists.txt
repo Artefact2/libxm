@@ -18,7 +18,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang)$")
 	)
 endif()
 
-add_library(xm xm.c load.c play.c)
+add_library(xm xm.c load.c play.c analyze.c)
 set_target_properties(xm PROPERTIES
 	PUBLIC_HEADER ${CMAKE_CURRENT_BINARY_DIR}/xm.h)
 

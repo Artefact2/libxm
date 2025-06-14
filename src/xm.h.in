@@ -434,6 +434,18 @@ float xm_get_panning_of_channel(const xm_context_t*, uint8_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
+
+
+/** Analyse a module and check for unused features. Write a NUL-terminated list
+ *  of build flag suggestions in a string.
+ *
+ * @param out Should point to a writeable area, at least XM_ANALYZE_OUTPUT_SIZE
+ * bytes long. */
+void xm_analyze(const xm_context_t*, char* out)
+__attribute__((nonnull));
+
+extern const uint16_t XM_ANALYZE_OUTPUT_SIZE;
+
 #ifdef __cplusplus
 }
 #endif
