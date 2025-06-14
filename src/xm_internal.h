@@ -39,13 +39,21 @@
 		if(!HAS_VOLUME_EFFECT(x)) assume(VOLUME_COLUMN(slot) != (x)); \
 	} while(0)
 #if HAS_VOLUME_COLUMN
-#define VOLUME_COLUMN(s) (s->volume_column)
+#define VOLUME_COLUMN(s) ((s)->volume_column)
 #else
 #define VOLUME_COLUMN(s) 0
 #endif
 
 static_assert(XM_FREQUENCY_TYPES >= 1 && XM_FREQUENCY_TYPES <= 3,
                "Unsupported value of XM_FREQUENCY_TYPES");
+#if XM_FREQUENCY_TYPES == 1
+#define AMIGA_FREQUENCIES(mod) false
+#elif XM_FREQUENCY_TYPES == 2
+#define AMIGA_FREQUENCIES(mod) true
+#else
+#define AMIGA_FREQUENCIES(mod) ((mod)->amiga_frequencies)
+#endif
+
 static_assert(_Generic((xm_sample_point_t){},
                         int8_t: true, int16_t: true, float: true,
                         default: false),
@@ -224,6 +232,7 @@ struct xm_module_s {
 	uint8_t num_instruments;
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 	uint8_t restart_position;
+
 	bool amiga_frequencies;
 
 	#if XM_STRINGS

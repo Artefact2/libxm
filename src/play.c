@@ -388,14 +388,9 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 
 static uint16_t xm_period([[maybe_unused]] const xm_context_t* ctx,
                           int16_t note) {
-	#if XM_FREQUENCY_TYPES == 1
-	return xm_linear_period(note);
-	#elif XM_FREQUENCY_TYPES == 2
-	return xm_amiga_period(note);
-	#else
-	return ctx->module.amiga_frequencies ?
-		xm_amiga_period(note) : xm_linear_period(note);
-	#endif
+	return AMIGA_FREQUENCIES(&ctx->module)
+		? xm_amiga_period(note)
+		: xm_linear_period(note);
 }
 
 static uint32_t xm_frequency([[maybe_unused]] const xm_context_t* ctx,
@@ -405,15 +400,9 @@ static uint32_t xm_frequency([[maybe_unused]] const xm_context_t* ctx,
 	uint16_t period = (uint16_t)(ch->period - ch->vibrato_offset
 		- ch->autovibrato_offset);
 
-	#if XM_FREQUENCY_TYPES == 1
-	return xm_linear_frequency(period, ch->arp_note_offset);
-	#elif XM_FREQUENCY_TYPES == 2
-	return xm_amiga_frequency(period, ch->arp_note_offset);
-	#else
-	return ctx->module.amiga_frequencies
+	return AMIGA_FREQUENCIES(&ctx->module)
 		? xm_amiga_frequency(period, ch->arp_note_offset)
 		: xm_linear_frequency(period, ch->arp_note_offset);
-	#endif
 }
 
 static void xm_round_linear_period_to_semitone(xm_channel_context_t* ch) {
@@ -437,19 +426,12 @@ static void xm_round_period_to_semitone([[maybe_unused]] const xm_context_t* ctx
 	/* Reset glissando control error */
 	xm_pitch_slide(ch, 0);
 
-	#if XM_FREQUENCY_TYPES == 1
-	xm_round_linear_period_to_semitone(ch);
-	#elif XM_FREQUENCY_TYPES == 2
-	TRACE();
-	xm_round_amiga_period_to_semitone(ch);
-	#else
-	if(ctx->module.amiga_frequencies) {
+	if(AMIGA_FREQUENCIES(&ctx->module)) {
 		TRACE();
 		xm_round_amiga_period_to_semitone(ch);
 	} else {
 		xm_round_linear_period_to_semitone(ch);
 	}
-	#endif
 }
 
 static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) {
