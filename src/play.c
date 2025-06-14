@@ -665,10 +665,12 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		}
 		break;
 
-	case 16: /* Gxx: Set global volume */
+	#if HAS_EFFECT(EFFECT_SET_GLOBAL_VOLUME)
+	case EFFECT_SET_GLOBAL_VOLUME:
 		/* xx > MAX_VOLUME is already clamped in load.c */
 		ctx->global_volume = s->effect_param;
 		break;
+	#endif
 
 	case 21: /* Lxx: Set envelope position */
 		ch->volume_envelope_frame_count = s->effect_param;
@@ -1054,7 +1056,7 @@ static void xm_tick(xm_context_t* ctx) {
 		base *= ch->volume_envelope_volume;
 		base *= ch->fadeout_volume;
 		base /= 4;
-		base *= ctx->global_volume;
+		base *= GLOBAL_VOLUME(ctx);
 		float volume =  (float)base / (float)(INT32_MAX);
 		assert(volume >= 0.f && volume <= 1.f);
 
@@ -1241,13 +1243,15 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 		break;
 
-	case 17: /* Hxy: Global volume slide */
+	#if HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE)
+	case EFFECT_GLOBAL_VOLUME_SLIDE:
 		if(ch->current->effect_param > 0) {
 			ch->global_volume_slide_param = ch->current->effect_param;
 		}
 		xm_param_slide(&ctx->global_volume,
 		               ch->global_volume_slide_param, MAX_VOLUME);
 		break;
+	#endif
 
 	case 20: /* Kxx: Key off (as tick effect) */
 		if(ctx->current_tick != ch->current->effect_param) break;

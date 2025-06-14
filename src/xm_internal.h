@@ -64,6 +64,8 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 
 #define EFFECT_ARPEGGIO 0
 #define EFFECT_TREMOLO 7
+#define EFFECT_SET_GLOBAL_VOLUME 16
+#define EFFECT_GLOBAL_VOLUME_SLIDE 17
 #define EFFECT_MULTI_RETRIG_NOTE 27
 #define EFFECT_TREMOR 29
 
@@ -310,7 +312,11 @@ struct xm_channel_context_s {
 	uint8_t volume_slide_param;
 	uint8_t fine_volume_slide_up_param;
 	uint8_t fine_volume_slide_down_param;
+
+	#if HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE)
 	uint8_t global_volume_slide_param;
+	#endif
+
 	uint8_t panning_slide_param;
 	uint8_t portamento_up_param;
 	uint8_t portamento_down_param;
@@ -376,7 +382,8 @@ struct xm_channel_context_s {
 		+ !HAS_VIBRATO_RESET \
 		+ 2*!HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
 		+ 3*!HAS_EFFECT(EFFECT_TREMOR) \
-		+ 2*!HAS_EFFECT(EFFECT_ARPEGGIO))
+		+ 2*!HAS_EFFECT(EFFECT_ARPEGGIO) \
+		+ !HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE))
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif
@@ -409,7 +416,15 @@ struct xm_context_s {
 	uint8_t extra_rows;
 
 	uint8_t current_table_index; /* 0..(module.length) */
+
+	#define HAS_GLOBAL_VOLUME (HAS_EFFECT(EFFECT_SET_GLOBAL_VOLUME) \
+	                           || HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE))
+	#if HAS_GLOBAL_VOLUME
+	#define GLOBAL_VOLUME(ctx) ((ctx)->global_volume)
 	uint8_t global_volume; /* 0..=MAX_VOLUME */
+	#else
+	#define GLOBAL_VOLUME(ctx) MAX_VOLUME
+	#endif
 
 	uint8_t tempo; /* 0..MIN_BPM */
 	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
@@ -422,7 +437,8 @@ struct xm_context_s {
 	uint8_t loop_count;
 	uint8_t max_loop_count;
 
-	#define CONTEXT_PADDING (4*XM_TIMING_FUNCTIONS)
+	#define CONTEXT_PADDING (4*XM_TIMING_FUNCTIONS\
+		+ !HAS_GLOBAL_VOLUME)
 	#if CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CONTEXT_PADDING % POINTER_SIZE];
 	#endif
