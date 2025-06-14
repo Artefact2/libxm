@@ -65,8 +65,13 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define EFFECT_ARPEGGIO 0
 #define EFFECT_PORTAMENTO_UP 1
 #define EFFECT_PORTAMENTO_DOWN 2
+#define EFFECT_TONE_PORTAMENTO 3
+#define EFFECT_VIBRATO 4
+#define EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE 5
+#define EFFECT_VIBRATO_VOLUME_SLIDE 6
 #define EFFECT_TREMOLO 7
 #define EFFECT_SET_PANNING 8
+#define EFFECT_VOLUME_SLIDE 0xA
 #define EFFECT_SET_VOLUME 0xC
 #define EFFECT_SET_GLOBAL_VOLUME 16
 #define EFFECT_GLOBAL_VOLUME_SLIDE 17
@@ -324,7 +329,13 @@ struct xm_channel_context_s {
 	uint8_t next_instrument; /* Last instrument seen in the
 	                            instrument column. Could be 0. */
 
+	#define HAS_VOLUME_SLIDE (HAS_EFFECT(EFFECT_VOLUME_SLIDE) \
+	                    || HAS_EFFECT(EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE) \
+	                    || HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE))
+	#if HAS_VOLUME_SLIDE
 	uint8_t volume_slide_param;
+	#endif
+
 	uint8_t fine_volume_slide_up_param;
 	uint8_t fine_volume_slide_down_param;
 
@@ -365,13 +376,17 @@ struct xm_channel_context_s {
 	uint8_t tremolo_ticks;
 	#endif
 
+	#define HAS_VIBRATO (HAS_EFFECT(EFFECT_VIBRATO) \
+		|| HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE) \
+		|| HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
+	#define HAS_VIBRATO_RESET ((HAS_EFFECT(EFFECT_VIBRATO) \
+	                            || HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)) \
+	                           && HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
+	#if HAS_VIBRATO
 	uint8_t vibrato_param;
 	uint8_t vibrato_control_param;
 	uint8_t vibrato_ticks;
 	int8_t vibrato_offset; /* in 1/64 semitone increments */
-
-	#define HAS_VIBRATO_RESET ((HAS_EFFECT(4) || HAS_EFFECT(6)) \
-		&& HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
 	#if HAS_VIBRATO_RESET
 	#define SHOULD_RESET_VIBRATO(ch) ((ch)->should_reset_vibrato)
 	bool should_reset_vibrato;
@@ -379,6 +394,7 @@ struct xm_channel_context_s {
 	#define SHOULD_RESET_VIBRATO(ch) false
 	#else
 	#define SHOULD_RESET_VIBRATO(ch) true
+	#endif
 	#endif
 
 	int8_t autovibrato_offset; /* in 1/64 semitone increments */
@@ -402,7 +418,6 @@ struct xm_channel_context_s {
 
 	#define CHANNEL_CONTEXT_PADDING (1 \
 		+ 4*XM_TIMING_FUNCTIONS \
-		+ !HAS_VIBRATO_RESET \
 		+ 2*!HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
 		+ 3*!HAS_EFFECT(EFFECT_TREMOR) \
 		+ 2*!HAS_EFFECT(EFFECT_ARPEGGIO) \
@@ -410,7 +425,9 @@ struct xm_channel_context_s {
 		+ !HAS_EFFECT(EFFECT_PORTAMENTO_UP) \
 		+ !HAS_EFFECT(EFFECT_PORTAMENTO_DOWN) \
 		+ 3*!HAS_EFFECT(EFFECT_TREMOLO) \
-		+ !HAS_VOLUME_OFFSET)
+		+ !HAS_VOLUME_OFFSET \
+		+ !HAS_VOLUME_SLIDE \
+		+ 4*!HAS_VIBRATO + !(HAS_VIBRATO && HAS_VIBRATO_RESET))
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif
