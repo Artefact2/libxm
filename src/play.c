@@ -20,7 +20,10 @@ static void xm_tremolo(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 #endif
 
+#if HAS_EFFECT(EFFECT_ARPEGGIO)
 static void xm_arpeggio(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+#endif
+
 static void xm_tone_portamento(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnull));
 static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
@@ -267,6 +270,7 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 }
 #endif
 
+#if HAS_EFFECT(EFFECT_ARPEGGIO)
 static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch) {
 	uint8_t t = ctx->tempo - ctx->current_tick;
 
@@ -288,6 +292,7 @@ static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	ch->arp_note_offset = ch->current->effect_param >> 4;
 }
+#endif
 
 static void xm_tone_portamento(const xm_context_t* ctx,
                                xm_channel_context_t* ch) {
@@ -362,9 +367,8 @@ static uint16_t xm_linear_period(int16_t note) {
 	return (uint16_t)(7680 - note * 4);
 }
 
-static uint32_t xm_linear_frequency(uint16_t period,
-                                                     uint8_t arp_note_offset) {
-	if(arp_note_offset) {
+static uint32_t xm_linear_frequency(uint16_t period, uint8_t arp_note_offset) {
+	if(HAS_EFFECT(EFFECT_ARPEGGIO) && arp_note_offset) {
 		/* XXX: test wraparound? */
 		period -= (uint16_t)(arp_note_offset * 64);
 		/* 1540 is the period of note 95+15/16ths, the maximum
@@ -378,10 +382,9 @@ static uint16_t xm_amiga_period(int16_t note) {
 	return (uint16_t)(32.f * 856.f * exp2f((float)note / (-12.f * 16.f)));
 }
 
-static uint32_t xm_amiga_frequency(uint16_t period,
-                                                    uint8_t arp_note_offset) {
+static uint32_t xm_amiga_frequency(uint16_t period, uint8_t arp_note_offset) {
 	float p = (float)period;
-	if(arp_note_offset) {
+	if(HAS_EFFECT(EFFECT_ARPEGGIO) && arp_note_offset) {
 		p *= exp2f((float)arp_note_offset / (-12.f));
 		p = p < 107.f ? 107.f : p;
 	}
@@ -406,8 +409,8 @@ static uint32_t xm_frequency([[maybe_unused]] const xm_context_t* ctx,
 		- ch->autovibrato_offset);
 
 	return AMIGA_FREQUENCIES(&ctx->module)
-		? xm_amiga_frequency(period, ch->arp_note_offset)
-		: xm_linear_frequency(period, ch->arp_note_offset);
+		? xm_amiga_frequency(period, ARP_NOTE_OFFSET(ch))
+		: xm_linear_frequency(period, ARP_NOTE_OFFSET(ch));
 }
 
 static void xm_round_linear_period_to_semitone(xm_channel_context_t* ch) {
@@ -899,12 +902,14 @@ static void xm_row(xm_context_t* ctx) {
 			in_a_loop = true;
 		}
 
+		#if HAS_EFFECT(EFFECT_ARPEGGIO)
 		if(ch->should_reset_arpeggio) {
 			/* Reset glissando control error */
 			xm_pitch_slide(ch, 0);
 			ch->should_reset_arpeggio = false;
 			ch->arp_note_offset = 0;
 		}
+		#endif
 
 		if(SHOULD_RESET_VIBRATO(ch) && !HAS_VIBRATO(ch->current)) {
 			ch->vibrato_offset = 0;
@@ -1135,10 +1140,12 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	switch(ch->current->effect_type) {
 
-	case 0: /* 0xy: Arpeggio */
+	#if HAS_EFFECT(EFFECT_ARPEGGIO)
+	case EFFECT_ARPEGGIO:
 		if(ch->current->effect_param == 0) break;
 		xm_arpeggio(ctx, ch);
 		break;
+	#endif
 
 	case 1: /* 1xx: Portamento up */
 		if(ch->current->effect_param > 0) {

@@ -62,6 +62,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 
 /* ----- XM constants ----- */
 
+#define EFFECT_ARPEGGIO 0
 #define EFFECT_TREMOLO 7
 #define EFFECT_MULTI_RETRIG_NOTE 27
 #define EFFECT_TREMOR 29
@@ -347,8 +348,13 @@ struct xm_channel_context_s {
 
 	int8_t autovibrato_offset; /* in 1/64 semitone increments */
 
+	#if HAS_EFFECT(EFFECT_ARPEGGIO)
+	#define ARP_NOTE_OFFSET(ch) ((ch)->arp_note_offset)
 	bool should_reset_arpeggio;
 	uint8_t arp_note_offset; /* in full semitones */
+	#else
+	#define ARP_NOTE_OFFSET(ch) 0
+	#endif
 
 	#if HAS_EFFECT(EFFECT_TREMOR)
 	uint8_t tremor_param;
@@ -363,7 +369,8 @@ struct xm_channel_context_s {
 		+ 4*XM_TIMING_FUNCTIONS \
 		+ !((HAS_EFFECT(4) || HAS_EFFECT(6)) && HAS_VOLUME_EFFECT(0xB)) \
 		+ 2*!HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
-		+ 3*!HAS_EFFECT(EFFECT_TREMOR))
+		+ 3*!HAS_EFFECT(EFFECT_TREMOR) \
+		+ 2*!HAS_EFFECT(EFFECT_ARPEGGIO))
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif

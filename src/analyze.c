@@ -60,6 +60,7 @@ void xm_analyze(const xm_context_t* ctx, char* out) {
 	    i; --i, ++slot) {
 		assert(slot->effect_type < 64); /* XXX */
 
+		static_assert(EFFECT_ARPEGGIO == 0);
 		if(slot->effect_type == 0) {
 			/* Do not count "000" as an arpeggio */
 			if(slot->effect_param) {
