@@ -71,8 +71,12 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define VOLUME_EFFECT_SLIDE_UP 7
 #define VOLUME_EFFECT_FINE_SLIDE_DOWN 8
 #define VOLUME_EFFECT_FINE_SLIDE_UP 9
+#define VOLUME_EFFECT_VIBRATO_SPEED 0xA
+#define VOLUME_EFFECT_VIBRATO 0xB
+#define VOLUME_EFFECT_SET_PANNING 0xC
 #define VOLUME_EFFECT_PANNING_SLIDE_LEFT 0xD
 #define VOLUME_EFFECT_PANNING_SLIDE_RIGHT 0xE
+#define VOLUME_EFFECT_TONE_PORTAMENTO 0xF
 
 /* These are the lengths we store in the context, including the terminating
    NUL, not necessarily the lengths of strings in loaded formats. */
@@ -337,10 +341,12 @@ struct xm_channel_context_s {
 	uint8_t vibrato_ticks;
 	int8_t vibrato_offset; /* in 1/64 semitone increments */
 
-	#if (HAS_EFFECT(4) || HAS_EFFECT(6)) && HAS_VOLUME_EFFECT(0xB)
+	#define HAS_VIBRATO_RESET ((HAS_EFFECT(4) || HAS_EFFECT(6)) \
+		&& HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
+	#if HAS_VIBRATO_RESET
 	#define SHOULD_RESET_VIBRATO(ch) ((ch)->should_reset_vibrato)
 	bool should_reset_vibrato;
-	#elif HAS_VOLUME_EFFECT(0xB)
+	#elif HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO)
 	#define SHOULD_RESET_VIBRATO(ch) false
 	#else
 	#define SHOULD_RESET_VIBRATO(ch) true
@@ -367,7 +373,7 @@ struct xm_channel_context_s {
 
 	#define CHANNEL_CONTEXT_PADDING (1 \
 		+ 4*XM_TIMING_FUNCTIONS \
-		+ !((HAS_EFFECT(4) || HAS_EFFECT(6)) && HAS_VOLUME_EFFECT(0xB)) \
+		+ !HAS_VIBRATO_RESET \
 		+ 2*!HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
 		+ 3*!HAS_EFFECT(EFFECT_TREMOR) \
 		+ 2*!HAS_EFFECT(EFFECT_ARPEGGIO))

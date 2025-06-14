@@ -96,13 +96,15 @@ static void xm_sample(xm_context_t*, float*, float*) __attribute__((nonnull));
 __attribute__((const)) __attribute__((nonnull))
 static bool HAS_TONE_PORTAMENTO(const xm_pattern_slot_t* s) {
 	return s->effect_type == 3 || s->effect_type == 5
-		|| (HAS_VOLUME_EFFECT(0xF) && (VOLUME_COLUMN(s) >> 4) == 0xF);
+		|| (HAS_VOLUME_EFFECT(VOLUME_EFFECT_TONE_PORTAMENTO)
+		    && (VOLUME_COLUMN(s) >> 4) == VOLUME_EFFECT_TONE_PORTAMENTO);
 }
 
 __attribute__((const)) __attribute__((nonnull))
 static bool HAS_VIBRATO(const xm_pattern_slot_t* s) {
 	return s->effect_type == 4 || s->effect_type == 6
-		|| (HAS_VOLUME_EFFECT(0xB) && (VOLUME_COLUMN(s) >> 4) == 0xB);
+		|| (HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO)
+		    && (VOLUME_COLUMN(s) >> 4) == VOLUME_EFFECT_VIBRATO);
 }
 
 __attribute__((const))
@@ -489,13 +491,14 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		ch->volume_offset = 0;
 		ch->volume = (uint8_t)(VOLUME_COLUMN(s) - 0x10);
 	}
-	if(HAS_VOLUME_EFFECT(0xC) && VOLUME_COLUMN(s) >> 4 == 0xC) {
-		/* Px: Set panning */
+	if(HAS_VOLUME_EFFECT(VOLUME_EFFECT_SET_PANNING)
+	   && VOLUME_COLUMN(s) >> 4 == VOLUME_EFFECT_SET_PANNING) {
 		ch->panning = VOLUME_COLUMN(s) << 4;
 	}
 
 	/* Set tone portamento memory (even on tick 0) */
-	if(HAS_VOLUME_EFFECT(0xF) && VOLUME_COLUMN(s) >> 4 == 0xF) {
+	if(HAS_VOLUME_EFFECT(VOLUME_EFFECT_TONE_PORTAMENTO)
+	   && VOLUME_COLUMN(s) >> 4 == VOLUME_EFFECT_TONE_PORTAMENTO) {
 		/* Mx *always* has precedence, even M0 */
 		if(VOLUME_COLUMN(s) & 0x0F) {
 			ch->tone_portamento_param = VOLUME_COLUMN(s) << 4;
@@ -529,8 +532,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			break;
 		#endif
 
-		#if HAS_VOLUME_EFFECT(0xA)
-		case 0xA: /* Sx: Set vibrato speed */
+		#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO_SPEED)
+		case VOLUME_EFFECT_VIBRATO_SPEED:
 			/* XXX: test me (with note delay, with simultaneous
 			   4xy/40y) */
 			/* S0 does nothing, but is deleted in load.c */
@@ -1105,13 +1108,15 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 	#endif
 
-	#if HAS_VOLUME_EFFECT(0xB)
-	case 0xB: /* Vx: Vibrato */
+	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO)
+	case VOLUME_EFFECT_VIBRATO:
 		UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
 		                        VOLUME_COLUMN(ch->current) & 0x0F);
 		/* This vibrato *does not* reset pitch when the command
 		   is discontinued */
+		#if HAS_VIBRATO_RESET
 		ch->should_reset_vibrato = false;
+		#endif
 		xm_vibrato(ch);
 		break;
 	#endif
@@ -1130,8 +1135,8 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 	#endif
 
-	#if HAS_VOLUME_EFFECT(0xF)
-	case 0xF: /* Mx: Tone portamento */
+	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_TONE_PORTAMENTO)
+	case VOLUME_EFFECT_TONE_PORTAMENTO:
 		xm_tone_portamento(ctx, ch);
 		break;
 	#endif
@@ -1176,7 +1181,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		                        ch->current->effect_param);
 		[[fallthrough]];
 	case 6: /* 6xy: Vibrato + Volume slide */
-		#if HAS_VOLUME_EFFECT(0xB)
+		#if HAS_VIBRATO_RESET
 		ch->should_reset_vibrato = true;
 		#endif
 		xm_vibrato(ch);
