@@ -11,6 +11,8 @@
 #include <string.h>
 #include <stdckdint.h>
 
+#define POINTER_SIZE (UINTPTR_MAX == UINT64_MAX ? 8 : 4)
+
 #if XM_VERBOSE
 #include <stdio.h>
 #define NOTICE(fmt, ...) do {                                           \
@@ -317,7 +319,10 @@ struct xm_channel_context_s {
 	uint8_t vibrato_ticks;
 	int8_t vibrato_offset; /* in 1/64 semitone increments */
 	int8_t autovibrato_offset; /* in 1/64 semitone increments */
+
+	#if HAS_VOLUME_EFFECT(0xB)
 	bool should_reset_vibrato;
+	#endif
 
 	bool should_reset_arpeggio;
 	uint8_t arp_note_offset; /* in full semitones */
@@ -329,10 +334,11 @@ struct xm_channel_context_s {
 	bool sustained;
 	bool muted;
 
-	#if XM_TIMING_FUNCTIONS
-	char __pad[5 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
-	#else
-	char __pad[1];
+	#define CHANNEL_CONTEXT_PADDING (1 \
+		+ 4*XM_TIMING_FUNCTIONS \
+		+ !HAS_VOLUME_EFFECT(0xB))
+	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
+	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif
 };
 typedef struct xm_channel_context_s xm_channel_context_t;
@@ -376,10 +382,8 @@ struct xm_context_s {
 	uint8_t loop_count;
 	uint8_t max_loop_count;
 
-
-	#if XM_TIMING_FUNCTIONS
-	char __pad[4 % (UINTPTR_MAX == UINT64_MAX ? 8 : 4)];
-	#else
-	//char __pad[0];
+	#define CONTEXT_PADDING (4*XM_TIMING_FUNCTIONS)
+	#if CONTEXT_PADDING % POINTER_SIZE
+	char __pad[CONTEXT_PADDING % POINTER_SIZE];
 	#endif
 };

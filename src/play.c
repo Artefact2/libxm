@@ -98,6 +98,12 @@ static bool HAS_VIBRATO(const xm_pattern_slot_t* s) {
 		|| (HAS_VOLUME_EFFECT(0xB) && (VOLUME_COLUMN(s) >> 4) == 0xB);
 }
 
+#if HAS_VOLUME_EFFECT(0xB)
+#define SHOULD_RESET_VIBRATO(ch) ((ch)->should_reset_vibrato)
+#else
+#define SHOULD_RESET_VIBRATO(ch) true
+#endif
+
 __attribute__((const))
 static bool NOTE_IS_KEY_OFF(uint8_t n) {
 	static_assert(NOTE_KEY_OFF == 128);
@@ -892,8 +898,7 @@ static void xm_row(xm_context_t* ctx) {
 			ch->arp_note_offset = 0;
 		}
 
-		if(ch->should_reset_vibrato && !HAS_VIBRATO(ch->current)) {
-			ch->should_reset_vibrato = false;
+		if(SHOULD_RESET_VIBRATO(ch) && !HAS_VIBRATO(ch->current)) {
 			ch->vibrato_offset = 0;
 		}
 	}
@@ -1156,7 +1161,9 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		                        ch->current->effect_param);
 		[[fallthrough]];
 	case 6: /* 6xy: Vibrato + Volume slide */
+		#if HAS_VOLUME_EFFECT(0xB)
 		ch->should_reset_vibrato = true;
+		#endif
 		xm_vibrato(ch);
 		if(ch->current->effect_type == 6) {
 			goto volume_slide;
