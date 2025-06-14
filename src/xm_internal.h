@@ -299,7 +299,13 @@ struct xm_channel_context_s {
 	#endif
 
 	uint16_t period; /* 1/64 semitone increments (linear frequencies) */
+
+	#define HAS_TONE_PORTAMENTO (HAS_EFFECT(EFFECT_TONE_PORTAMENTO) \
+	                   || HAS_EFFECT(EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE) \
+	                   || HAS_VOLUME_EFFECT(VOLUME_EFFECT_TONE_PORTAMENTO))
+	#if HAS_TONE_PORTAMENTO
 	uint16_t tone_portamento_target_period;
+	#endif
 
 	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
 	uint16_t autovibrato_ticks;
@@ -357,9 +363,17 @@ struct xm_channel_context_s {
 	uint8_t fine_portamento_down_param;
 	uint8_t extra_fine_portamento_up_param;
 	uint8_t extra_fine_portamento_down_param;
+
+	#define HAS_GLISSANDO_CONTROL (HAS_EFFECT(EFFECT_ARPEGGIO) \
+		|| (HAS_TONE_PORTAMENTO && HAS_EFFECT(0xE))) /* XXX */
+	#if HAS_GLISSANDO_CONTROL
 	uint8_t glissando_control_param;
 	int8_t glissando_control_error;
+	#endif
+
+	#if HAS_TONE_PORTAMENTO
 	uint8_t tone_portamento_param;
+	#endif
 
 	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 	uint8_t multi_retrig_param;
@@ -383,6 +397,7 @@ struct xm_channel_context_s {
 	                            || HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)) \
 	                           && HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
 	#if HAS_VIBRATO
+	#define VIBRATO_OFFSET(ch) ((ch)->vibrato_offset)
 	uint8_t vibrato_param;
 	uint8_t vibrato_control_param;
 	uint8_t vibrato_ticks;
@@ -395,6 +410,8 @@ struct xm_channel_context_s {
 	#else
 	#define SHOULD_RESET_VIBRATO(ch) true
 	#endif
+	#else
+	#define VIBRATO_OFFSET(ch) 0
 	#endif
 
 	int8_t autovibrato_offset; /* in 1/64 semitone increments */
@@ -427,7 +444,9 @@ struct xm_channel_context_s {
 		+ 3*!HAS_EFFECT(EFFECT_TREMOLO) \
 		+ !HAS_VOLUME_OFFSET \
 		+ !HAS_VOLUME_SLIDE \
-		+ 4*!HAS_VIBRATO + !(HAS_VIBRATO && HAS_VIBRATO_RESET))
+		+ 4*!HAS_VIBRATO + !(HAS_VIBRATO && HAS_VIBRATO_RESET) \
+		+ 3*!HAS_TONE_PORTAMENTO \
+		+ 2*!HAS_GLISSANDO_CONTROL)
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif

@@ -31,7 +31,12 @@ static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribu
 static void xm_arpeggio(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 #endif
 
+#if HAS_TONE_PORTAMENTO
+static bool xm_slot_has_tone_portamento(const xm_pattern_slot_t*) __attribute__((const)) __attribute((nonnull));
 static void xm_tone_portamento(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+static void xm_tone_portamento_target(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+#endif
+
 static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnull));
 static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
 static void xm_tick_effects(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
@@ -48,12 +53,13 @@ static uint32_t xm_linear_frequency(uint16_t, uint8_t) __attribute__((warn_unuse
 static uint32_t xm_amiga_frequency(uint16_t, uint8_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 static uint32_t xm_frequency(const xm_context_t*, const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 
+#if HAS_GLISSANDO_CONTROL
 static void xm_round_linear_period_to_semitone(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_round_amiga_period_to_semitone(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_round_period_to_semitone(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+#endif
 
 static void xm_handle_pattern_slot(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
-static void xm_tone_portamento_target(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_trigger_instrument(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_trigger_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_cut_note(xm_channel_context_t*) __attribute__((nonnull));
@@ -89,8 +95,8 @@ static void xm_sample(xm_context_t*, float*, float*) __attribute__((nonnull));
 
 #define XM_LERP(u, v, t) ((u) + (t) * ((v) - (u)))
 
-[[maybe_unused]] static void XM_SLIDE_TOWARDS(float* val,
-                                              float goal, float incr) {
+#if XM_RAMPING
+static void XM_SLIDE_TOWARDS(float* val, float goal, float incr) {
 	if(*val > goal) {
 		*val -= incr;
 		XM_CLAMP_DOWN1F(*val, goal);
@@ -99,16 +105,7 @@ static void xm_sample(xm_context_t*, float*, float*) __attribute__((nonnull));
 		XM_CLAMP_UP1F(*val, goal);
 	}
 }
-
-__attribute__((const)) __attribute__((nonnull))
-static bool HAS_TONE_PORTAMENTO(const xm_pattern_slot_t* s) {
-	return (HAS_EFFECT(EFFECT_TONE_PORTAMENTO)
-	        && s->effect_type == EFFECT_TONE_PORTAMENTO)
-		|| (HAS_EFFECT(EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE)
-		    && s->effect_type == EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE)
-		|| (HAS_VOLUME_EFFECT(VOLUME_EFFECT_TONE_PORTAMENTO)
-		    && (VOLUME_COLUMN(s) >> 4) == VOLUME_EFFECT_TONE_PORTAMENTO);
-}
+#endif
 
 __attribute__((const))
 static bool NOTE_IS_KEY_OFF(uint8_t n) {
@@ -311,6 +308,7 @@ static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch) {
 }
 #endif
 
+#if HAS_TONE_PORTAMENTO
 static void xm_tone_portamento(const xm_context_t* ctx,
                                xm_channel_context_t* ch) {
 	/* 3xx called without a note, wait until we get an actual
@@ -323,18 +321,55 @@ static void xm_tone_portamento(const xm_context_t* ctx,
 	diff = diff < (-incr) ? (-incr) : diff;
 	xm_pitch_slide(ch, (int16_t)diff);
 
+	#if HAS_GLISSANDO_CONTROL
 	if(ch->glissando_control_param) {
 		xm_round_period_to_semitone(ctx, ch);
 	}
+	#endif
 }
+
+static bool xm_slot_has_tone_portamento(const xm_pattern_slot_t* s) {
+	return (HAS_EFFECT(EFFECT_TONE_PORTAMENTO)
+	        && s->effect_type == EFFECT_TONE_PORTAMENTO)
+		|| (HAS_EFFECT(EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE)
+		    && s->effect_type == EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE)
+		|| (HAS_VOLUME_EFFECT(VOLUME_EFFECT_TONE_PORTAMENTO)
+		    && (VOLUME_COLUMN(s) >> 4) == VOLUME_EFFECT_TONE_PORTAMENTO);
+}
+
+static void xm_tone_portamento_target(const xm_context_t* ctx,
+                                      xm_channel_context_t* ch) {
+	assert(xm_slot_has_tone_portamento(ch->current));
+	if(ch->sample == NULL) return;
+
+	/* Tone porta uses the relative note of whatever sample we have, even if
+	   the target note belongs to another sample with another relative
+	   note. */
+	int16_t note = (int16_t)(ch->current->note + ch->sample->relative_note);
+
+	/* Invalid notes keep whatever target period was there before. */
+	if(note <= 0 || note >= 120) return;
+
+	/* 3xx/Mx ignores E5y, but will reuse whatever finetune was set when
+	   initially triggering the note */
+	/* XXX: refactor note+finetune logic with xm_trigger_note() */
+	ch->tone_portamento_target_period =
+		xm_period(ctx, (int16_t)(16 * (note - 1) + ch->finetune));
+}
+#endif
 
 static void xm_pitch_slide(xm_channel_context_t* ch,
                            int16_t period_offset) {
 	/* All pitch slides seem to reset the glissando error, and also cancel
 	   any lingering vibrato effect */
+	#if HAS_GLISSANDO_CONTROL
 	ch->period = (uint16_t)(ch->period + ch->glissando_control_error);
 	ch->glissando_control_error = 0;
+	#endif
+
+	#if HAS_VIBRATO
 	ch->vibrato_offset = 0;
+	#endif
 
 	/* Clamp period when sliding up (matches FT2 behaviour), wrap around
 	   when sliding down (albeit still in a broken way compared to FT2) */
@@ -422,7 +457,7 @@ static uint32_t xm_frequency([[maybe_unused]] const xm_context_t* ctx,
                              const xm_channel_context_t* ch) {
 	assert(ch->period > 0);
 	/* XXX: test wraparound/overflow */
-	uint16_t period = (uint16_t)(ch->period - ch->vibrato_offset
+	uint16_t period = (uint16_t)(ch->period - VIBRATO_OFFSET(ch)
 		- ch->autovibrato_offset);
 
 	return AMIGA_FREQUENCIES(&ctx->module)
@@ -430,6 +465,7 @@ static uint32_t xm_frequency([[maybe_unused]] const xm_context_t* ctx,
 		: xm_linear_frequency(period, ARP_NOTE_OFFSET(ch));
 }
 
+#if HAS_GLISSANDO_CONTROL
 static void xm_round_linear_period_to_semitone(xm_channel_context_t* ch) {
 	/* With linear frequencies, 1 semitone is 64 period units and 16
 	   finetune units. */
@@ -458,6 +494,7 @@ static void xm_round_period_to_semitone([[maybe_unused]] const xm_context_t* ctx
 		xm_round_linear_period_to_semitone(ch);
 	}
 }
+#endif
 
 static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) {
 	xm_pattern_slot_t* s = ch->current;
@@ -470,11 +507,14 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	if(!NOTE_IS_KEY_OFF(s->note)) {
 		if(s->note) {
 			if(s->note <= MAX_NOTE) {
-				if(HAS_TONE_PORTAMENTO(ch->current)) {
+				#if HAS_TONE_PORTAMENTO
+				if(xm_slot_has_tone_portamento(ch->current)) {
 					/* Orig note (used for retriggers) is
 					   not updated by tone portas */
 					xm_tone_portamento_target(ctx, ch);
-				} else {
+				} else
+				#endif
+				{
 					ch->orig_note = s->note;
 					xm_trigger_note(ctx, ch);
 				}
@@ -511,6 +551,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		ch->panning = VOLUME_COLUMN(s) << 4;
 	}
 
+	#if HAS_TONE_PORTAMENTO
 	/* Set tone portamento memory (even on tick 0) */
 	if(HAS_VOLUME_EFFECT(VOLUME_EFFECT_TONE_PORTAMENTO)
 	   && VOLUME_COLUMN(s) >> 4 == VOLUME_EFFECT_TONE_PORTAMENTO) {
@@ -518,11 +559,13 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		if(VOLUME_COLUMN(s) & 0x0F) {
 			ch->tone_portamento_param = VOLUME_COLUMN(s) << 4;
 		}
-	} else if(s->effect_type == 3) {
+	} else if(HAS_EFFECT(EFFECT_TONE_PORTAMENTO)
+	          && s->effect_type == EFFECT_TONE_PORTAMENTO) {
 		if(s->effect_param > 0) {
 			ch->tone_portamento_param = s->effect_param;
 		}
 	}
+	#endif
 
 	if(ctx->current_tick == 0) {
 		/* These effects are ONLY applied at tick 0. If a note delay
@@ -608,9 +651,11 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			xm_pitch_slide(ch, ch->fine_portamento_down_param);
 			break;
 
+		#if HAS_GLISSANDO_CONTROL
 		case 3: /* E3y: Set glissando control */
 			ch->glissando_control_param = s->effect_param & 0x0F;
 			break;
+		#endif
 
 		#if HAS_VIBRATO
 		case 4: /* E4y: Set vibrato control */
@@ -736,26 +781,6 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	}
 }
 
-static void xm_tone_portamento_target(const xm_context_t* ctx,
-                                      xm_channel_context_t* ch) {
-	assert(HAS_TONE_PORTAMENTO(ch->current));
-	if(ch->sample == NULL) return;
-
-	/* Tone porta uses the relative note of whatever sample we have, even if
-	   the target note belongs to another sample with another relative
-	   note. */
-	int16_t note = (int16_t)(ch->current->note + ch->sample->relative_note);
-
-	/* Invalid notes keep whatever target period was there before. */
-	if(note <= 0 || note >= 120) return;
-
-	/* 3xx/Mx ignores E5y, but will reuse whatever finetune was set when
-	   initially triggering the note */
-	/* XXX: refactor note+finetune logic with xm_trigger_note() */
-	ch->tone_portamento_target_period =
-		xm_period(ctx, (int16_t)(16 * (note - 1) + ch->finetune));
-}
-
 static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
                                   xm_channel_context_t* ch) {
 	ch->sustained = true;
@@ -870,8 +895,14 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 
 	ch->sample_position *= SAMPLE_MICROSTEPS;
+
+	#if HAS_GLISSANDO_CONTROL
 	ch->glissando_control_error = 0;
+	#endif
+
+	#if HAS_VIBRATO
 	ch->vibrato_offset = 0;
+	#endif
 
 	/* XXX: is this reset by a note trigger or inst trigger? does it matter
 	   since tremor_on touches volume_offest anyway, and it gets reset by an
@@ -1420,11 +1451,13 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 
 	uint32_t a = ch->sample_position / SAMPLE_MICROSTEPS;
+	uint32_t b;
 
-	[[maybe_unused]] const float t = (float)
+	#if XM_LINEAR_INTERPOLATION
+	const float t = (float)
 		(ch->sample_position % SAMPLE_MICROSTEPS)
 		/ (float)SAMPLE_MICROSTEPS;
-	[[maybe_unused]] uint32_t b;
+	#endif
 
 	/* Find the next sample point (for linear interpolation only) and also
 	   apply ping-pong logic */
