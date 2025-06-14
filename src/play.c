@@ -15,7 +15,11 @@ static int8_t xm_waveform(uint8_t, uint8_t) __attribute__((warn_unused_result));
 static void xm_autovibrato(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_vibrato(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tremolo(xm_channel_context_t*) __attribute__((nonnull));
+
+#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+#endif
+
 static void xm_arpeggio(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tone_portamento(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnull));
@@ -97,12 +101,6 @@ static bool HAS_VIBRATO(const xm_pattern_slot_t* s) {
 	return s->effect_type == 4 || s->effect_type == 6
 		|| (HAS_VOLUME_EFFECT(0xB) && (VOLUME_COLUMN(s) >> 4) == 0xB);
 }
-
-#if HAS_VOLUME_EFFECT(0xB)
-#define SHOULD_RESET_VIBRATO(ch) ((ch)->should_reset_vibrato)
-#else
-#define SHOULD_RESET_VIBRATO(ch) true
-#endif
 
 __attribute__((const))
 static bool NOTE_IS_KEY_OFF(uint8_t n) {
@@ -223,6 +221,7 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 	ch->tremolo_ticks += (ch->tremolo_param >> 4);
 }
 
+#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* Seems to work similarly to Txy tremor effect. It uses an increasing
 	   counter and also runs on tick 0. */
@@ -266,6 +265,7 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	if(ch->volume > UINT8_MAX - 16) ch->volume = 0;
 	else if(ch->volume > MAX_VOLUME) ch->volume = MAX_VOLUME;
 }
+#endif
 
 static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch) {
 	uint8_t t = ctx->tempo - ctx->current_tick;
@@ -356,14 +356,13 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 		ctx->current_table_index = ctx->module.restart_position;
 	}
 }
-
-[[maybe_unused]] static uint16_t xm_linear_period(int16_t note) {
+static uint16_t xm_linear_period(int16_t note) {
 	assert(7680 - note * 4 > 0);
 	assert(7860 - note * 4 < UINT16_MAX);
 	return (uint16_t)(7680 - note * 4);
 }
 
-[[maybe_unused]] static uint32_t xm_linear_frequency(uint16_t period,
+static uint32_t xm_linear_frequency(uint16_t period,
                                                      uint8_t arp_note_offset) {
 	if(arp_note_offset) {
 		/* XXX: test wraparound? */
@@ -375,11 +374,11 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 	return (uint32_t)(8363.f * exp2f((4608.f - (float)period) / 768.f));
 }
 
-[[maybe_unused]] static uint16_t xm_amiga_period(int16_t note) {
+static uint16_t xm_amiga_period(int16_t note) {
 	return (uint16_t)(32.f * 856.f * exp2f((float)note / (-12.f * 16.f)));
 }
 
-[[maybe_unused]] static uint32_t xm_amiga_frequency(uint16_t period,
+static uint32_t xm_amiga_frequency(uint16_t period,
                                                     uint8_t arp_note_offset) {
 	float p = (float)period;
 	if(arp_note_offset) {
@@ -511,16 +510,16 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		switch(VOLUME_COLUMN(s) >> 4) {
 
-		#if HAS_VOLUME_EFFECT(8)
-		case 0x8: /* ▼x: Fine volume slide down */
+		#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_FINE_SLIDE_DOWN)
+		case VOLUME_EFFECT_FINE_SLIDE_DOWN:
 			ch->volume_offset = 0;
 			xm_param_slide(&ch->volume, VOLUME_COLUMN(s) & 0x0F,
 			               MAX_VOLUME);
 			break;
 		#endif
 
-		#if HAS_VOLUME_EFFECT(9)
-		case 0x9: /* ▲x: Fine volume slide up */
+		#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_FINE_SLIDE_UP)
+		case VOLUME_EFFECT_FINE_SLIDE_UP:
 			ch->volume_offset = 0;
 			xm_param_slide(&ch->volume, VOLUME_COLUMN(s) << 4,
 			               MAX_VOLUME);
@@ -670,9 +669,11 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		ch->panning_envelope_frame_count = s->effect_param;
 		break;
 
-	case 27: /* Rxy: Multi retrig note */
+	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
+	case EFFECT_MULTI_RETRIG_NOTE:
 		xm_multi_retrig_note(ctx, ch);
 		break;
+	#endif
 
 	case 33: /* Xxy: Extra stuff */
 		switch(s->effect_param >> 4) {
@@ -729,8 +730,15 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 	ch->sustained = true;
 	ch->volume_envelope_frame_count = 0;
 	ch->panning_envelope_frame_count = 0;
-	ch->tremor_ticks = 0;
+
+	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 	ch->multi_retrig_ticks = 0;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_TREMOR)
+	ch->tremor_ticks = 0;
+	#endif
+
 	ch->autovibrato_ticks = 0;
 	ch->volume_offset = 0;
 
@@ -1076,16 +1084,16 @@ static void xm_tick(xm_context_t* ctx) {
 static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 	switch(VOLUME_COLUMN(ch->current) >> 4) {
 
-	#if HAS_VOLUME_EFFECT(6)
-	case 6: /* -x: Volume slide down */
+	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_SLIDE_DOWN)
+	case VOLUME_EFFECT_SLIDE_DOWN:
 		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, VOLUME_COLUMN(ch->current) & 0x0F,
 		               MAX_VOLUME);
 		break;
 	#endif
 
-	#if HAS_VOLUME_EFFECT(7)
-	case 7: /* +x: Volume slide up */
+	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_SLIDE_UP)
+	case VOLUME_EFFECT_SLIDE_UP:
 		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, VOLUME_COLUMN(ch->current) << 4,
 		               MAX_VOLUME);
@@ -1103,15 +1111,15 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 	#endif
 
-	#if HAS_VOLUME_EFFECT(0xD)
-	case 0xD: /* ◀x: Panning slide left */
+	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_PANNING_SLIDE_LEFT)
+	case VOLUME_EFFECT_PANNING_SLIDE_LEFT:
 		xm_param_slide(&ch->panning, VOLUME_COLUMN(ch->current) & 0x0F,
 		               MAX_PANNING-1);
 		break;
 	#endif
 
-	#if HAS_VOLUME_EFFECT(0xE)
-	case 0xE: /* ▶x: Panning slide right */
+	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_PANNING_SLIDE_RIGHT)
+	case VOLUME_EFFECT_PANNING_SLIDE_RIGHT:
 		xm_param_slide(&ch->panning, VOLUME_COLUMN(ch->current) << 4,
 		               MAX_PANNING-1);
 		break;
@@ -1171,7 +1179,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 			break;
 		}
 
-	case 7: /* 7xy: Tremolo */
+	case EFFECT_TREMOLO:
 		UPDATE_EFFECT_MEMORY_XY(&ch->tremolo_param,
 		                        ch->current->effect_param);
 		xm_tremolo(ch);
@@ -1242,11 +1250,14 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		               MAX_PANNING-1);
 		break;
 
-	case 27: /* Rxy: Multi retrig note */
+	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
+	case EFFECT_MULTI_RETRIG_NOTE:
 		xm_multi_retrig_note(ctx, ch);
 		break;
+	#endif
 
-	case 29: /* Txy: Tremor */
+	#if HAS_EFFECT(EFFECT_TREMOR)
+	case EFFECT_TREMOR:
 		/* (x+1) ticks on, then (y+1) ticks off */
 		/* Effect is not the same every row: it keeps an internal tick
 		   counter and updates to the parameter only matters at the end
@@ -1271,6 +1282,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		}
 		ch->volume_offset = ch->tremor_on ? 0 : MAX_VOLUME;
 		break;
+	#endif
 	}
 }
 

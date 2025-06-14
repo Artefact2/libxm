@@ -35,13 +35,10 @@
 #include <assert.h>
 #endif
 
+#define HAS_EFFECT(x) (!(((XM_DISABLED_EFFECTS) >> (x)) & 1))
+
 #define HAS_VOLUME_COLUMN ((~(XM_DISABLED_VOLUME_EFFECTS)) & 65534)
 #define HAS_VOLUME_EFFECT(x) (!(((XM_DISABLED_VOLUME_EFFECTS) >> (x)) & 1))
-#if HAS_VOLUME_COLUMN
-#define VOLUME_COLUMN(s) ((s)->volume_column)
-#else
-#define VOLUME_COLUMN(s) 0
-#endif
 
 static_assert(XM_FREQUENCY_TYPES >= 1 && XM_FREQUENCY_TYPES <= 3,
                "Unsupported value of XM_FREQUENCY_TYPES");
@@ -64,6 +61,17 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
                "with XM_SAMPLE_TYPE=float");
 
 /* ----- XM constants ----- */
+
+#define EFFECT_TREMOLO 7
+#define EFFECT_MULTI_RETRIG_NOTE 27
+#define EFFECT_TREMOR 29
+
+#define VOLUME_EFFECT_SLIDE_DOWN 6
+#define VOLUME_EFFECT_SLIDE_UP 7
+#define VOLUME_EFFECT_FINE_SLIDE_DOWN 8
+#define VOLUME_EFFECT_FINE_SLIDE_UP 9
+#define VOLUME_EFFECT_PANNING_SLIDE_LEFT 0xD
+#define VOLUME_EFFECT_PANNING_SLIDE_RIGHT 0xE
 
 /* These are the lengths we store in the context, including the terminating
    NUL, not necessarily the lengths of strings in loaded formats. */
@@ -205,9 +213,14 @@ typedef struct xm_instrument_s xm_instrument_t;
 struct xm_pattern_slot_s {
 	uint8_t note; /* 0..=MAX_NOTE or NOTE_KEY_OFF or NOTE_RETRIGGER */
 	uint8_t instrument; /* 1..=128 */
+
 	#if HAS_VOLUME_COLUMN
+	#define VOLUME_COLUMN(s) ((s)->volume_column)
 	uint8_t volume_column;
+	#else
+	#define VOLUME_COLUMN(s) 0
 	#endif
+
 	uint8_t effect_type;
 	uint8_t effect_param;
 };
@@ -303,8 +316,12 @@ struct xm_channel_context_s {
 	uint8_t glissando_control_param;
 	int8_t glissando_control_error;
 	uint8_t tone_portamento_param;
+
+	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 	uint8_t multi_retrig_param;
 	uint8_t multi_retrig_ticks;
+	#endif
+
 	uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
 	uint8_t pattern_loop_count; /* How many loop passes have been done */
 	uint8_t sample_offset_param;
@@ -318,25 +335,35 @@ struct xm_channel_context_s {
 	uint8_t vibrato_control_param;
 	uint8_t vibrato_ticks;
 	int8_t vibrato_offset; /* in 1/64 semitone increments */
-	int8_t autovibrato_offset; /* in 1/64 semitone increments */
 
-	#if HAS_VOLUME_EFFECT(0xB)
+	#if (HAS_EFFECT(4) || HAS_EFFECT(6)) && HAS_VOLUME_EFFECT(0xB)
+	#define SHOULD_RESET_VIBRATO(ch) ((ch)->should_reset_vibrato)
 	bool should_reset_vibrato;
+	#elif HAS_VOLUME_EFFECT(0xB)
+	#define SHOULD_RESET_VIBRATO(ch) false
+	#else
+	#define SHOULD_RESET_VIBRATO(ch) true
 	#endif
+
+	int8_t autovibrato_offset; /* in 1/64 semitone increments */
 
 	bool should_reset_arpeggio;
 	uint8_t arp_note_offset; /* in full semitones */
 
+	#if HAS_EFFECT(EFFECT_TREMOR)
 	uint8_t tremor_param;
 	uint8_t tremor_ticks; /* Decrements from max 16 */
 	bool tremor_on;
+	#endif
 
 	bool sustained;
 	bool muted;
 
 	#define CHANNEL_CONTEXT_PADDING (1 \
 		+ 4*XM_TIMING_FUNCTIONS \
-		+ !HAS_VOLUME_EFFECT(0xB))
+		+ !((HAS_EFFECT(4) || HAS_EFFECT(6)) && HAS_VOLUME_EFFECT(0xB)) \
+		+ 2*!HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
+		+ 3*!HAS_EFFECT(EFFECT_TREMOR))
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif
