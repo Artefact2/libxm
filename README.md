@@ -113,6 +113,7 @@ Known inaccuracies
 
 * E8y panning effect is supported, FT2 has no support for this command
 * Glissando control (E3y) with Amiga frequencies is not yet supported
+* Arpeggios after pitch slides with Amiga frequencies are subtly incorrect
 * Amiga filter toggle (E0y) is not supported, and is unlikely to be
 * Invert loop / funk repeat (EFy) is not supported, and is unlikely to be
 * Period wraparound after a long slide down (with eg, 2xx) is not accurate

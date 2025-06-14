@@ -14,7 +14,10 @@
 static int8_t xm_waveform(uint8_t, uint8_t) __attribute__((warn_unused_result));
 static void xm_autovibrato(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_vibrato(xm_channel_context_t*) __attribute__((nonnull));
+
+#if HAS_EFFECT(EFFECT_TREMOLO)
 static void xm_tremolo(xm_channel_context_t*) __attribute__((nonnull));
+#endif
 
 #if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
@@ -200,6 +203,7 @@ static void xm_vibrato(xm_channel_context_t* ch) {
 	ch->vibrato_ticks += (ch->vibrato_param >> 4);
 }
 
+#if HAS_EFFECT(EFFECT_TREMOLO)
 static void xm_tremolo(xm_channel_context_t* ch) {
 	/* Additive volume effect based on a waveform. Depth 8 is plus or minus
 	   32 volume. Works in the opposite direction of vibrato (ie, ramp down
@@ -225,6 +229,7 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 		* (ch->tremolo_param & 0x0F) * 4 / 128);
 	ch->tremolo_ticks += (ch->tremolo_param >> 4);
 }
+#endif
 
 #if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
@@ -488,7 +493,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	    || HAS_VOLUME_EFFECT(5))
 	   && VOLUME_COLUMN(s) >= 0x10 && VOLUME_COLUMN(s) <= 0x50) {
 		/* Set volume */
-		ch->volume_offset = 0;
+		RESET_VOLUME_OFFSET(ch);
 		ch->volume = (uint8_t)(VOLUME_COLUMN(s) - 0x10);
 	}
 	if(HAS_VOLUME_EFFECT(VOLUME_EFFECT_SET_PANNING)
@@ -518,7 +523,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_FINE_SLIDE_DOWN)
 		case VOLUME_EFFECT_FINE_SLIDE_DOWN:
-			ch->volume_offset = 0;
+			RESET_VOLUME_OFFSET(ch);
 			xm_param_slide(&ch->volume, VOLUME_COLUMN(s) & 0x0F,
 			               MAX_VOLUME);
 			break;
@@ -526,7 +531,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 		#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_FINE_SLIDE_UP)
 		case VOLUME_EFFECT_FINE_SLIDE_UP:
-			ch->volume_offset = 0;
+			RESET_VOLUME_OFFSET(ch);
 			xm_param_slide(&ch->volume, VOLUME_COLUMN(s) << 4,
 			               MAX_VOLUME);
 			break;
@@ -547,9 +552,11 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 	switch(s->effect_type) {
 
-	case 8: /* 8xx: Set panning */
+	#if HAS_EFFECT(EFFECT_SET_PANNING)
+	case EFFECT_SET_PANNING:
 		ch->panning = s->effect_param;
 		break;
+	#endif
 
 	case 0xB: /* Bxx: Position jump */
 		ctx->position_jump = true;
@@ -557,11 +564,13 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		ctx->jump_row = 0;
 		break;
 
-	case 0xC: /* Cxx: Set volume */
-		ch->volume_offset = 0;
+	#if HAS_EFFECT(EFFECT_SET_VOLUME)
+	case EFFECT_SET_VOLUME:
+		RESET_VOLUME_OFFSET(ch);
 		/* xx > MAX_VOLUME is already clamped in load.c */
 		ch->volume = s->effect_param;
 		break;
+	#endif
 
 	case 0xD: /* Dxx: Pattern break */
 		/* Jump after playing this line */
@@ -621,16 +630,18 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			}
 			break;
 
+		#if HAS_EFFECT(EFFECT_TREMOLO)
 		case 7: /* E7y: Set tremolo control */
 			ch->tremolo_control_param = s->effect_param;
 			break;
+		#endif
 
 		case 0xA: /* EAy: Fine volume slide up */
 			if(s->effect_param & 0x0F) {
 				ch->fine_volume_slide_up_param =
 					s->effect_param << 4;
 			}
-			ch->volume_offset = 0;
+			RESET_VOLUME_OFFSET(ch);
 			xm_param_slide(&ch->volume,
 			               ch->fine_volume_slide_up_param,
 			               MAX_VOLUME);
@@ -641,7 +652,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 				ch->fine_volume_slide_down_param =
 					s->effect_param & 0x0F;
 			}
-			ch->volume_offset = 0;
+			RESET_VOLUME_OFFSET(ch);
 			xm_param_slide(&ch->volume,
 			               ch->fine_volume_slide_down_param,
 			               MAX_VOLUME);
@@ -748,14 +759,17 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 	#endif
 
 	ch->autovibrato_ticks = 0;
-	ch->volume_offset = 0;
+	RESET_VOLUME_OFFSET(ch);
 
 	if(!(ch->vibrato_control_param & 4)) {
 		ch->vibrato_ticks = 0;
 	}
+
+	#if HAS_EFFECT(EFFECT_TREMOLO)
 	if(!(ch->tremolo_control_param & 4)) {
 		ch->tremolo_ticks = 0;
 	}
+	#endif
 
 	#if XM_TIMING_FUNCTIONS
 	ch->latest_trigger = ctx->generated_samples;
@@ -1042,15 +1056,15 @@ static void xm_tick(xm_context_t* ctx) {
 			 / (MAX_ENVELOPE_VALUE / 2));
 
 		assert(ch->volume <= MAX_VOLUME);
-		assert(ch->volume_offset >= -MAX_VOLUME
-		       && ch->volume_offset <= MAX_VOLUME);
+		assert(VOLUME_OFFSET(ch) >= -MAX_VOLUME
+		       && VOLUME_OFFSET(ch) <= MAX_VOLUME);
 
 		static_assert(MAX_VOLUME == 1<<6);
 		static_assert(MAX_ENVELOPE_VALUE == 1<<6);
 		static_assert(MAX_FADEOUT_VOLUME == 1<<15);
 
 		/* 6 + 6 + 15 - 2 + 6 => 31 bits of range */
-		int32_t base = ch->volume - ch->volume_offset;
+		int32_t base = ch->volume - VOLUME_OFFSET(ch);
 		if(base < 0) base = 0;
 		else if(base > MAX_VOLUME) base = MAX_VOLUME;
 		base *= ch->volume_envelope_volume;
@@ -1096,7 +1110,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_SLIDE_DOWN)
 	case VOLUME_EFFECT_SLIDE_DOWN:
-		ch->volume_offset = 0;
+		RESET_VOLUME_OFFSET(ch);
 		xm_param_slide(&ch->volume, VOLUME_COLUMN(ch->current) & 0x0F,
 		               MAX_VOLUME);
 		break;
@@ -1104,7 +1118,7 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_SLIDE_UP)
 	case VOLUME_EFFECT_SLIDE_UP:
-		ch->volume_offset = 0;
+		RESET_VOLUME_OFFSET(ch);
 		xm_param_slide(&ch->volume, VOLUME_COLUMN(ch->current) << 4,
 		               MAX_VOLUME);
 		break;
@@ -1154,19 +1168,23 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 	#endif
 
-	case 1: /* 1xx: Portamento up */
+	#if HAS_EFFECT(EFFECT_PORTAMENTO_UP)
+	case EFFECT_PORTAMENTO_UP:
 		if(ch->current->effect_param > 0) {
 			ch->portamento_up_param = ch->current->effect_param;
 		}
 		xm_pitch_slide(ch, -4 * ch->portamento_up_param);
 		break;
+	#endif
 
-	case 2: /* 2xx: Portamento down */
+	#if HAS_EFFECT(EFFECT_PORTAMENTO_DOWN)
+	case EFFECT_PORTAMENTO_DOWN:
 		if(ch->current->effect_param > 0) {
 			ch->portamento_down_param = ch->current->effect_param;
 		}
 		xm_pitch_slide(ch, 4 * ch->portamento_down_param);
 		break;
+	#endif
 
 	case 3: /* 3xx: Tone portamento */
 		[[fallthrough]];
@@ -1193,18 +1211,20 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 			break;
 		}
 
+	#if HAS_EFFECT(EFFECT_TREMOLO)
 	case EFFECT_TREMOLO:
 		UPDATE_EFFECT_MEMORY_XY(&ch->tremolo_param,
 		                        ch->current->effect_param);
 		xm_tremolo(ch);
 		break;
+	#endif
 
 	volume_slide:
 	case 0xA: /* Axy: Volume slide */
 		if(ch->current->effect_param > 0) {
 			ch->volume_slide_param = ch->current->effect_param;
 		}
-		ch->volume_offset = 0;
+		RESET_VOLUME_OFFSET(ch);
 		xm_param_slide(&ch->volume, ch->volume_slide_param, MAX_VOLUME);
 		break;
 

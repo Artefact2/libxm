@@ -250,7 +250,10 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	assert(mempool - (char*)ctx == ctx_size);
 
 	ctx->rate = rate;
+
+	#if HAS_GLOBAL_VOLUME
 	ctx->global_volume = MAX_VOLUME;
+	#endif
 
 	switch(p->format) {
 	case XM_FORMAT_XM0104:

@@ -63,7 +63,11 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 /* ----- XM constants ----- */
 
 #define EFFECT_ARPEGGIO 0
+#define EFFECT_PORTAMENTO_UP 1
+#define EFFECT_PORTAMENTO_DOWN 2
 #define EFFECT_TREMOLO 7
+#define EFFECT_SET_PANNING 8
+#define EFFECT_SET_VOLUME 0xC
 #define EFFECT_SET_GLOBAL_VOLUME 16
 #define EFFECT_GLOBAL_VOLUME_SLIDE 17
 #define EFFECT_MULTI_RETRIG_NOTE 27
@@ -300,9 +304,20 @@ struct xm_channel_context_s {
 	uint8_t panning_envelope_panning; /* 0..=MAX_ENVELOPE_VALUE */
 
 	uint8_t volume; /* 0..=MAX_VOLUME */
+
+	#define HAS_VOLUME_OFFSET (HAS_EFFECT(EFFECT_TREMOLO) \
+	                           || HAS_EFFECT(EFFECT_TREMOR))
+	#if HAS_VOLUME_OFFSET
+	#define VOLUME_OFFSET(ch) ((ch)->volume_offset)
+	#define RESET_VOLUME_OFFSET(ch) (ch)->volume_offset = 0
 	int8_t volume_offset; /* -MIN_VOLUME..MAX_VOLUME. Reset by note trigger
                                    or by any volume command. Shared by 7xy:
                                    Tremolo and Txy: Tremor. */
+	#else
+	#define VOLUME_OFFSET(ch) 0
+	#define RESET_VOLUME_OFFSET(ch)
+	#endif
+
 	uint8_t panning; /* 0..MAX_PANNING  */
 	uint8_t orig_note; /* Last valid note seen in a slot. Could be 0. */
 	int8_t finetune;
@@ -318,8 +333,15 @@ struct xm_channel_context_s {
 	#endif
 
 	uint8_t panning_slide_param;
+
+	#if HAS_EFFECT(EFFECT_PORTAMENTO_UP)
 	uint8_t portamento_up_param;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_PORTAMENTO_DOWN)
 	uint8_t portamento_down_param;
+	#endif
+
 	uint8_t fine_portamento_up_param;
 	uint8_t fine_portamento_down_param;
 	uint8_t extra_fine_portamento_up_param;
@@ -337,10 +359,11 @@ struct xm_channel_context_s {
 	uint8_t pattern_loop_count; /* How many loop passes have been done */
 	uint8_t sample_offset_param;
 
+	#if HAS_EFFECT(EFFECT_TREMOLO)
 	uint8_t tremolo_param;
 	uint8_t tremolo_control_param;
-	uint8_t tremolo_ticks; /* Mod 0x40, so wraparound is fine. XXX: is it
-	                          shared with vibrato ticks? tremor ticks? */
+	uint8_t tremolo_ticks;
+	#endif
 
 	uint8_t vibrato_param;
 	uint8_t vibrato_control_param;
@@ -383,7 +406,11 @@ struct xm_channel_context_s {
 		+ 2*!HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
 		+ 3*!HAS_EFFECT(EFFECT_TREMOR) \
 		+ 2*!HAS_EFFECT(EFFECT_ARPEGGIO) \
-		+ !HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE))
+		+ !HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE) \
+		+ !HAS_EFFECT(EFFECT_PORTAMENTO_UP) \
+		+ !HAS_EFFECT(EFFECT_PORTAMENTO_DOWN) \
+		+ 3*!HAS_EFFECT(EFFECT_TREMOLO) \
+		+ !HAS_VOLUME_OFFSET)
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif
