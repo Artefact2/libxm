@@ -35,9 +35,6 @@
 
 #define HAS_VOLUME_COLUMN ((~(XM_DISABLED_VOLUME_EFFECTS)) & 65534)
 #define HAS_VOLUME_EFFECT(x) (!(((XM_DISABLED_VOLUME_EFFECTS) >> (x)) & 1))
-#define ASSUME_VOLUME_EFFECT(slot, x) do {                                 \
-		if(!HAS_VOLUME_EFFECT(x)) assume(VOLUME_COLUMN(slot) != (x)); \
-	} while(0)
 #if HAS_VOLUME_COLUMN
 #define VOLUME_COLUMN(s) ((s)->volume_column)
 #else

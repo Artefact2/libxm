@@ -503,23 +503,25 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		   effect (EDy), where y>0, uses this effect in its volume
 		   column, it will be ignored. */
 
-		ASSUME_VOLUME_EFFECT(s, 8);
-		ASSUME_VOLUME_EFFECT(s, 9);
-		ASSUME_VOLUME_EFFECT(s, 0xA);
 		switch(VOLUME_COLUMN(s) >> 4) {
 
+		#if HAS_VOLUME_EFFECT(8)
 		case 0x8: /* ▼x: Fine volume slide down */
 			ch->volume_offset = 0;
 			xm_param_slide(&ch->volume, VOLUME_COLUMN(s) & 0x0F,
 			               MAX_VOLUME);
 			break;
+		#endif
 
+		#if HAS_VOLUME_EFFECT(9)
 		case 0x9: /* ▲x: Fine volume slide up */
 			ch->volume_offset = 0;
 			xm_param_slide(&ch->volume, VOLUME_COLUMN(s) << 4,
 			               MAX_VOLUME);
 			break;
+		#endif
 
+		#if HAS_VOLUME_EFFECT(0xA)
 		case 0xA: /* Sx: Set vibrato speed */
 			/* XXX: test me (with note delay, with simultaneous
 			   4xy/40y) */
@@ -527,6 +529,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
 			                        VOLUME_COLUMN(s) << 4);
 			break;
+		#endif
 
 		}
 	}
@@ -1066,26 +1069,25 @@ static void xm_tick(xm_context_t* ctx) {
    Immediate effects (like Cxx or Fxx) are handled in
    xm_handle_pattern_slot(). */
 static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
-	ASSUME_VOLUME_EFFECT(ch->current, 6);
-	ASSUME_VOLUME_EFFECT(ch->current, 7);
-	ASSUME_VOLUME_EFFECT(ch->current, 0xB);
-	ASSUME_VOLUME_EFFECT(ch->current, 0xD);
-	ASSUME_VOLUME_EFFECT(ch->current, 0xE);
-	ASSUME_VOLUME_EFFECT(ch->current, 0xF);
 	switch(VOLUME_COLUMN(ch->current) >> 4) {
 
-	case 0x6: /* -x: Volume slide down */
+	#if HAS_VOLUME_EFFECT(6)
+	case 6: /* -x: Volume slide down */
 		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, VOLUME_COLUMN(ch->current) & 0x0F,
 		               MAX_VOLUME);
 		break;
+	#endif
 
-	case 0x7: /* +x: Volume slide up */
+	#if HAS_VOLUME_EFFECT(7)
+	case 7: /* +x: Volume slide up */
 		ch->volume_offset = 0;
 		xm_param_slide(&ch->volume, VOLUME_COLUMN(ch->current) << 4,
 		               MAX_VOLUME);
 		break;
+	#endif
 
+	#if HAS_VOLUME_EFFECT(0xB)
 	case 0xB: /* Vx: Vibrato */
 		UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
 		                        VOLUME_COLUMN(ch->current) & 0x0F);
@@ -1094,20 +1096,27 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		ch->should_reset_vibrato = false;
 		xm_vibrato(ch);
 		break;
+	#endif
 
+	#if HAS_VOLUME_EFFECT(0xD)
 	case 0xD: /* ◀x: Panning slide left */
 		xm_param_slide(&ch->panning, VOLUME_COLUMN(ch->current) & 0x0F,
 		               MAX_PANNING-1);
 		break;
+	#endif
 
+	#if HAS_VOLUME_EFFECT(0xE)
 	case 0xE: /* ▶x: Panning slide right */
 		xm_param_slide(&ch->panning, VOLUME_COLUMN(ch->current) << 4,
 		               MAX_PANNING-1);
 		break;
+	#endif
 
+	#if HAS_VOLUME_EFFECT(0xF)
 	case 0xF: /* Mx: Tone portamento */
 		xm_tone_portamento(ctx, ch);
 		break;
+	#endif
 
 	}
 
