@@ -404,11 +404,13 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			slot->effect_param = 0;
 		}
 
+		#if HAS_VOLUME_COLUMN
 		if(slot->volume_column == 0xA0) {
 			/* Delete S0, it does nothing and saves a check in
 			   play.c. */
 			slot->volume_column = 0;
 		}
+		#endif
 	}
 }
 
@@ -759,7 +761,9 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 
 			if(note & (1 << 2)) {
 				/* Volume column follows */
+				#if HAS_VOLUME_COLUMN
 				slot->volume_column = READ_U8(offset + j);
+				#endif
 				++j;
 			}
 
@@ -778,7 +782,9 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 			/* Uncompressed packet */
 			slot->note = note;
 			slot->instrument = READ_U8(offset + j + 1);
+			#if HAS_VOLUME_COLUMN
 			slot->volume_column = READ_U8(offset + j + 2);
+			#endif
 			slot->effect_type = READ_U8(offset + j + 3);
 			slot->effect_param = READ_U8(offset + j + 4);
 			j += 5;
@@ -1322,7 +1328,7 @@ static void xm_load_mod(xm_context_t* ctx,
 		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
 			static_assert(XM_AMIGA_STEREO_SEPARATION >= 0);
 			static_assert(XM_AMIGA_STEREO_SEPARATION <= 7);
-			#if XM_AMIGA_STEREO_SEPARATION > 0
+			#if HAS_VOLUME_COLUMN && XM_AMIGA_STEREO_SEPARATION > 0
 			/* Emulate hard panning (LRRL LRRL etc) */
 			if(!has_panning_effects && slot->instrument) {
 				slot->volume_column = (((ch >> 1) ^ ch) & 1)

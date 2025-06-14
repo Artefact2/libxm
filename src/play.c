@@ -89,13 +89,13 @@ static void xm_sample(xm_context_t*, float*, float*) __attribute__((nonnull));
 __attribute__((const)) __attribute__((nonnull))
 static bool HAS_TONE_PORTAMENTO(const xm_pattern_slot_t* s) {
 	return s->effect_type == 3 || s->effect_type == 5
-		|| (s->volume_column >> 4) == 0xF;
+		|| (HAS_VOLUME_EFFECT(0xF) && (VOLUME_COLUMN(s) >> 4) == 0xF);
 }
 
 __attribute__((const)) __attribute__((nonnull))
 static bool HAS_VIBRATO(const xm_pattern_slot_t* s) {
 	return s->effect_type == 4 || s->effect_type == 6
-		|| (s->volume_column >> 4) == 0xB;
+		|| (HAS_VOLUME_EFFECT(0xB) && (VOLUME_COLUMN(s) >> 4) == 0xB);
 }
 
 __attribute__((const))
@@ -224,7 +224,7 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	UPDATE_EFFECT_MEMORY_XY(&ch->multi_retrig_param,
 	                        ch->current->effect_param);
 
-	if(ch->current->volume_column && ctx->current_tick == 0) {
+	if(VOLUME_COLUMN(ch->current) && ctx->current_tick == 0) {
 		/* ??? */
 		return;
 	}
@@ -235,8 +235,11 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	xm_trigger_note(ctx, ch);
 
 	/* Fixed volume in volume column always has precedence */
-	if(ch->current->volume_column >= 0x10
-	   && ch->current->volume_column <= 0x50) {
+	if((HAS_VOLUME_EFFECT(1) || HAS_VOLUME_EFFECT(2)
+	    || HAS_VOLUME_EFFECT(3) || HAS_VOLUME_EFFECT(4)
+	    || HAS_VOLUME_EFFECT(5))
+	   && VOLUME_COLUMN(ch->current) >= 0x10
+	   && VOLUME_COLUMN(ch->current) <= 0x50) {
 		return;
 	}
 
@@ -488,21 +491,24 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 	/* These volume effects always work, even when called with a delay by
 	   EDy. */
-	if(s->volume_column >= 0x10 && s->volume_column <= 0x50) {
+	if((HAS_VOLUME_EFFECT(1) || HAS_VOLUME_EFFECT(2)
+	    || HAS_VOLUME_EFFECT(3) || HAS_VOLUME_EFFECT(4)
+	    || HAS_VOLUME_EFFECT(5))
+	   && VOLUME_COLUMN(s) >= 0x10 && VOLUME_COLUMN(s) <= 0x50) {
 		/* Set volume */
 		ch->volume_offset = 0;
-		ch->volume = s->volume_column - 0x10;
+		ch->volume = (uint8_t)(VOLUME_COLUMN(s) - 0x10);
 	}
-	if(s->volume_column >> 4 == 0xC) {
+	if(HAS_VOLUME_EFFECT(0xC) && VOLUME_COLUMN(s) >> 4 == 0xC) {
 		/* Px: Set panning */
-		ch->panning = s->volume_column << 4;
+		ch->panning = VOLUME_COLUMN(s) << 4;
 	}
 
 	/* Set tone portamento memory (even on tick 0) */
-	if(s->volume_column >> 4 == 0xF) {
+	if(HAS_VOLUME_EFFECT(0xF) && VOLUME_COLUMN(s) >> 4 == 0xF) {
 		/* Mx *always* has precedence, even M0 */
-		if(s->volume_column & 0x0F) {
-			ch->tone_portamento_param = s->volume_column << 4;
+		if(VOLUME_COLUMN(s) & 0x0F) {
+			ch->tone_portamento_param = VOLUME_COLUMN(s) << 4;
 		}
 	} else if(s->effect_type == 3) {
 		if(s->effect_param > 0) {
@@ -515,17 +521,20 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		   effect (EDy), where y>0, uses this effect in its volume
 		   column, it will be ignored. */
 
-		switch(s->volume_column >> 4) {
+		ASSUME_VOLUME_EFFECT(s, 8);
+		ASSUME_VOLUME_EFFECT(s, 9);
+		ASSUME_VOLUME_EFFECT(s, 0xA);
+		switch(VOLUME_COLUMN(s) >> 4) {
 
 		case 0x8: /* ▼x: Fine volume slide down */
 			ch->volume_offset = 0;
-			xm_param_slide(&ch->volume, s->volume_column & 0x0F,
+			xm_param_slide(&ch->volume, VOLUME_COLUMN(s) & 0x0F,
 			               MAX_VOLUME);
 			break;
 
 		case 0x9: /* ▲x: Fine volume slide up */
 			ch->volume_offset = 0;
-			xm_param_slide(&ch->volume, s->volume_column << 4,
+			xm_param_slide(&ch->volume, VOLUME_COLUMN(s) << 4,
 			               MAX_VOLUME);
 			break;
 
@@ -534,7 +543,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			   4xy/40y) */
 			/* S0 does nothing, but is deleted in load.c */
 			UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
-			                        s->volume_column << 4);
+			                        VOLUME_COLUMN(s) << 4);
 			break;
 
 		}
@@ -1075,23 +1084,29 @@ static void xm_tick(xm_context_t* ctx) {
    Immediate effects (like Cxx or Fxx) are handled in
    xm_handle_pattern_slot(). */
 static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
-	switch(ch->current->volume_column >> 4) {
+	ASSUME_VOLUME_EFFECT(ch->current, 6);
+	ASSUME_VOLUME_EFFECT(ch->current, 7);
+	ASSUME_VOLUME_EFFECT(ch->current, 0xB);
+	ASSUME_VOLUME_EFFECT(ch->current, 0xD);
+	ASSUME_VOLUME_EFFECT(ch->current, 0xE);
+	ASSUME_VOLUME_EFFECT(ch->current, 0xF);
+	switch(VOLUME_COLUMN(ch->current) >> 4) {
 
 	case 0x6: /* -x: Volume slide down */
 		ch->volume_offset = 0;
-		xm_param_slide(&ch->volume, ch->current->volume_column & 0x0F,
+		xm_param_slide(&ch->volume, VOLUME_COLUMN(ch->current) & 0x0F,
 		               MAX_VOLUME);
 		break;
 
 	case 0x7: /* +x: Volume slide up */
 		ch->volume_offset = 0;
-		xm_param_slide(&ch->volume, ch->current->volume_column << 4,
+		xm_param_slide(&ch->volume, VOLUME_COLUMN(ch->current) << 4,
 		               MAX_VOLUME);
 		break;
 
 	case 0xB: /* Vx: Vibrato */
 		UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
-		                        ch->current->volume_column & 0x0F);
+		                        VOLUME_COLUMN(ch->current) & 0x0F);
 		/* This vibrato *does not* reset pitch when the command
 		   is discontinued */
 		ch->should_reset_vibrato = false;
@@ -1099,12 +1114,12 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 
 	case 0xD: /* ◀x: Panning slide left */
-		xm_param_slide(&ch->panning, ch->current->volume_column & 0x0F,
+		xm_param_slide(&ch->panning, VOLUME_COLUMN(ch->current) & 0x0F,
 		               MAX_PANNING-1);
 		break;
 
 	case 0xE: /* ▶x: Panning slide right */
-		xm_param_slide(&ch->panning, ch->current->volume_column << 4,
+		xm_param_slide(&ch->panning, VOLUME_COLUMN(ch->current) << 4,
 		               MAX_PANNING-1);
 		break;
 

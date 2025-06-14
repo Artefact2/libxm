@@ -33,6 +33,17 @@
 #include <assert.h>
 #endif
 
+#define HAS_VOLUME_COLUMN ((~(XM_DISABLED_VOLUME_EFFECTS)) & 65534)
+#define HAS_VOLUME_EFFECT(x) (!(((XM_DISABLED_VOLUME_EFFECTS) >> (x)) & 1))
+#define ASSUME_VOLUME_EFFECT(slot, x) do {                                 \
+		if(!HAS_VOLUME_EFFECT(x)) assume(VOLUME_COLUMN(slot) != (x)); \
+	} while(0)
+#if HAS_VOLUME_COLUMN
+#define VOLUME_COLUMN(s) (s->volume_column)
+#else
+#define VOLUME_COLUMN(s) 0
+#endif
+
 static_assert(XM_FREQUENCY_TYPES >= 1 && XM_FREQUENCY_TYPES <= 3,
                "Unsupported value of XM_FREQUENCY_TYPES");
 static_assert(_Generic((xm_sample_point_t){},
@@ -187,7 +198,9 @@ typedef struct xm_instrument_s xm_instrument_t;
 struct xm_pattern_slot_s {
 	uint8_t note; /* 0..=MAX_NOTE or NOTE_KEY_OFF or NOTE_RETRIGGER */
 	uint8_t instrument; /* 1..=128 */
+	#if HAS_VOLUME_COLUMN
 	uint8_t volume_column;
+	#endif
 	uint8_t effect_type;
 	uint8_t effect_param;
 };

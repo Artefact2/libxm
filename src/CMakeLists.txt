@@ -75,4 +75,8 @@ set(XM_AMIGA_STEREO_SEPARATION "7" CACHE STRING
 	"Stereo separation strength for MODs without panning effects (0=Mono to 7=Hard Amiga panning)")
 target_compile_definitions(xm PRIVATE XM_AMIGA_STEREO_SEPARATION=${XM_AMIGA_STEREO_SEPARATION})
 
+set(XM_DISABLED_VOLUME_EFFECTS "0" CACHE STRING
+	"Bit mask of volume effects to disable (eg 0xF00 disables Ux/Dx fine volume slides and Sx/Vx vibratos, 0xFFFF completely disables the volume column)")
+target_compile_definitions(xm PRIVATE "XM_DISABLED_VOLUME_EFFECTS=(0x10000UWB|${XM_DISABLED_VOLUME_EFFECTS}UWB)")
+
 configure_file(xm.h.in xm.h @ONLY)
