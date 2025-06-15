@@ -8,7 +8,7 @@
 
 #include "xm_internal.h"
 
-const uint16_t XM_ANALYZE_OUTPUT_SIZE = 22 + 41 + 36 + 1;
+const uint16_t XM_ANALYZE_OUTPUT_SIZE = 22 + 41 + 36 + 31 + 31 + 1;
 
 /* ----- Static functions ----- */
 
@@ -55,6 +55,9 @@ void xm_analyze(const xm_context_t* ctx, char* out) {
 
 	uint64_t used_effects = 0;
 	uint16_t used_volume_effects = 0;
+	uint16_t used_waveforms = 0;
+	uint16_t used_envelopes = 0;
+
 	const xm_pattern_slot_t* slot = ctx->pattern_slots;
 	for(uint32_t i = ctx->module.num_rows * ctx->module.num_channels;
 	    i; --i, ++slot) {
@@ -71,6 +74,37 @@ void xm_analyze(const xm_context_t* ctx, char* out) {
 		}
 
 		used_volume_effects |= (uint16_t)1 << (VOLUME_COLUMN(slot) >> 4);
+
+		if(slot->effect_type == EFFECT_SET_VIBRATO_CONTROL
+		   || slot->effect_type == EFFECT_SET_TREMOLO_CONTROL) {
+			used_waveforms |=
+				(uint16_t)1 << (slot->effect_param & 3);
+		}
+	}
+
+	for(uint8_t i = 0; i < ctx->module.num_instruments; ++i) {
+		xm_instrument_t* inst = ctx->instruments + i;
+
+		if(inst->volume_envelope.num_points) {
+			used_envelopes |= 1;
+		}
+
+		if(inst->panning_envelope.num_points) {
+			used_envelopes |= 2;
+		}
+
+		if(inst->volume_fadeout) {
+			used_envelopes |= 4;
+		}
+
+		if(inst->vibrato_depth) {
+			if(inst->vibrato_rate > 0
+			   || inst->vibrato_type == WAVEFORM_SQUARE) {
+				used_envelopes |= 8;
+				used_waveforms |=
+					(uint16_t)1 << inst->vibrato_type;
+			}
+		}
 	}
 
 	append_str(out, &off, " -DXM_DISABLED_EFFECTS=0x");
@@ -78,6 +112,12 @@ void xm_analyze(const xm_context_t* ctx, char* out) {
 
 	append_str(out, &off, " -DXM_DISABLED_VOLUME_EFFECTS=0x");
 	append_u16(out, &off, (uint16_t)(~used_volume_effects));
+
+	append_str(out, &off, " -DXM_DISABLED_ENVELOPES=0x");
+	append_u16(out, &off, (uint16_t)(~used_envelopes));
+
+	append_str(out, &off, " -DXM_DISABLED_WAVEFORMS=0x");
+	append_u16(out, &off, (uint16_t)(~used_waveforms));
 
 	if(off < XM_ANALYZE_OUTPUT_SIZE) {
 		out[off] = '\0';

@@ -12,7 +12,10 @@
 /* ----- Static functions ----- */
 
 static int8_t xm_waveform(uint8_t, uint8_t) __attribute__((warn_unused_result));
+
+#if HAS_AUTOVIBRATO
 static void xm_autovibrato(xm_channel_context_t*) __attribute__((nonnull));
+#endif
 
 #if HAS_VIBRATO
 static bool xm_slot_has_vibrato(const xm_pattern_slot_t*) __attribute__((const)) __attribute__((nonnull));
@@ -41,8 +44,11 @@ static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnul
 static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
 static void xm_tick_effects(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
+#if HAS_VOLUME_ENVELOPES || HAS_PANNING_ENVELOPES
 static uint8_t xm_envelope_lerp(const xm_envelope_point_t* restrict, const xm_envelope_point_t* restrict, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 static uint8_t xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16_t*) __attribute__((nonnull)) __attribute__((warn_unused_result));
+#endif
+
 static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
 static uint16_t xm_linear_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const));
@@ -133,7 +139,8 @@ static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
 
 	switch(waveform & 3) {
 
-	case 0: /* Sine */
+	#if HAS_WAVEFORM(WAVEFORM_SINE)
+	case WAVEFORM_SINE:
 		static const int8_t sin_lut[] = {
 			/* 128*sinf(2πx/64) for x in 0..16 */
 			0, 12, 24, 37, 48, 60, 71, 81,
@@ -141,24 +148,32 @@ static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
 		};
 		uint8_t idx = step & 0x10 ? 0xF - (step & 0xF) : (step & 0xF);
 		return (step < 0x20) ? -sin_lut[idx] : sin_lut[idx];
+	#endif
 
-	case 2: /* Square */
+	#if HAS_WAVEFORM(WAVEFORM_SQUARE)
+	case WAVEFORM_SQUARE:
 		return (step < 0x20) ? INT8_MIN : INT8_MAX;
+	#endif
 
-	case 1: /* Ramp down */
+	#if HAS_WAVEFORM(WAVEFORM_RAMP_DOWN)
+	case WAVEFORM_RAMP_DOWN:
 		/* Starts at zero, wraps around at the middle */
 		return (int8_t)(-step * 4 - 1);
+	#endif
 
-	case 3: /* Ramp up */
+	#if HAS_WAVEFORM(WAVEFORM_RAMP_UP)
+	case WAVEFORM_RAMP_UP:
 		/* Only used by autovibrato, regular E4y/E7y will use a square
 		   wave instead (this is set by load.c) */
 		return (int8_t)(step * 4);
+	#endif
 
 	}
 
 	assert(0);
 }
 
+#if HAS_AUTOVIBRATO
 static void xm_autovibrato(xm_channel_context_t* ch) {
 	xm_instrument_t* instr = ch->instrument;
 	if(instr == NULL) return;
@@ -187,6 +202,7 @@ static void xm_autovibrato(xm_channel_context_t* ch) {
 
 	ch->autovibrato_ticks++;
 }
+#endif
 
 #if HAS_VIBRATO
 static void xm_vibrato(xm_channel_context_t* ch) {
@@ -393,21 +409,6 @@ static void xm_param_slide(uint8_t* param, uint8_t rawval, uint8_t max) {
 	}
 }
 
-static uint8_t xm_envelope_lerp(const xm_envelope_point_t* restrict a,
-                                const xm_envelope_point_t* restrict b,
-                                uint16_t pos) {
-	/* Linear interpolation between two envelope points */
-	assert(pos >= a->frame);
-	assert(a->frame < b->frame);
-	static_assert(MAX_ENVELOPE_VALUE <= UINT8_MAX);
-	if(pos >= b->frame) return b->value;
-	uint32_t val = (uint32_t)
-		(b->value * (uint16_t)(pos - a->frame)
-		 + a->value * (uint16_t)(b->frame - pos));
-	val /= (uint16_t)(b->frame - a->frame);
-	return (uint8_t)val;
-}
-
 static void xm_post_pattern_change(xm_context_t* ctx) {
 	/* Loop if necessary */
 	if(ctx->current_table_index >= ctx->module.length) {
@@ -459,7 +460,7 @@ static uint32_t xm_frequency([[maybe_unused]] const xm_context_t* ctx,
 	assert(ch->period > 0);
 	/* XXX: test wraparound/overflow */
 	uint16_t period = (uint16_t)(ch->period - VIBRATO_OFFSET(ch)
-		- ch->autovibrato_offset);
+	                             - AUTOVIBRATO_OFFSET(ch));
 
 	return AMIGA_FREQUENCIES(&ctx->module)
 		? xm_amiga_frequency(period, ARP_NOTE_OFFSET(ch))
@@ -680,10 +681,15 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_SET_ENVELOPE_POSITION)
+	#if HAS_EFFECT(EFFECT_SET_ENVELOPE_POSITION) \
+		&& (HAS_VOLUME_ENVELOPES || HAS_PANNING_ENVELOPES)
 	case EFFECT_SET_ENVELOPE_POSITION:
+		#if HAS_VOLUME_ENVELOPES
 		ch->volume_envelope_frame_count = s->effect_param;
+		#endif
+		#if HAS_PANNING_ENVELOPES
 		ch->panning_envelope_frame_count = s->effect_param;
+		#endif
 		break;
 	#endif
 
@@ -784,8 +790,14 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
                                   xm_channel_context_t* ch) {
 	ch->sustained = true;
+
+	#if HAS_VOLUME_ENVELOPES
 	ch->volume_envelope_frame_count = 0;
+	#endif
+
+	#if HAS_PANNING_ENVELOPES
 	ch->panning_envelope_frame_count = 0;
+	#endif
 
 	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 	ch->multi_retrig_ticks = 0;
@@ -795,7 +807,10 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 	ch->tremor_ticks = 0;
 	#endif
 
+	#if HAS_AUTOVIBRATO
 	ch->autovibrato_ticks = 0;
+	#endif
+
 	RESET_VOLUME_OFFSET(ch);
 
 	#if HAS_VIBRATO
@@ -881,8 +896,8 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* Handle 9xx: Sample offset here, since it does nothing outside of a
 	   note trigger (ie, called on its own without a note). If we have Mx in
 	   the volume column, it does nothing. */
-	if(HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET)
-	   && ch->current->effect_type == EFFECT_SET_SAMPLE_OFFSET) {
+	#if HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET)
+	if(ch->current->effect_type == EFFECT_SET_SAMPLE_OFFSET) {
 		if(ch->current->effect_param > 0) {
 			ch->sample_offset_param = ch->current->effect_param;
 		}
@@ -891,9 +906,9 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 			ch->period = 0;
 			return;
 		}
-	} else {
-		ch->sample_position = 0;
-	}
+	} else
+	#endif
+	ch->sample_position = 0;
 
 	ch->sample_position *= SAMPLE_MICROSTEPS;
 
@@ -1021,6 +1036,22 @@ static void xm_row(xm_context_t* ctx) {
 	}
 }
 
+#if HAS_VOLUME_ENVELOPES || HAS_PANNING_ENVELOPES
+static uint8_t xm_envelope_lerp(const xm_envelope_point_t* restrict a,
+                                const xm_envelope_point_t* restrict b,
+                                uint16_t pos) {
+	/* Linear interpolation between two envelope points */
+	assert(pos >= a->frame);
+	assert(a->frame < b->frame);
+	static_assert(MAX_ENVELOPE_VALUE <= UINT8_MAX);
+	if(pos >= b->frame) return b->value;
+	uint32_t val = (uint32_t)
+		(b->value * (uint16_t)(pos - a->frame)
+		 + a->value * (uint16_t)(b->frame - pos));
+	val /= (uint16_t)(b->frame - a->frame);
+	return (uint8_t)val;
+}
+
 static uint8_t xm_tick_envelope(xm_channel_context_t* ch,
                                 const xm_envelope_t* env,
                                 uint16_t* counter) {
@@ -1051,13 +1082,17 @@ static uint8_t xm_tick_envelope(xm_channel_context_t* ch,
 
 	assert(0);
 }
+#endif
 
 static void xm_tick_envelopes(xm_channel_context_t* ch) {
 	xm_instrument_t* inst = ch->instrument;
 	if(inst == NULL) return;
 
+	#if HAS_AUTOVIBRATO
 	xm_autovibrato(ch);
+	#endif
 
+	#if HAS_FADEOUT_VOLUME
 	if(!ch->sustained) {
 		ch->fadeout_volume =
 			(ch->fadeout_volume < inst->volume_fadeout) ?
@@ -1065,18 +1100,23 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 	} else {
 		ch->fadeout_volume = MAX_FADEOUT_VOLUME-1;
 	}
+	#endif
 
+	#if HAS_VOLUME_ENVELOPES
 	ch->volume_envelope_volume =
 		inst->volume_envelope.num_points
 		? xm_tick_envelope(ch, &(inst->volume_envelope),
 		                   &(ch->volume_envelope_frame_count))
 		: MAX_ENVELOPE_VALUE;
+	#endif
 
+	#if HAS_PANNING_ENVELOPES
 	ch->panning_envelope_panning =
 		inst->panning_envelope.num_points
 		? xm_tick_envelope(ch, &(inst->panning_envelope),
 		                   &(ch->panning_envelope_frame_count))
 		: MAX_ENVELOPE_VALUE / 2;
+	#endif
 }
 
 static void xm_tick(xm_context_t* ctx) {
@@ -1122,7 +1162,7 @@ static void xm_tick(xm_context_t* ctx) {
 
 		uint8_t panning = (uint8_t)
 			(ch->panning
-			 + (ch->panning_envelope_panning
+			 + (PANNING_ENVELOPE_PANNING(ch)
 			    - MAX_ENVELOPE_VALUE / 2)
 			 * (MAX_PANNING/2
 			    - __builtin_abs(ch->panning - MAX_PANNING / 2))
@@ -1138,10 +1178,13 @@ static void xm_tick(xm_context_t* ctx) {
 
 		/* 6 + 6 + 15 - 2 + 6 => 31 bits of range */
 		int32_t base = ch->volume - VOLUME_OFFSET(ch);
+		#if HAS_VOLUME_OFFSET
 		if(base < 0) base = 0;
 		else if(base > MAX_VOLUME) base = MAX_VOLUME;
-		base *= ch->volume_envelope_volume;
-		base *= ch->fadeout_volume;
+		#endif
+
+		base *= VOLUME_ENVELOPE_VOLUME(ch);
+		base *= FADEOUT_VOLUME(ch);
 		base /= 4;
 		base *= GLOBAL_VOLUME(ctx);
 		float volume =  (float)base / (float)(INT32_MAX);

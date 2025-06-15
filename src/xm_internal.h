@@ -40,6 +40,13 @@
 #define HAS_VOLUME_COLUMN ((~(XM_DISABLED_VOLUME_EFFECTS)) & 65534)
 #define HAS_VOLUME_EFFECT(x) (!(((XM_DISABLED_VOLUME_EFFECTS) >> (x)) & 1))
 
+#define HAS_WAVEFORM(x) (!(((XM_DISABLED_WAVEFORMS) >> (x)) & 1))
+
+#define HAS_VOLUME_ENVELOPES (!((XM_DISABLED_ENVELOPES) & 1))
+#define HAS_PANNING_ENVELOPES (!(((XM_DISABLED_ENVELOPES) >> 1) & 1))
+#define HAS_FADEOUT_VOLUME (!(((XM_DISABLED_ENVELOPES) >> 2) & 1))
+#define HAS_AUTOVIBRATO (!(((XM_DISABLED_ENVELOPES) >> 3) & 1))
+
 static_assert(XM_FREQUENCY_TYPES >= 1 && XM_FREQUENCY_TYPES <= 3,
                "Unsupported value of XM_FREQUENCY_TYPES");
 #if XM_FREQUENCY_TYPES == 1
@@ -113,6 +120,11 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define VOLUME_EFFECT_PANNING_SLIDE_LEFT 0xD
 #define VOLUME_EFFECT_PANNING_SLIDE_RIGHT 0xE
 #define VOLUME_EFFECT_TONE_PORTAMENTO 0xF
+
+#define WAVEFORM_SINE 0
+#define WAVEFORM_RAMP_DOWN 1
+#define WAVEFORM_SQUARE 2
+#define WAVEFORM_RAMP_UP 3
 
 /* These are the lengths we store in the context, including the terminating
    NUL, not necessarily the lengths of strings in loaded formats. */
@@ -332,12 +344,38 @@ struct xm_channel_context_s {
 	uint16_t tone_portamento_target_period;
 	#endif
 
+	#if HAS_FADEOUT_VOLUME
+	#define FADEOUT_VOLUME(ch) ((ch)->fadeout_volume)
 	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
+	#else
+	#define FADEOUT_VOLUME(ch) MAX_FADEOUT_VOLUME
+	#endif
+
+	#if HAS_AUTOVIBRATO
 	uint16_t autovibrato_ticks;
+	#endif
+
+	#if HAS_VOLUME_ENVELOPES
 	uint16_t volume_envelope_frame_count;
+	#endif
+
+	#if HAS_PANNING_ENVELOPES
 	uint16_t panning_envelope_frame_count;
+	#endif
+
+	#if HAS_VOLUME_ENVELOPES
+	#define VOLUME_ENVELOPE_VOLUME(ch) ((ch)->volume_envelope_volume)
 	uint8_t volume_envelope_volume; /* 0..=MAX_ENVELOPE_VALUE  */
+	#else
+	#define VOLUME_ENVELOPE_VOLUME(ch) MAX_ENVELOPE_VALUE
+	#endif
+
+	#if HAS_PANNING_ENVELOPES
+	#define PANNING_ENVELOPE_PANNING(ch) ((ch)->panning_envelope_panning)
 	uint8_t panning_envelope_panning; /* 0..=MAX_ENVELOPE_VALUE */
+	#else
+	#define PANNING_ENVELOPE_PANNING(ch) (MAX_ENVELOPE_VALUE / 2)
+	#endif
 
 	uint8_t volume; /* 0..=MAX_VOLUME */
 
@@ -476,7 +514,12 @@ struct xm_channel_context_s {
 	#define VIBRATO_CONTROL_PARAM(ch) 0
 	#endif
 
+	#if HAS_AUTOVIBRATO
+	#define AUTOVIBRATO_OFFSET(ch) ((ch)->autovibrato_offset)
 	int8_t autovibrato_offset; /* in 1/64 semitone increments */
+	#else
+	#define AUTOVIBRATO_OFFSET(ch) 0
+	#endif
 
 	#if HAS_EFFECT(EFFECT_ARPEGGIO)
 	#define ARP_NOTE_OFFSET(ch) ((ch)->arp_note_offset)
@@ -521,7 +564,11 @@ struct xm_channel_context_s {
 		+ !HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_UP) \
 		+ !HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_DOWN) \
 		+ !HAS_EFFECT(EFFECT_FINE_PORTAMENTO_UP) \
-		+ !HAS_EFFECT(EFFECT_FINE_PORTAMENTO_DOWN))
+		+ !HAS_EFFECT(EFFECT_FINE_PORTAMENTO_DOWN) \
+		+ 3*!HAS_AUTOVIBRATO \
+		+ 2*!HAS_FADEOUT_VOLUME \
+		+ 3*!HAS_VOLUME_ENVELOPES \
+		+ 3*!HAS_PANNING_ENVELOPES)
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif

@@ -83,4 +83,12 @@ set(XM_DISABLED_VOLUME_EFFECTS "0" CACHE STRING
 	"Bit mask of volume effects to disable (eg 0xF00 disables Ux/Dx fine volume slides and Sx/Vx vibratos, 0xFFFF completely disables the volume column)")
 target_compile_definitions(xm PRIVATE "XM_DISABLED_VOLUME_EFFECTS=${XM_DISABLED_VOLUME_EFFECTS}ULL")
 
+set(XM_DISABLED_ENVELOPES "0" CACHE STRING
+	"Bit mask of envelopes to disable (bit 0 = volume envelope, bit 1 = panning envelope, bit 2 = volume fadeout, bit 3 = autovibrato)")
+target_compile_definitions(xm PRIVATE "XM_DISABLED_ENVELOPES=${XM_DISABLED_ENVELOPES}ULL")
+
+set(XM_DISABLED_WAVEFORMS "0" CACHE STRING
+	"Bit mask of waveforms to disable for vibrato, autovibrato and tremolo (eg 0x9 disables ramp down and ramp up, 0xF disables all waveforms)")
+target_compile_definitions(xm PRIVATE "XM_DISABLED_ENVELOPES=${XM_DISABLED_ENVELOPES}ULL")
+
 configure_file(xm.h.in xm.h @ONLY)
