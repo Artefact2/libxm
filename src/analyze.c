@@ -8,7 +8,12 @@
 
 #include "xm_internal.h"
 
-const uint16_t XM_ANALYZE_OUTPUT_SIZE = 22 + 41 + 36 + 31 + 30 + 1;
+const uint16_t XM_ANALYZE_OUTPUT_SIZE =
+	41 /* disabled effects */
+	+ 36 /* disabled volume effects */
+	+ 31 /* disabled waveforms */
+	+ 30 /* disabled features */
+	+ 1; /* terminating NUL */
 
 /* ----- Static functions ----- */
 
@@ -132,7 +137,7 @@ static void scan_control_waveforms(const xm_context_t* ctx, uint16_t* out) {
 
 static void scan_features(const xm_context_t* ctx, uint16_t* out,
                           uint16_t* out_autovibrato_waveforms) {
-	*out = 0;
+	*out = AMIGA_FREQUENCIES(&ctx->module) ? (1 << 9) : (1 << 8);
 	*out_autovibrato_waveforms = 0;
 
 	const xm_sample_t* smp = ctx->samples;
@@ -181,8 +186,10 @@ static void scan_features(const xm_context_t* ctx, uint16_t* out,
 void xm_analyze(const xm_context_t* ctx, char* out) {
 	uint16_t off = 0;
 
-	append_str(out, &off, "-DXM_FREQUENCY_TYPES=");
-	append_str(out, &off, AMIGA_FREQUENCIES(&ctx->module) ? "2" : "1");
+	#if XM_DISABLED_FEATURES > 0
+	NOTICE("suggested flags might be inaccurate; "
+	       "recompile libxmize with XM_DISABLED_FEATURES=0");
+	#endif
 
 	uint64_t used_effects;
 	uint16_t used_volume_effects;

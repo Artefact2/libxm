@@ -50,17 +50,11 @@
 #define HAS_PANNING_ENVELOPES (!(((XM_DISABLED_FEATURES) >> 5) & 1))
 #define HAS_FADEOUT_VOLUME (!(((XM_DISABLED_FEATURES) >> 6) & 1))
 #define HAS_AUTOVIBRATO (!(((XM_DISABLED_FEATURES) >> 7) & 1))
+#define HAS_LINEAR_FREQUENCIES (!(((XM_DISABLED_FEATURES) >> 8) & 1))
+#define HAS_AMIGA_FREQUENCIES (!(((XM_DISABLED_FEATURES) >> 9) & 1))
 
-static_assert(XM_FREQUENCY_TYPES >= 1 && XM_FREQUENCY_TYPES <= 3,
-               "Unsupported value of XM_FREQUENCY_TYPES");
-#if XM_FREQUENCY_TYPES == 1
-#define AMIGA_FREQUENCIES(mod) false
-#elif XM_FREQUENCY_TYPES == 2
-#define AMIGA_FREQUENCIES(mod) true
-#else
-#define AMIGA_FREQUENCIES(mod) ((mod)->amiga_frequencies)
-#endif
-
+static_assert(HAS_LINEAR_FREQUENCIES || HAS_AMIGA_FREQUENCIES,
+               "Must enable at least one frequency type (linear or Amiga)");
 static_assert(_Generic((xm_sample_point_t){},
                         int8_t: true, int16_t: true, float: true,
                         default: false),
@@ -302,7 +296,14 @@ struct xm_module_s {
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 	uint8_t restart_position;
 
+	#if HAS_LINEAR_FREQUENCIES && HAS_AMIGA_FREQUENCIES
+	#define AMIGA_FREQUENCIES(mod) ((mod)->amiga_frequencies)
 	bool amiga_frequencies;
+	#elif HAS_AMIGA_FREQUENCIES
+	#define AMIGA_FREQUENCIES(mod) true
+	#else
+	#define AMIGA_FREQUENCIES(mod) false
+	#endif
 
 	#if XM_STRINGS
 	static_assert(MODULE_NAME_LENGTH % 8 == 0);
@@ -311,7 +312,7 @@ struct xm_module_s {
 	char trackername[TRACKER_NAME_LENGTH];
 	#endif
 
-	char __pad[2];
+	char __pad[2 + !(HAS_LINEAR_FREQUENCIES && HAS_AMIGA_FREQUENCIES)];
 };
 typedef struct xm_module_s xm_module_t;
 

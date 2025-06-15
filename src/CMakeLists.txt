@@ -67,10 +67,6 @@ set(XM_MICROSTEP_BITS "12" CACHE STRING
 	"Precision of sample stepping (8..12, higher = better pitch accuracy, lower = can load larger samples)")
 target_compile_definitions(xm PRIVATE XM_MICROSTEP_BITS=${XM_MICROSTEP_BITS})
 
-set(XM_FREQUENCY_TYPES "3" CACHE STRING
-	"Supported frequency types (1=Linear,2=Amiga,3=Both)")
-target_compile_definitions(xm PRIVATE XM_FREQUENCY_TYPES=${XM_FREQUENCY_TYPES})
-
 set(XM_AMIGA_STEREO_SEPARATION "7" CACHE STRING
 	"Stereo separation strength for MODs without panning effects (0=Mono to 7=Hard Amiga panning)")
 target_compile_definitions(xm PRIVATE XM_AMIGA_STEREO_SEPARATION=${XM_AMIGA_STEREO_SEPARATION})
@@ -88,7 +84,7 @@ set(XM_DISABLED_WAVEFORMS "0" CACHE STRING
 target_compile_definitions(xm PRIVATE "XM_DISABLED_ENVELOPES=${XM_DISABLED_ENVELOPES}ULL")
 
 set(XM_DISABLED_FEATURES "0" CACHE STRING
-	"Bit mask of features to disable (bit 0 = pingpong samples, bit 1 = key-off note, bit 2 = accurate .MOD instrument triggers, bit 3 = unused, bit 4 = volume envelopes, bit 5 = panning envelopes, bit 6 = instrument fadeout, bit 7 = instrument autovibrato)")
+	"Bit mask of features to disable (bit 0 = pingpong samples, bit 1 = key-off note, bit 2 = accurate .MOD instrument triggers, bit 3 = unused, bit 4 = volume envelopes, bit 5 = panning envelopes, bit 6 = instrument fadeout, bit 7 = instrument autovibrato, bit 8 = linear frequencies, bit 9 = Amiga frequencies)")
 target_compile_definitions(xm PRIVATE "XM_DISABLED_FEATURES=${XM_DISABLED_FEATURES}ULL")
 
 configure_file(xm.h.in xm.h @ONLY)
