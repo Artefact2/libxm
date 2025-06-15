@@ -74,11 +74,16 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define EFFECT_TREMOLO 7
 #define EFFECT_SET_PANNING 8
 #define EFFECT_VOLUME_SLIDE 0xA
+#define EFFECT_JUMP_TO_ORDER 0xB
 #define EFFECT_SET_VOLUME 0xC
+#define EFFECT_PATTERN_BREAK 0xD
 #define EFFECT_SET_GLOBAL_VOLUME 16
 #define EFFECT_GLOBAL_VOLUME_SLIDE 17
-#define EFFECT_EXTRA_FINE_PORTAMENTO_UP 18
-#define EFFECT_EXTRA_FINE_PORTAMENTO_DOWN 19
+#define EFFECT_EXTRA_FINE_PORTAMENTO_UP 18 /* Not vanilla XM */
+#define EFFECT_EXTRA_FINE_PORTAMENTO_DOWN 19 /* Not vanilla XM */
+#define EFFECT_KEY_OFF 20
+#define EFFECT_SET_ENVELOPE_POSITION 21
+#define EFFECT_PANNING_SLIDE 25
 #define EFFECT_MULTI_RETRIG_NOTE 27
 #define EFFECT_TREMOR 29
 
@@ -353,7 +358,9 @@ struct xm_channel_context_s {
 	uint8_t global_volume_slide_param;
 	#endif
 
+	#if HAS_EFFECT(EFFECT_PANNING_SLIDE)
 	uint8_t panning_slide_param;
+	#endif
 
 	#if HAS_EFFECT(EFFECT_PORTAMENTO_UP)
 	uint8_t portamento_up_param;
@@ -390,8 +397,12 @@ struct xm_channel_context_s {
 	uint8_t multi_retrig_ticks;
 	#endif
 
+	#define HAS_LOOPS (HAS_EFFECT(0xE)) /* XXX */
+	#if HAS_LOOPS
 	uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
 	uint8_t pattern_loop_count; /* How many loop passes have been done */
+	#endif
+
 	uint8_t sample_offset_param;
 
 	#if HAS_EFFECT(EFFECT_TREMOLO)
@@ -458,7 +469,9 @@ struct xm_channel_context_s {
 		+ 3*!HAS_TONE_PORTAMENTO \
 		+ 2*!HAS_GLISSANDO_CONTROL \
 		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_UP) \
-		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_DOWN))
+		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_DOWN) \
+		+ !HAS_EFFECT(EFFECT_PANNING_SLIDE) \
+		+ 2*!HAS_LOOPS)
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif
@@ -504,16 +517,37 @@ struct xm_context_s {
 	uint8_t tempo; /* 0..MIN_BPM */
 	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
 
-	bool position_jump;
+	#if HAS_EFFECT(EFFECT_PATTERN_BREAK)
+	#define PATTERN_BREAK(ctx) ((ctx)->pattern_break)
 	bool pattern_break;
+	#else
+	#define PATTERN_BREAK(ctx) false
+	#endif
+
+	#define HAS_POSITION_JUMP (HAS_EFFECT(EFFECT_JUMP_TO_ORDER) || HAS_LOOPS)
+	#if HAS_POSITION_JUMP
+	#define POSITION_JUMP(ctx) ((ctx)->position_jump)
+	bool position_jump;
 	uint8_t jump_dest;
+	#else
+	#define POSITION_JUMP(ctx) false
+	#endif
+
+	#define HAS_JUMP_ROW (HAS_EFFECT(EFFECT_PATTERN_BREAK) \
+	                      || HAS_POSITION_JUMP)
+	#if HAS_JUMP_ROW
 	uint8_t jump_row;
+	#endif
 
 	uint8_t loop_count;
 	uint8_t max_loop_count;
 
-	#define CONTEXT_PADDING (4*XM_TIMING_FUNCTIONS\
-		+ !HAS_GLOBAL_VOLUME)
+	#define CONTEXT_PADDING (0 \
+		+ 4*XM_TIMING_FUNCTIONS \
+		+ !HAS_GLOBAL_VOLUME \
+		+ 2*!HAS_POSITION_JUMP \
+		+ !HAS_EFFECT(EFFECT_PATTERN_BREAK) \
+		+ !HAS_JUMP_ROW)
 	#if CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CONTEXT_PADDING % POINTER_SIZE];
 	#endif

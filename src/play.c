@@ -309,7 +309,7 @@ static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch) {
 #endif
 
 #if HAS_TONE_PORTAMENTO
-static void xm_tone_portamento(const xm_context_t* ctx,
+static void xm_tone_portamento([[maybe_unused]] const xm_context_t* ctx,
                                xm_channel_context_t* ch) {
 	/* 3xx called without a note, wait until we get an actual
 	 * target note. */
@@ -605,18 +605,6 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 	switch(s->effect_type) {
 
-	#if HAS_EFFECT(EFFECT_SET_PANNING)
-	case EFFECT_SET_PANNING:
-		ch->panning = s->effect_param;
-		break;
-	#endif
-
-	case 0xB: /* Bxx: Position jump */
-		ctx->position_jump = true;
-		ctx->jump_dest = s->effect_param;
-		ctx->jump_row = 0;
-		break;
-
 	#if HAS_EFFECT(EFFECT_SET_VOLUME)
 	case EFFECT_SET_VOLUME:
 		RESET_VOLUME_OFFSET(ch);
@@ -625,12 +613,28 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 	#endif
 
-	case 0xD: /* Dxx: Pattern break */
+	#if HAS_EFFECT(EFFECT_SET_PANNING)
+	case EFFECT_SET_PANNING:
+		ch->panning = s->effect_param;
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_JUMP_TO_ORDER)
+	case EFFECT_JUMP_TO_ORDER:
+		ctx->position_jump = true;
+		ctx->jump_dest = s->effect_param;
+		ctx->jump_row = 0;
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_PATTERN_BREAK)
+	case EFFECT_PATTERN_BREAK:
 		/* Jump after playing this line */
 		ctx->pattern_break = true;
 		ctx->jump_row = (uint8_t)
 			(s->effect_param - 6 * (s->effect_param >> 4));
 		break;
+	#endif
 
 	case 0xE: /* EXy: Extended command */
 		switch(s->effect_param >> 4) {
@@ -666,6 +670,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		/* E5y: Set note fine-tune is handled in
 		   xm_handle_pattern_slot() directly. */
 
+		#if HAS_LOOPS
 		case 6: /* E6y: Pattern loop */
 			if(s->effect_param & 0x0F) {
 				if((s->effect_param & 0x0F) == ch->pattern_loop_count) {
@@ -686,6 +691,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 				ctx->jump_row = ch->pattern_loop_origin;
 			}
 			break;
+		#endif
 
 		#if HAS_EFFECT(EFFECT_TREMOLO)
 		case 7: /* E7y: Set tremolo control */
@@ -740,10 +746,12 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 	#endif
 
-	case 21: /* Lxx: Set envelope position */
+	#if HAS_EFFECT(EFFECT_SET_ENVELOPE_POSITION)
+	case EFFECT_SET_ENVELOPE_POSITION:
 		ch->volume_envelope_frame_count = s->effect_param;
 		ch->panning_envelope_frame_count = s->effect_param;
 		break;
+	#endif
 
 	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 	case EFFECT_MULTI_RETRIG_NOTE:
@@ -923,17 +931,27 @@ static void xm_key_off(xm_channel_context_t* ch) {
 }
 
 static void xm_row(xm_context_t* ctx) {
-	if(ctx->position_jump || ctx->pattern_break) {
-		if(ctx->position_jump) {
+	if(POSITION_JUMP(ctx) || PATTERN_BREAK(ctx)) {
+		#if HAS_POSITION_JUMP
+		if(POSITION_JUMP(ctx)) {
 			ctx->current_table_index = ctx->jump_dest;
-		} else {
-			ctx->current_table_index++;
-		}
+		} else
+		#endif
+		ctx->current_table_index++;
 
-		ctx->current_row = ctx->jump_row;
-		ctx->position_jump = false;
+		#if HAS_EFFECT(EFFECT_PATTERN_BREAK)
 		ctx->pattern_break = false;
+		#endif
+
+		#if HAS_POSITION_JUMP
+		ctx->position_jump = false;
+		#endif
+
+		#if HAS_JUMP_ROW
+		ctx->current_row = ctx->jump_row;
 		ctx->jump_row = 0;
+		#endif
+
 		xm_post_pattern_change(ctx);
 	}
 
@@ -953,9 +971,11 @@ static void xm_row(xm_context_t* ctx) {
 			xm_handle_pattern_slot(ctx, ch);
 		}
 
+		#if HAS_LOOPS
 		if(ch->pattern_loop_count > 0) {
 			in_a_loop = true;
 		}
+		#endif
 
 		#if HAS_EFFECT(EFFECT_ARPEGGIO)
 		if(ch->should_reset_arpeggio) {
@@ -983,13 +1003,18 @@ static void xm_row(xm_context_t* ctx) {
 	                     * increment from 255 to 0, in which case it
 	                     * is still necessary to go the next
 	                     * pattern. */
-	if(!ctx->position_jump && !ctx->pattern_break &&
+	if(!POSITION_JUMP(ctx) && !PATTERN_BREAK(ctx) &&
 	   (ctx->current_row >= cur->num_rows || ctx->current_row == 0)) {
 		ctx->current_table_index++;
-		ctx->current_row = ctx->jump_row; /* This will be 0 most of
-		                                   * the time, except when E60
-		                                   * is used */
+
+		#if HAS_JUMP_ROW
+		/* This will be 0 most of the time, except when E60 is used */
+		ctx->current_row = ctx->jump_row;
 		ctx->jump_row = 0;
+		#else
+		ctx->current_row = 0;
+		#endif
+
 		xm_post_pattern_change(ctx);
 	}
 }
@@ -1348,18 +1373,22 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 	#endif
 
-	case 20: /* Kxx: Key off (as tick effect) */
+	#if HAS_EFFECT(EFFECT_KEY_OFF)
+	case EFFECT_KEY_OFF:
 		if(ctx->current_tick != ch->current->effect_param) break;
 		xm_key_off(ch);
 		break;
+	#endif
 
-	case 25: /* Pxy: Panning slide */
+	#if HAS_EFFECT(EFFECT_PANNING_SLIDE)
+	case EFFECT_PANNING_SLIDE:
 		if(ch->current->effect_param > 0) {
 			ch->panning_slide_param = ch->current->effect_param;
 		}
 		xm_param_slide(&ch->panning, ch->panning_slide_param,
 		               MAX_PANNING-1);
 		break;
+	#endif
 
 	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 	case EFFECT_MULTI_RETRIG_NOTE:
