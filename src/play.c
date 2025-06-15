@@ -11,7 +11,7 @@
 
 /* ----- Static functions ----- */
 
-static int8_t xm_waveform(uint8_t, uint8_t) __attribute__((warn_unused_result));
+[[maybe_unused]] static int8_t xm_waveform(uint8_t, uint8_t) __attribute__((warn_unused_result));
 
 #if HAS_AUTOVIBRATO
 static void xm_autovibrato(xm_channel_context_t*) __attribute__((nonnull));
@@ -40,8 +40,8 @@ static void xm_tone_portamento(const xm_context_t*, xm_channel_context_t*) __att
 static void xm_tone_portamento_target(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 #endif
 
-static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnull));
-static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
+[[maybe_unused]] static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnull));
+[[maybe_unused]] static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
 static void xm_tick_effects(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
 #if HAS_VOLUME_ENVELOPES || HAS_PANNING_ENVELOPES
@@ -1349,6 +1349,8 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		goto volume_slide;
 	#elif HAS_EFFECT(EFFECT_VIBRATO)
 	case EFFECT_VIBRATO:
+		UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
+		                        ch->current->effect_param);
 		#if HAS_VIBRATO_RESET
 		ch->should_reset_vibrato = true;
 		#endif

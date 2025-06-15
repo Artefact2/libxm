@@ -338,7 +338,6 @@ struct xm_channel_context_s {
 	uint16_t period; /* 1/64 semitone increments (linear frequencies) */
 
 	#define HAS_TONE_PORTAMENTO (HAS_EFFECT(EFFECT_TONE_PORTAMENTO) \
-	                   || HAS_EFFECT(EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE) \
 	                   || HAS_VOLUME_EFFECT(VOLUME_EFFECT_TONE_PORTAMENTO))
 	#if HAS_TONE_PORTAMENTO
 	uint16_t tone_portamento_target_period;
@@ -484,7 +483,6 @@ struct xm_channel_context_s {
 	#endif
 
 	#define HAS_VIBRATO (HAS_EFFECT(EFFECT_VIBRATO) \
-		|| HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE) \
 		|| HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
 	#define HAS_VIBRATO_RESET ((HAS_EFFECT(EFFECT_VIBRATO) \
 	                            || HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)) \
