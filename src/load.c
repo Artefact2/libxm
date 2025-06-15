@@ -323,6 +323,27 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			slot->note = NOTE_KEY_OFF;
 		}
 
+		if(slot->effect_type == 33) {
+			/* Split X1y/X2y effect */
+			switch(slot->effect_param >> 4) {
+			case 1:
+				slot->effect_type =
+					EFFECT_EXTRA_FINE_PORTAMENTO_UP;
+				slot->effect_param &= 0xF;
+				break;
+			case 2:
+				slot->effect_type =
+					EFFECT_EXTRA_FINE_PORTAMENTO_DOWN;
+				slot->effect_param &= 0xF;
+				break;
+			default:
+				/* Invalid X effect, clear it */
+				slot->effect_type = 0;
+				slot->effect_param = 0;
+				break;
+			}
+		}
+
 		if(slot->effect_type == 0xB
 		   && slot->effect_param >= ctx->module.length) {
 			/* Convert invalid Bxx to B00 */
@@ -398,13 +419,6 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			   same slot. */
 			slot->effect_type = 0;
 			slot->note = NOTE_KEY_OFF;
-		}
-
-		if(slot->effect_type == 33 &&
-		   (slot->effect_param < 0x10 || slot->effect_param >= 0x30)) {
-			/* Delete unknown X effect */
-			slot->effect_type = 0;
-			slot->effect_param = 0;
 		}
 
 		#if HAS_VOLUME_COLUMN

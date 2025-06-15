@@ -60,8 +60,10 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
                "XM_LIBXM_DELTA_SAMPLES cannot be used "
                "with XM_SAMPLE_TYPE=float");
 
-/* ----- XM constants ----- */
+/* ----- Libxm constants ----- */
 
+/* These are not a 1:1 match with XM semantics, rather, they are the values
+   stored after a context has been loaded. */
 #define EFFECT_ARPEGGIO 0
 #define EFFECT_PORTAMENTO_UP 1
 #define EFFECT_PORTAMENTO_DOWN 2
@@ -75,6 +77,8 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define EFFECT_SET_VOLUME 0xC
 #define EFFECT_SET_GLOBAL_VOLUME 16
 #define EFFECT_GLOBAL_VOLUME_SLIDE 17
+#define EFFECT_EXTRA_FINE_PORTAMENTO_UP 18
+#define EFFECT_EXTRA_FINE_PORTAMENTO_DOWN 19
 #define EFFECT_MULTI_RETRIG_NOTE 27
 #define EFFECT_TREMOR 29
 
@@ -361,8 +365,14 @@ struct xm_channel_context_s {
 
 	uint8_t fine_portamento_up_param;
 	uint8_t fine_portamento_down_param;
+
+	#if HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_UP)
 	uint8_t extra_fine_portamento_up_param;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_DOWN)
 	uint8_t extra_fine_portamento_down_param;
+	#endif
 
 	#define HAS_GLISSANDO_CONTROL (HAS_EFFECT(EFFECT_ARPEGGIO) \
 		|| (HAS_TONE_PORTAMENTO && HAS_EFFECT(0xE))) /* XXX */
@@ -446,7 +456,9 @@ struct xm_channel_context_s {
 		+ !HAS_VOLUME_SLIDE \
 		+ 4*!HAS_VIBRATO + !(HAS_VIBRATO && HAS_VIBRATO_RESET) \
 		+ 3*!HAS_TONE_PORTAMENTO \
-		+ 2*!HAS_GLISSANDO_CONTROL)
+		+ 2*!HAS_GLISSANDO_CONTROL \
+		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_UP) \
+		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_DOWN))
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif

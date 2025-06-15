@@ -751,32 +751,23 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 	#endif
 
-	case 33: /* Xxy: Extra stuff */
-		switch(s->effect_param >> 4) {
-
-		case 1: /* X1y: Extra fine portamento up */
-			if(s->effect_param & 0x0F) {
-				ch->extra_fine_portamento_up_param =
-					s->effect_param & 0x0F;
-			}
-			xm_pitch_slide(ch,
-			               -ch->extra_fine_portamento_up_param);
-			break;
-
-		case 2: /* X2y: Extra fine portamento down */
-			if(s->effect_param & 0x0F) {
-				ch->extra_fine_portamento_down_param =
-					s->effect_param & 0x0F;
-			}
-			xm_pitch_slide(ch,
-			               ch->extra_fine_portamento_down_param);
-			break;
-
-		default:
-			assert(0);
-
+	#if HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_UP)
+	case EFFECT_EXTRA_FINE_PORTAMENTO_UP:
+		if(s->effect_param & 0x0F) {
+			ch->extra_fine_portamento_up_param = s->effect_param;
 		}
+		xm_pitch_slide(ch, -ch->extra_fine_portamento_up_param);
 		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_DOWN)
+	case EFFECT_EXTRA_FINE_PORTAMENTO_DOWN:
+		if(s->effect_param) {
+			ch->extra_fine_portamento_down_param = s->effect_param;
+		}
+		xm_pitch_slide(ch, ch->extra_fine_portamento_down_param);
+		break;
+	#endif
 
 	}
 }
