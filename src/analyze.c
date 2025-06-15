@@ -8,7 +8,7 @@
 
 #include "xm_internal.h"
 
-const uint16_t XM_ANALYZE_OUTPUT_SIZE = 22 + 41 + 36 + 31 + 31 + 30 + 1;
+const uint16_t XM_ANALYZE_OUTPUT_SIZE = 22 + 41 + 36 + 31 + 30 + 1;
 
 /* ----- Static functions ----- */
 
@@ -18,9 +18,8 @@ static void append_u16(char*, uint16_t*, uint16_t);
 static void append_u64(char*, uint16_t*, uint64_t);
 
 static void scan_effects(const xm_context_t*, uint64_t*, uint16_t*);
-static void scan_envelopes(const xm_context_t*, uint16_t*, uint16_t*);
 static void scan_control_waveforms(const xm_context_t*, uint16_t*);
-static void scan_features(const xm_context_t*, uint16_t*);
+static void scan_features(const xm_context_t*, uint16_t*, uint16_t*);
 
 /* ----- Function definitions ----- */
 
@@ -73,37 +72,6 @@ static void scan_effects(const xm_context_t* ctx, uint64_t* out_effects,
 		}
 
 		*out_volume_effects |= (uint16_t)1 << (VOLUME_COLUMN(slot) >> 4);
-	}
-}
-
-static void scan_envelopes(const xm_context_t* ctx, uint16_t* out_envelopes,
-                           uint16_t* out_autovibrato_waveforms) {
-	*out_envelopes = 0;
-	*out_autovibrato_waveforms = 0;
-	xm_instrument_t* inst = ctx->instruments;
-
-	for(uint8_t i = ctx->module.num_instruments; i; --i, ++inst) {
-		if(inst->volume_envelope.num_points) {
-			*out_envelopes |= 1;
-		}
-
-		if(inst->panning_envelope.num_points) {
-			*out_envelopes |= 2;
-		}
-
-		if(inst->volume_fadeout) {
-			*out_envelopes |= 4;
-		}
-
-		if(inst->vibrato_depth
-		   && (inst->vibrato_rate > 0
-		       || inst->vibrato_type == WAVEFORM_SQUARE)) {
-			/* A zero vibrato_rate effectively turns off
-			   autovibrato, except for square waveforms */
-			*out_envelopes |= 8;
-			*out_autovibrato_waveforms |=
-				(uint16_t)1 << inst->vibrato_type;
-		}
 	}
 }
 
@@ -162,8 +130,10 @@ static void scan_control_waveforms(const xm_context_t* ctx, uint16_t* out) {
 	}
 }
 
-static void scan_features(const xm_context_t* ctx, uint16_t* out) {
+static void scan_features(const xm_context_t* ctx, uint16_t* out,
+                          uint16_t* out_autovibrato_waveforms) {
 	*out = 0;
+	*out_autovibrato_waveforms = 0;
 
 	const xm_sample_t* smp = ctx->samples;
 	for(uint16_t i = ctx->module.num_samples; i; --i, ++smp) {
@@ -179,6 +149,31 @@ static void scan_features(const xm_context_t* ctx, uint16_t* out) {
 			*out |= 2;
 		} else if(slot->note == NOTE_SWITCH) {
 			*out |= 4;
+		}
+	}
+
+	const xm_instrument_t* inst = ctx->instruments;
+	for(uint8_t i = ctx->module.num_instruments; i; --i, ++inst) {
+		if(inst->volume_envelope.num_points) {
+			*out |= 16;
+		}
+
+		if(inst->panning_envelope.num_points) {
+			*out |= 32;
+		}
+
+		if(inst->volume_fadeout) {
+			*out |= 64;
+		}
+
+		if(inst->vibrato_depth
+		   && (inst->vibrato_rate > 0
+		       || inst->vibrato_type == WAVEFORM_SQUARE)) {
+			/* A zero vibrato_rate effectively turns off
+			   autovibrato, except for square waveforms */
+			*out |= 128;
+			*out_autovibrato_waveforms |=
+				(uint16_t)1 << inst->vibrato_type;
 		}
 	}
 }
@@ -197,20 +192,14 @@ void xm_analyze(const xm_context_t* ctx, char* out) {
 	append_str(out, &off, " -DXM_DISABLED_VOLUME_EFFECTS=0x");
 	append_u16(out, &off, (uint16_t)(~used_volume_effects));
 
-	uint16_t used_envelopes;
+	uint16_t used_features;
 	uint16_t used_autovibrato_waveforms;
-	scan_envelopes(ctx, &used_envelopes, &used_autovibrato_waveforms);
-	append_str(out, &off, " -DXM_DISABLED_ENVELOPES=0x");
-	append_u16(out, &off, (uint16_t)(~used_envelopes));
-
 	uint16_t used_control_waveforms;
+	scan_features(ctx, &used_features, &used_autovibrato_waveforms);
 	scan_control_waveforms(ctx, &used_control_waveforms);
 	append_str(out, &off, " -DXM_DISABLED_WAVEFORMS=0x");
 	append_u16(out, &off, (uint16_t)(~(used_autovibrato_waveforms
 	                                   | used_control_waveforms)));
-
-	uint16_t used_features;
-	scan_features(ctx, &used_features);
 	append_str(out, &off, " -DXM_DISABLED_FEATURES=0x");
 	append_u16(out, &off, (uint16_t)(~used_features));
 
