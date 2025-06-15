@@ -67,10 +67,10 @@ void xm_analyze(const xm_context_t* ctx, char* out) {
 				used_effects |= 1;
 			}
 		} else {
-			used_effects |= 1 << slot->effect_type;
+			used_effects |= (uint64_t)1 << slot->effect_type;
 		}
 
-		used_volume_effects |= 1 << (VOLUME_COLUMN(slot) >> 4);
+		used_volume_effects |= (uint16_t)1 << (VOLUME_COLUMN(slot) >> 4);
 	}
 
 	append_str(out, &off, " -DXM_DISABLED_EFFECTS=0x");

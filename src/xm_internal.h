@@ -73,10 +73,13 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define EFFECT_VIBRATO_VOLUME_SLIDE 6
 #define EFFECT_TREMOLO 7
 #define EFFECT_SET_PANNING 8
+#define EFFECT_SET_SAMPLE_OFFSET 9
 #define EFFECT_VOLUME_SLIDE 0xA
 #define EFFECT_JUMP_TO_ORDER 0xB
 #define EFFECT_SET_VOLUME 0xC
 #define EFFECT_PATTERN_BREAK 0xD
+#define EFFECT_SET_TEMPO 0xE /* Not vanilla XM */
+#define EFFECT_SET_BPM 0xF
 #define EFFECT_SET_GLOBAL_VOLUME 16
 #define EFFECT_GLOBAL_VOLUME_SLIDE 17
 #define EFFECT_EXTRA_FINE_PORTAMENTO_UP 18 /* Not vanilla XM */
@@ -86,6 +89,19 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define EFFECT_PANNING_SLIDE 25
 #define EFFECT_MULTI_RETRIG_NOTE 27
 #define EFFECT_TREMOR 29
+#define EFFECT_FINE_PORTAMENTO_UP (32|1) /* Not vanilla XM */
+#define EFFECT_FINE_PORTAMENTO_DOWN (32|2) /* Not vanilla XM */
+#define EFFECT_SET_GLISSANDO_CONTROL (32|3) /* Not vanilla XM */
+#define EFFECT_SET_VIBRATO_CONTROL (32|4) /* Not vanilla XM */
+#define EFFECT_SET_FINETUNE (32|5) /* Not vanilla XM */
+#define EFFECT_PATTERN_LOOP (32|6) /* Not vanilla XM */
+#define EFFECT_SET_TREMOLO_CONTROL (32|7) /* Not vanilla XM */
+#define EFFECT_RETRIGGER_NOTE (32|9) /* Not vanilla XM */
+#define EFFECT_FINE_VOLUME_SLIDE_UP (32|0xA) /* Not vanilla XM */
+#define EFFECT_FINE_VOLUME_SLIDE_DOWN (32|0xB) /* Not vanilla XM */
+#define EFFECT_CUT_NOTE (32|0xC) /* Not vanilla XM */
+#define EFFECT_DELAY_NOTE (32|0xD) /* Not vanilla XM */
+#define EFFECT_DELAY_PATTERN (32|0xE) /* Not vanilla XM */
 
 #define VOLUME_EFFECT_SLIDE_DOWN 6
 #define VOLUME_EFFECT_SLIDE_UP 7
@@ -351,8 +367,13 @@ struct xm_channel_context_s {
 	uint8_t volume_slide_param;
 	#endif
 
+	#if HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_UP)
 	uint8_t fine_volume_slide_up_param;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_DOWN)
 	uint8_t fine_volume_slide_down_param;
+	#endif
 
 	#if HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE)
 	uint8_t global_volume_slide_param;
@@ -370,8 +391,13 @@ struct xm_channel_context_s {
 	uint8_t portamento_down_param;
 	#endif
 
+	#if HAS_EFFECT(EFFECT_FINE_PORTAMENTO_UP)
 	uint8_t fine_portamento_up_param;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_FINE_PORTAMENTO_DOWN)
 	uint8_t fine_portamento_down_param;
+	#endif
 
 	#if HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_UP)
 	uint8_t extra_fine_portamento_up_param;
@@ -382,7 +408,8 @@ struct xm_channel_context_s {
 	#endif
 
 	#define HAS_GLISSANDO_CONTROL (HAS_EFFECT(EFFECT_ARPEGGIO) \
-		|| (HAS_TONE_PORTAMENTO && HAS_EFFECT(0xE))) /* XXX */
+		|| (HAS_TONE_PORTAMENTO \
+		    && HAS_EFFECT(EFFECT_SET_GLISSANDO_CONTROL)))
 	#if HAS_GLISSANDO_CONTROL
 	uint8_t glissando_control_param;
 	int8_t glissando_control_error;
@@ -397,18 +424,25 @@ struct xm_channel_context_s {
 	uint8_t multi_retrig_ticks;
 	#endif
 
-	#define HAS_LOOPS (HAS_EFFECT(0xE)) /* XXX */
-	#if HAS_LOOPS
+	#if HAS_EFFECT(EFFECT_PATTERN_LOOP)
 	uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
 	uint8_t pattern_loop_count; /* How many loop passes have been done */
 	#endif
 
+	#if HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET)
 	uint8_t sample_offset_param;
+	#endif
 
 	#if HAS_EFFECT(EFFECT_TREMOLO)
 	uint8_t tremolo_param;
-	uint8_t tremolo_control_param;
 	uint8_t tremolo_ticks;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_TREMOLO) && HAS_EFFECT(EFFECT_SET_TREMOLO_CONTROL)
+	#define TREMOLO_CONTROL_PARAM(ch) ((ch)->tremolo_control_param)
+	uint8_t tremolo_control_param;
+	#else
+	#define TREMOLO_CONTROL_PARAM(ch) 0
 	#endif
 
 	#define HAS_VIBRATO (HAS_EFFECT(EFFECT_VIBRATO) \
@@ -420,9 +454,12 @@ struct xm_channel_context_s {
 	#if HAS_VIBRATO
 	#define VIBRATO_OFFSET(ch) ((ch)->vibrato_offset)
 	uint8_t vibrato_param;
-	uint8_t vibrato_control_param;
 	uint8_t vibrato_ticks;
 	int8_t vibrato_offset; /* in 1/64 semitone increments */
+	#else
+	#define VIBRATO_OFFSET(ch) 0
+	#endif
+
 	#if HAS_VIBRATO_RESET
 	#define SHOULD_RESET_VIBRATO(ch) ((ch)->should_reset_vibrato)
 	bool should_reset_vibrato;
@@ -431,8 +468,12 @@ struct xm_channel_context_s {
 	#else
 	#define SHOULD_RESET_VIBRATO(ch) true
 	#endif
+
+	#if HAS_VIBRATO && HAS_EFFECT(EFFECT_SET_VIBRATO_CONTROL)
+	#define VIBRATO_CONTROL_PARAM(ch) ((ch)->vibrato_control_param)
+	uint8_t vibrato_control_param;
 	#else
-	#define VIBRATO_OFFSET(ch) 0
+	#define VIBRATO_CONTROL_PARAM(ch) 0
 	#endif
 
 	int8_t autovibrato_offset; /* in 1/64 semitone increments */
@@ -462,16 +503,25 @@ struct xm_channel_context_s {
 		+ !HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE) \
 		+ !HAS_EFFECT(EFFECT_PORTAMENTO_UP) \
 		+ !HAS_EFFECT(EFFECT_PORTAMENTO_DOWN) \
-		+ 3*!HAS_EFFECT(EFFECT_TREMOLO) \
+		+ 2*!HAS_EFFECT(EFFECT_TREMOLO) \
+		+ !(HAS_EFFECT(EFFECT_TREMOLO) \
+		       && HAS_EFFECT(EFFECT_SET_TREMOLO_CONTROL)) \
 		+ !HAS_VOLUME_OFFSET \
 		+ !HAS_VOLUME_SLIDE \
-		+ 4*!HAS_VIBRATO + !(HAS_VIBRATO && HAS_VIBRATO_RESET) \
+		+ 3*!HAS_VIBRATO \
+		+ !(HAS_VIBRATO && HAS_VIBRATO_RESET) \
+		+ !(HAS_VIBRATO && HAS_EFFECT(EFFECT_SET_VIBRATO_CONTROL)) \
 		+ 3*!HAS_TONE_PORTAMENTO \
 		+ 2*!HAS_GLISSANDO_CONTROL \
 		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_UP) \
 		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_DOWN) \
 		+ !HAS_EFFECT(EFFECT_PANNING_SLIDE) \
-		+ 2*!HAS_LOOPS)
+		+ 2*!HAS_EFFECT(EFFECT_PATTERN_LOOP) \
+		+ !HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET) \
+		+ !HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_UP) \
+		+ !HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_DOWN) \
+		+ !HAS_EFFECT(EFFECT_FINE_PORTAMENTO_UP) \
+		+ !HAS_EFFECT(EFFECT_FINE_PORTAMENTO_DOWN))
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif
@@ -499,9 +549,15 @@ struct xm_context_s {
 	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
 
 	uint8_t current_tick; /* Typically 0..(ctx->tempo) */
-	uint8_t extra_rows_done;
 	uint8_t current_row;
+
+	#if HAS_EFFECT(EFFECT_DELAY_PATTERN)
+	#define EXTRA_ROWS_DONE(ctx) ((ctx)->extra_rows_done)
+	uint8_t extra_rows_done;
 	uint8_t extra_rows;
+	#else
+	#define EXTRA_ROWS_DONE(ctx) 0
+	#endif
 
 	uint8_t current_table_index; /* 0..(module.length) */
 
@@ -524,7 +580,8 @@ struct xm_context_s {
 	#define PATTERN_BREAK(ctx) false
 	#endif
 
-	#define HAS_POSITION_JUMP (HAS_EFFECT(EFFECT_JUMP_TO_ORDER) || HAS_LOOPS)
+	#define HAS_POSITION_JUMP (HAS_EFFECT(EFFECT_JUMP_TO_ORDER) \
+	                           || HAS_EFFECT(EFFECT_PATTERN_LOOP))
 	#if HAS_POSITION_JUMP
 	#define POSITION_JUMP(ctx) ((ctx)->position_jump)
 	bool position_jump;
@@ -547,7 +604,8 @@ struct xm_context_s {
 		+ !HAS_GLOBAL_VOLUME \
 		+ 2*!HAS_POSITION_JUMP \
 		+ !HAS_EFFECT(EFFECT_PATTERN_BREAK) \
-		+ !HAS_JUMP_ROW)
+		+ !HAS_JUMP_ROW \
+		+ 2*!HAS_EFFECT(EFFECT_DELAY_PATTERN))
 	#if CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CONTEXT_PADDING % POINTER_SIZE];
 	#endif

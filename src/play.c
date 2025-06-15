@@ -195,7 +195,7 @@ static void xm_vibrato(xm_channel_context_t* ch) {
 
 	/* Depth 8 == 2 semitones amplitude (-1 then +1) */
 	ch->vibrato_offset = (int8_t)
-		((int16_t)xm_waveform(ch->vibrato_control_param,
+		((int16_t)xm_waveform(VIBRATO_CONTROL_PARAM(ch),
 		                      ch->vibrato_ticks)
 		 * (ch->vibrato_param & 0x0F) / 0x10);
 	ch->vibrato_ticks += (ch->vibrato_param >> 4);
@@ -220,8 +220,9 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 	/* Like Txy: Tremor, tremolo effect *persists* after the end of the
 	   effect, but is reset after any volume command. */
 
-	uint8_t ticks = ch->tremolo_ticks % 0x40;
-	if(ch->tremolo_control_param & 1) {
+	uint8_t ticks = ch->tremolo_ticks;
+	if(TREMOLO_CONTROL_PARAM(ch) & 1) {
+		ticks %= 0x40;
 		/* FT2 quirk, ramp waveform with tremolo is weird and is also
 		   influenced by vibrato ticks... */
 		if(ticks >= 0x20) {
@@ -232,7 +233,7 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 		}
 	}
 	ch->volume_offset = (int8_t)
-		((int16_t)xm_waveform(ch->tremolo_control_param, ticks)
+		((int16_t)xm_waveform(TREMOLO_CONTROL_PARAM(ch), ticks)
 		* (ch->tremolo_param & 0x0F) * 4 / 128);
 	ch->tremolo_ticks += (ch->tremolo_param >> 4);
 }
@@ -613,6 +614,30 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 	#endif
 
+	#if HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_UP)
+	case EFFECT_FINE_VOLUME_SLIDE_UP:
+		if(s->effect_param) {
+			ch->fine_volume_slide_up_param = s->effect_param << 4;
+		}
+		RESET_VOLUME_OFFSET(ch);
+		xm_param_slide(&ch->volume,
+		               ch->fine_volume_slide_up_param,
+		               MAX_VOLUME);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_DOWN)
+	case EFFECT_FINE_VOLUME_SLIDE_DOWN:
+		if(s->effect_param) {
+			ch->fine_volume_slide_down_param = s->effect_param;
+		}
+		RESET_VOLUME_OFFSET(ch);
+		xm_param_slide(&ch->volume,
+		               ch->fine_volume_slide_down_param,
+		               MAX_VOLUME);
+		break;
+	#endif
+
 	#if HAS_EFFECT(EFFECT_SET_PANNING)
 	case EFFECT_SET_PANNING:
 		ch->panning = s->effect_param;
@@ -636,108 +661,17 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 	#endif
 
-	case 0xE: /* EXy: Extended command */
-		switch(s->effect_param >> 4) {
-
-		case 1: /* E1y: Fine portamento up */
-			if(s->effect_param & 0x0F) {
-				ch->fine_portamento_up_param =
-					4 * (s->effect_param & 0x0F);
-			}
-			xm_pitch_slide(ch, -ch->fine_portamento_up_param);
-			break;
-
-		case 2: /* E2y: Fine portamento down */
-			if(s->effect_param & 0x0F) {
-				ch->fine_portamento_down_param =
-					4 * (s->effect_param & 0x0F);
-			}
-			xm_pitch_slide(ch, ch->fine_portamento_down_param);
-			break;
-
-		#if HAS_GLISSANDO_CONTROL
-		case 3: /* E3y: Set glissando control */
-			ch->glissando_control_param = s->effect_param & 0x0F;
-			break;
-		#endif
-
-		#if HAS_VIBRATO
-		case 4: /* E4y: Set vibrato control */
-			ch->vibrato_control_param = s->effect_param;
-			break;
-		#endif
-
-		/* E5y: Set note fine-tune is handled in
-		   xm_handle_pattern_slot() directly. */
-
-		#if HAS_LOOPS
-		case 6: /* E6y: Pattern loop */
-			if(s->effect_param & 0x0F) {
-				if((s->effect_param & 0x0F) == ch->pattern_loop_count) {
-					/* Loop is over */
-					ch->pattern_loop_count = 0;
-					break;
-				}
-
-				/* Jump to the beginning of the loop */
-				ch->pattern_loop_count++;
-				ctx->position_jump = true;
-				ctx->jump_row = ch->pattern_loop_origin;
-				ctx->jump_dest = ctx->current_table_index;
-			} else {
-				/* Set loop start point */
-				ch->pattern_loop_origin = ctx->current_row;
-				/* Replicate FT2 E60 bug */
-				ctx->jump_row = ch->pattern_loop_origin;
-			}
-			break;
-		#endif
-
-		#if HAS_EFFECT(EFFECT_TREMOLO)
-		case 7: /* E7y: Set tremolo control */
-			ch->tremolo_control_param = s->effect_param;
-			break;
-		#endif
-
-		case 0xA: /* EAy: Fine volume slide up */
-			if(s->effect_param & 0x0F) {
-				ch->fine_volume_slide_up_param =
-					s->effect_param << 4;
-			}
-			RESET_VOLUME_OFFSET(ch);
-			xm_param_slide(&ch->volume,
-			               ch->fine_volume_slide_up_param,
-			               MAX_VOLUME);
-			break;
-
-		case 0xB: /* EBy: Fine volume slide down */
-			if(s->effect_param & 0x0F) {
-				ch->fine_volume_slide_down_param =
-					s->effect_param & 0x0F;
-			}
-			RESET_VOLUME_OFFSET(ch);
-			xm_param_slide(&ch->volume,
-			               ch->fine_volume_slide_down_param,
-			               MAX_VOLUME);
-			break;
-
-		case 0xE: /* EEy: Pattern delay */
-			/* Loop current row y times. Tick effects *are* applied
-			   on tick 0 of repeated rows. */
-			ctx->extra_rows = (ch->current->effect_param & 0x0F);
-			break;
-
-		}
+	#if HAS_EFFECT(EFFECT_SET_TEMPO)
+	case EFFECT_SET_TEMPO:
+		ctx->tempo = s->effect_param;
 		break;
+	#endif
 
-	case 0xF: /* Fxx: Set tempo/BPM */
-		static_assert(MIN_BPM == 0b00100000);
-		if(s->effect_param & 0b11100000) {
-			ctx->bpm = s->effect_param;
-		} else {
-			ctx->tempo = s->effect_param;
-		}
+	#if HAS_EFFECT(EFFECT_SET_BPM)
+	case EFFECT_SET_BPM:
+		ctx->bpm = s->effect_param;
 		break;
+	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_GLOBAL_VOLUME)
 	case EFFECT_SET_GLOBAL_VOLUME:
@@ -777,6 +711,73 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 	#endif
 
+	#if HAS_EFFECT(EFFECT_FINE_PORTAMENTO_UP)
+	case EFFECT_FINE_PORTAMENTO_UP:
+		if(s->effect_param) {
+			ch->fine_portamento_up_param = 4 * s->effect_param;
+		}
+		xm_pitch_slide(ch, -ch->fine_portamento_up_param);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_FINE_PORTAMENTO_DOWN)
+	case EFFECT_FINE_PORTAMENTO_DOWN:
+		if(s->effect_param) {
+			ch->fine_portamento_down_param = 4 * s->effect_param;
+		}
+		xm_pitch_slide(ch, ch->fine_portamento_down_param);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_SET_GLISSANDO_CONTROL)
+	case EFFECT_SET_GLISSANDO_CONTROL:
+		ch->glissando_control_param = s->effect_param;
+		break;
+	#endif
+
+	#if HAS_VIBRATO && HAS_EFFECT(EFFECT_SET_VIBRATO_CONTROL)
+	case EFFECT_SET_VIBRATO_CONTROL:
+		ch->vibrato_control_param = s->effect_param;
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_TREMOLO) && HAS_EFFECT(EFFECT_SET_TREMOLO_CONTROL)
+	case EFFECT_SET_TREMOLO_CONTROL:
+		ch->tremolo_control_param = s->effect_param;
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_PATTERN_LOOP)
+	case EFFECT_PATTERN_LOOP:
+		if(s->effect_param) {
+			if(s->effect_param == ch->pattern_loop_count) {
+				/* Loop is over */
+				ch->pattern_loop_count = 0;
+				break;
+			}
+
+			/* Jump to the beginning of the loop */
+			ch->pattern_loop_count++;
+			ctx->position_jump = true;
+			ctx->jump_row = ch->pattern_loop_origin;
+			ctx->jump_dest = ctx->current_table_index;
+		} else {
+			/* Set loop start point */
+			ch->pattern_loop_origin = ctx->current_row;
+			/* Replicate FT2 E60 bug */
+			ctx->jump_row = ch->pattern_loop_origin;
+		}
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_DELAY_PATTERN)
+	case EFFECT_DELAY_PATTERN:
+		/* Loop current row y times. Tick effects *are* applied
+		   on tick 0 of repeated rows. */
+		ctx->extra_rows = ch->current->effect_param;
+		break;
+	#endif
+
 	}
 }
 
@@ -798,13 +799,13 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 	RESET_VOLUME_OFFSET(ch);
 
 	#if HAS_VIBRATO
-	if(!(ch->vibrato_control_param & 4)) {
+	if(!(VIBRATO_CONTROL_PARAM(ch) & 4)) {
 		ch->vibrato_ticks = 0;
 	}
 	#endif
 
 	#if HAS_EFFECT(EFFECT_TREMOLO)
-	if(!(ch->tremolo_control_param & 4)) {
+	if(!(TREMOLO_CONTROL_PARAM(ch) & 4)) {
 		ch->tremolo_ticks = 0;
 	}
 	#endif
@@ -868,10 +869,10 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* Handle E5y: Set note fine-tune here; this effect only works in tandem
 	   with a note and overrides the finetune value stored in the sample. If
 	   we have Mx in the volume column, it does nothing. */
-	if(ch->current->effect_type == 0xE
-	   && (ch->current->effect_param >> 4) == 0x5) {
+	if(HAS_EFFECT(EFFECT_SET_FINETUNE)
+	   && ch->current->effect_type == EFFECT_SET_FINETUNE) {
 		ch->finetune = (int8_t)
-			((ch->current->effect_param & 0xF) * 2 - 16);
+			(ch->current->effect_param * 2 - 16);
 	} else {
 		ch->finetune = ch->sample->finetune;
 	}
@@ -880,7 +881,8 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* Handle 9xx: Sample offset here, since it does nothing outside of a
 	   note trigger (ie, called on its own without a note). If we have Mx in
 	   the volume column, it does nothing. */
-	if(ch->current->effect_type == 9) {
+	if(HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET)
+	   && ch->current->effect_type == EFFECT_SET_SAMPLE_OFFSET) {
 		if(ch->current->effect_param > 0) {
 			ch->sample_offset_param = ch->current->effect_param;
 		}
@@ -966,12 +968,12 @@ static void xm_row(xm_context_t* ctx) {
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i, ++ch, ++s) {
 		ch->current = s;
 
-		if(s->effect_type != 0xE || s->effect_param >> 4 != 0xD) {
-			/* No EDy note delay */
+		if(!HAS_EFFECT(EFFECT_DELAY_NOTE)
+		   || s->effect_type != EFFECT_DELAY_NOTE) {
 			xm_handle_pattern_slot(ctx, ch);
 		}
 
-		#if HAS_LOOPS
+		#if HAS_EFFECT(EFFECT_PATTERN_LOOP)
 		if(ch->pattern_loop_count > 0) {
 			in_a_loop = true;
 		}
@@ -1078,6 +1080,7 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 }
 
 static void xm_tick(xm_context_t* ctx) {
+	#if HAS_EFFECT(EFFECT_DELAY_PATTERN)
 	if(ctx->current_tick >= ctx->tempo) {
 		ctx->current_tick = 0;
 		ctx->extra_rows_done++;
@@ -1091,13 +1094,19 @@ static void xm_tick(xm_context_t* ctx) {
 		ctx->extra_rows_done = 0;
 		xm_row(ctx);
 	}
+	#else
+	if(ctx->current_tick == 0 || ctx->current_tick >= ctx->tempo) {
+		ctx->current_tick = 0;
+		xm_row(ctx);
+	}
+	#endif
 
 	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
 		xm_tick_envelopes(ch);
 
-		if(ctx->current_tick || ctx->extra_rows_done) {
+		if(ctx->current_tick || EXTRA_ROWS_DONE(ctx)) {
 			xm_tick_effects(ctx, ch);
 		}
 
@@ -1328,41 +1337,6 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		break;
 	#endif
 
-	case 0xE: /* EXy: Extended command */
-		switch(ch->current->effect_param >> 4) {
-
-		case 0x9: /* E9y: Retrigger note */
-			assert((ch->current->effect_param & 0x0F) > 0);
-			if(ctx->current_tick
-			   % (ch->current->effect_param & 0x0F)) break;
-			xm_trigger_instrument(ctx, ch);
-			xm_trigger_note(ctx, ch);
-			xm_tick_envelopes(ch);
-			break;
-
-		case 0xC: /* ECy: Note cut */
-			/* XXX: test this effect */
-			if(ctx->current_tick
-			   != (ch->current->effect_param & 0x0F)) break;
-			xm_cut_note(ch);
-			break;
-
-		case 0xD: /* EDy: Note delay */
-			if(ctx->current_tick !=
-			   (ch->current->effect_param & 0x0F)) {
-				break;
-			}
-			xm_handle_pattern_slot(ctx, ch);
-			xm_trigger_instrument(ctx, ch);
-			if(!NOTE_IS_KEY_OFF(ch->current->note)) {
-				xm_trigger_note(ctx, ch);
-			}
-			xm_tick_envelopes(ch);
-			break;
-		}
-
-		break;
-
 	#if HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE)
 	case EFFECT_GLOBAL_VOLUME_SLIDE:
 		if(ch->current->effect_param > 0) {
@@ -1423,6 +1397,38 @@ static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
 		ch->volume_offset = ch->tremor_on ? 0 : MAX_VOLUME;
 		break;
 	#endif
+
+	#if HAS_EFFECT(EFFECT_RETRIGGER_NOTE)
+	case EFFECT_RETRIGGER_NOTE:
+		assert(ch->current->effect_param > 0);
+		if(ctx->current_tick % ch->current->effect_param) break;
+		xm_trigger_instrument(ctx, ch);
+		xm_trigger_note(ctx, ch);
+		xm_tick_envelopes(ch);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_CUT_NOTE)
+	case EFFECT_CUT_NOTE:
+		if(ctx->current_tick != ch->current->effect_param) break;
+		xm_cut_note(ch);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_DELAY_NOTE)
+	case EFFECT_DELAY_NOTE:
+		if(ctx->current_tick != ch->current->effect_param) {
+			break;
+		}
+		xm_handle_pattern_slot(ctx, ch);
+		xm_trigger_instrument(ctx, ch);
+		if(!NOTE_IS_KEY_OFF(ch->current->note)) {
+			xm_trigger_note(ctx, ch);
+		}
+		xm_tick_envelopes(ch);
+		break;
+	#endif
+
 	}
 }
 

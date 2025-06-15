@@ -344,21 +344,34 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			}
 		}
 
-		if(slot->effect_type == 0xB
+		if(slot->effect_type == 0xE) {
+			/* Now that effects 32..=47 are free, use these for Exy
+			   extended commands */
+			slot->effect_type = 32 | (slot->effect_param >> 4);
+			slot->effect_param &= 0xF;
+		}
+
+		if(slot->effect_type == EFFECT_SET_BPM
+		   && slot->effect_param < MIN_BPM) {
+			/* Now that effect E is free, use it for "set tempo" */
+			slot->effect_type = EFFECT_SET_TEMPO;
+		}
+
+		if(slot->effect_type == EFFECT_JUMP_TO_ORDER
 		   && slot->effect_param >= ctx->module.length) {
 			/* Convert invalid Bxx to B00 */
 			slot->effect_param = 0;
 		}
 
-		if((slot->effect_type == 0xC || slot->effect_type == 16)
+		if((slot->effect_type == EFFECT_SET_VOLUME
+		    || slot->effect_type == EFFECT_SET_GLOBAL_VOLUME)
 		   && slot->effect_param > MAX_VOLUME) {
 			/* Clamp Cxx and Gxx */
 			slot->effect_param = MAX_VOLUME;
 		}
 
-		if(slot->effect_type == 0xE &&
-		   (slot->effect_param >> 4 == 4
-		    || slot->effect_param >> 4 == 7)) {
+		if(slot->effect_type == EFFECT_SET_VIBRATO_CONTROL
+		   || slot->effect_type == EFFECT_SET_TREMOLO_CONTROL) {
 			/* Convert random waveform to square waveform (FT2
 			   behaviour, lets us reuse waveform 3 for
 			   autovibrato ramp) */
@@ -369,27 +382,28 @@ static void xm_fixup_context(xm_context_t* ctx) {
 
 		}
 
-		if(slot->effect_type == 0xE && slot->effect_param >> 4 == 8) {
+		if(slot->effect_type == 40) {
 			/* Convert E8x to 8xx */
-			slot->effect_type = 8;
-			slot->effect_param = (slot->effect_param & 0xF) * 0x11;
+			slot->effect_type = EFFECT_SET_PANNING;
+			slot->effect_param = slot->effect_param * 0x10;
 		}
 
-		if(slot->effect_type == 0xE && slot->effect_param == 0xC0) {
+		if(slot->effect_type == EFFECT_CUT_NOTE
+		   && slot->effect_param == 0) {
 			/* Convert EC0 to C00, this is exactly the same effect
 			   and saves us a switch case in play.c */
-			slot->effect_type = 0xC;
-			slot->effect_param = 0;
+			slot->effect_type = EFFECT_SET_VOLUME;
 		}
 
-		if(slot->effect_type == 0xE && slot->effect_param == 0xD0) {
+		if(slot->effect_type == EFFECT_DELAY_NOTE
+		   && slot->effect_param == 0) {
 			/* Remove all ED0, these are completely useless and save
 			   us a check in play.c */
 			slot->effect_type = 0;
-			slot->effect_param = 0;
 		}
 
-		if(slot->effect_type == 0xE && slot->effect_param == 0x90) {
+		if(slot->effect_type == EFFECT_RETRIGGER_NOTE
+		   && slot->effect_param == 0) {
 			if(slot->note) {
 				/* E90 with a note is completely redundant */
 			} else {
@@ -398,20 +412,21 @@ static void xm_fixup_context(xm_context_t* ctx) {
 				slot->note = NOTE_RETRIGGER;
 			}
 			slot->effect_type = 0;
-			slot->effect_param = 0;
 		}
 
-		if(slot->effect_type == 0x0F && slot->effect_param == 0) {
+		if(slot->effect_type == EFFECT_SET_TEMPO
+		   && slot->effect_param == 0) {
 			/* F00 is not great for a player, as it stops playback.
 			   Some modules use this to indicate the end of the
 			   song. Just loop back to the start of the module and
 			   let the user decide if they want to continue, based
 			   on max_loop_count. */
-			slot->effect_type = 0xB;
+			slot->effect_type = EFFECT_JUMP_TO_ORDER;
 			slot->effect_param = ctx->module.restart_position;
 		}
 
-		if(slot->effect_type == 20 && slot->effect_param == 0) {
+		if(slot->effect_type == EFFECT_KEY_OFF
+		   && slot->effect_param == 0) {
 			/* Convert K00 to key off note. This is vital, as Kxx
 			   effect logic would otherwise be applied much later,
 			   and this has all kinds of nasty side effects when K00
