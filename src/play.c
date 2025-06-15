@@ -114,12 +114,17 @@ static void XM_SLIDE_TOWARDS(float* val, float goal, float incr) {
 #endif
 
 __attribute__((const))
-static bool NOTE_IS_KEY_OFF(uint8_t n) {
+static bool NOTE_IS_KEY_OFF([[maybe_unused]] uint8_t n) {
 	static_assert(NOTE_KEY_OFF == 128);
 	static_assert(MAX_NOTE < 128);
 	static_assert(NOTE_RETRIGGER < 128);
 	static_assert(NOTE_SWITCH < 128);
+
+	#if HAS_NOTE_KEY_OFF
 	return n & 128;
+	#else
+	return false;
+	#endif
 }
 
 __attribute__((nonnull)) __attribute__((unused))
@@ -789,7 +794,9 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
                                   xm_channel_context_t* ch) {
+	#if HAS_SUSTAIN
 	ch->sustained = true;
+	#endif
 
 	#if HAS_VOLUME_ENVELOPES
 	ch->volume_envelope_frame_count = 0;
@@ -870,7 +877,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		+ ch->instrument->samples_index
 		+ ch->instrument->sample_of_notes[ch->orig_note - 1];
 
-	if(ch->current->note == NOTE_SWITCH) {
+	if(HAS_NOTE_SWITCH && ch->current->note == NOTE_SWITCH) {
 		return;
 	}
 
@@ -938,10 +945,13 @@ static void xm_cut_note(xm_channel_context_t* ch) {
 
 static void xm_key_off(xm_channel_context_t* ch) {
 	/* Key Off */
+	#if HAS_SUSTAIN
 	ch->sustained = false;
+	#endif
 
 	/* If no volume envelope is used, also cut the note */
-	if(ch->instrument == NULL
+	if(!HAS_VOLUME_ENVELOPES
+	   || ch->instrument == NULL
 	   || ch->instrument->volume_envelope.num_points == 0) {
 		xm_cut_note(ch);
 	}
@@ -1063,12 +1073,12 @@ static uint8_t xm_tick_envelope(xm_channel_context_t* ch,
 	   it, with eg a Lxx effect. Don't loop if sustain_point == loop_end and
 	   the note is not sustained (FT2 quirk). */
 	if(*counter == env->points[env->loop_end_point].frame
-	   && (ch->sustained || env->sustain_point != env->loop_end_point)) {
+	   && (SUSTAINED(ch) || env->sustain_point != env->loop_end_point)) {
 		*counter = env->points[env->loop_start_point].frame;
 	}
 
 	/* Don't advance envelope position if we are sustaining */
-	if((ch->sustained & !(env->sustain_point & 128))
+	if((SUSTAINED(ch) & !(env->sustain_point & 128))
 	   && *counter == env->points[env->sustain_point].frame) {
 		return env->points[env->sustain_point].value;
 	}
@@ -1093,7 +1103,7 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 	#endif
 
 	#if HAS_FADEOUT_VOLUME
-	if(!ch->sustained) {
+	if(!SUSTAINED(ch)) {
 		ch->fadeout_volume =
 			(ch->fadeout_volume < inst->volume_fadeout) ?
 			0 : ch->fadeout_volume - inst->volume_fadeout;
@@ -1515,7 +1525,7 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 		uint32_t off = (uint32_t)
 			((smp->length - smp->loop_length) * SAMPLE_MICROSTEPS);
 		ch->sample_position -= off;
-		ch->sample_position %= smp->ping_pong
+		ch->sample_position %= (HAS_PINGPONG_LOOPS && smp->ping_pong)
 			? smp->loop_length * SAMPLE_MICROSTEPS * 2
 			: smp->loop_length * SAMPLE_MICROSTEPS;
 		ch->sample_position += off;
@@ -1534,7 +1544,7 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	   apply ping-pong logic */
 	if(smp->loop_length == 0) {
 		b = (a+1 < ch->sample->length) ? (a+1) : a;
-	} else if(!smp->ping_pong) {
+	} else if(!(HAS_PINGPONG_LOOPS && smp->ping_pong)) {
 		b = (a+1 == smp->length) ?
 			smp->length - smp->loop_length : (a+1);
 	} else {

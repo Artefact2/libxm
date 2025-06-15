@@ -8,7 +8,7 @@
 
 #include "xm_internal.h"
 
-const uint16_t XM_ANALYZE_OUTPUT_SIZE = 22 + 41 + 36 + 31 + 31 + 1;
+const uint16_t XM_ANALYZE_OUTPUT_SIZE = 22 + 41 + 36 + 31 + 31 + 30 + 1;
 
 /* ----- Static functions ----- */
 
@@ -20,6 +20,7 @@ static void append_u64(char*, uint16_t*, uint64_t);
 static void scan_effects(const xm_context_t*, uint64_t*, uint16_t*);
 static void scan_envelopes(const xm_context_t*, uint16_t*, uint16_t*);
 static void scan_control_waveforms(const xm_context_t*, uint16_t*);
+static void scan_features(const xm_context_t*, uint16_t*);
 
 /* ----- Function definitions ----- */
 
@@ -161,6 +162,27 @@ static void scan_control_waveforms(const xm_context_t* ctx, uint16_t* out) {
 	}
 }
 
+static void scan_features(const xm_context_t* ctx, uint16_t* out) {
+	*out = 0;
+
+	const xm_sample_t* smp = ctx->samples;
+	for(uint16_t i = ctx->module.num_samples; i; --i, ++smp) {
+		if(smp->ping_pong) {
+			*out |= 1;
+		}
+	}
+
+	const xm_pattern_slot_t* slot = ctx->pattern_slots;
+	for(uint32_t i = ctx->module.num_rows * ctx->module.num_channels;
+	    i; --i, ++slot) {
+		if(slot->note == NOTE_KEY_OFF) {
+			*out |= 2;
+		} else if(slot->note == NOTE_SWITCH) {
+			*out |= 4;
+		}
+	}
+}
+
 void xm_analyze(const xm_context_t* ctx, char* out) {
 	uint16_t off = 0;
 
@@ -170,26 +192,27 @@ void xm_analyze(const xm_context_t* ctx, char* out) {
 	uint64_t used_effects;
 	uint16_t used_volume_effects;
 	scan_effects(ctx, &used_effects, &used_volume_effects);
+	append_str(out, &off, " -DXM_DISABLED_EFFECTS=0x");
+	append_u64(out, &off, (uint64_t)(~used_effects));
+	append_str(out, &off, " -DXM_DISABLED_VOLUME_EFFECTS=0x");
+	append_u16(out, &off, (uint16_t)(~used_volume_effects));
 
 	uint16_t used_envelopes;
 	uint16_t used_autovibrato_waveforms;
 	scan_envelopes(ctx, &used_envelopes, &used_autovibrato_waveforms);
-
-	uint16_t used_control_waveforms;
-	scan_control_waveforms(ctx, &used_control_waveforms);
-
-	append_str(out, &off, " -DXM_DISABLED_EFFECTS=0x");
-	append_u64(out, &off, (uint64_t)(~used_effects));
-
-	append_str(out, &off, " -DXM_DISABLED_VOLUME_EFFECTS=0x");
-	append_u16(out, &off, (uint16_t)(~used_volume_effects));
-
 	append_str(out, &off, " -DXM_DISABLED_ENVELOPES=0x");
 	append_u16(out, &off, (uint16_t)(~used_envelopes));
 
+	uint16_t used_control_waveforms;
+	scan_control_waveforms(ctx, &used_control_waveforms);
 	append_str(out, &off, " -DXM_DISABLED_WAVEFORMS=0x");
 	append_u16(out, &off, (uint16_t)(~(used_autovibrato_waveforms
 	                                   | used_control_waveforms)));
+
+	uint16_t used_features;
+	scan_features(ctx, &used_features);
+	append_str(out, &off, " -DXM_DISABLED_FEATURES=0x");
+	append_u16(out, &off, (uint16_t)(~used_features));
 
 	if(off < XM_ANALYZE_OUTPUT_SIZE) {
 		out[off] = '\0';

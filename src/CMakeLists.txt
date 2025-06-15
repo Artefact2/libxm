@@ -91,4 +91,8 @@ set(XM_DISABLED_WAVEFORMS "0" CACHE STRING
 	"Bit mask of waveforms to disable for vibrato, autovibrato and tremolo (eg 0x9 disables ramp down and ramp up, 0xF disables all waveforms)")
 target_compile_definitions(xm PRIVATE "XM_DISABLED_ENVELOPES=${XM_DISABLED_ENVELOPES}ULL")
 
+set(XM_DISABLED_FEATURES "0" CACHE STRING
+	"Bit mask of features to disable (bit 0 = pingpong samples, bit 1 = key-off note, bit 2 = accurate .MOD instrument triggers)")
+target_compile_definitions(xm PRIVATE "XM_DISABLED_FEATURES=${XM_DISABLED_FEATURES}ULL")
+
 configure_file(xm.h.in xm.h @ONLY)

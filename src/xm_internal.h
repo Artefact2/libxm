@@ -47,6 +47,10 @@
 #define HAS_FADEOUT_VOLUME (!(((XM_DISABLED_ENVELOPES) >> 2) & 1))
 #define HAS_AUTOVIBRATO (!(((XM_DISABLED_ENVELOPES) >> 3) & 1))
 
+#define HAS_PINGPONG_LOOPS (!((XM_DISABLED_FEATURES) & 1))
+#define HAS_NOTE_KEY_OFF (!(((XM_DISABLED_FEATURES) >> 1) & 1))
+#define HAS_NOTE_SWITCH (!(((XM_DISABLED_FEATURES) >> 2) & 1))
+
 static_assert(XM_FREQUENCY_TYPES >= 1 && XM_FREQUENCY_TYPES <= 3,
                "Unsupported value of XM_FREQUENCY_TYPES");
 #if XM_FREQUENCY_TYPES == 1
@@ -533,7 +537,14 @@ struct xm_channel_context_s {
 	bool tremor_on;
 	#endif
 
+	#define HAS_SUSTAIN (HAS_NOTE_KEY_OFF || HAS_EFFECT(EFFECT_KEY_OFF))
+	#if HAS_SUSTAIN
+	#define SUSTAINED(ch) ((ch)->sustained)
 	bool sustained;
+	#else
+	#define SUSTAINED(ch) true
+	#endif
+
 	bool muted;
 
 	#define CHANNEL_CONTEXT_PADDING (1 \
@@ -566,7 +577,8 @@ struct xm_channel_context_s {
 		+ 3*!HAS_AUTOVIBRATO \
 		+ 2*!HAS_FADEOUT_VOLUME \
 		+ 3*!HAS_VOLUME_ENVELOPES \
-		+ 3*!HAS_PANNING_ENVELOPES)
+		+ 3*!HAS_PANNING_ENVELOPES \
+		+ !HAS_SUSTAIN)
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif
