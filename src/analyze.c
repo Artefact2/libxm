@@ -17,6 +17,10 @@ static void append_str(char* restrict, uint16_t*, const char* restrict);
 static void append_u16(char*, uint16_t*, uint16_t);
 static void append_u64(char*, uint16_t*, uint64_t);
 
+static void scan_effects(const xm_context_t*, uint64_t*, uint16_t*);
+static void scan_envelopes(const xm_context_t*, uint16_t*, uint16_t*);
+static void scan_control_waveforms(const xm_context_t*, uint16_t*);
+
 /* ----- Function definitions ----- */
 
 static void append_char(char* dest, uint16_t* dest_offset, char x) {
@@ -47,18 +51,12 @@ static void append_u64(char* dest, uint16_t* dest_offset, uint64_t x) {
 	append_u16(dest, dest_offset, (uint16_t)(x & 0xFFFF));
 }
 
-void xm_analyze(const xm_context_t* ctx, char* out) {
-	uint16_t off = 0;
-
-	append_str(out, &off, "-DXM_FREQUENCY_TYPES=");
-	append_str(out, &off, AMIGA_FREQUENCIES(&ctx->module) ? "2" : "1");
-
-	uint64_t used_effects = 0;
-	uint16_t used_volume_effects = 0;
-	uint16_t used_waveforms = 0;
-	uint16_t used_envelopes = 0;
-
+static void scan_effects(const xm_context_t* ctx, uint64_t* out_effects,
+                             uint16_t* out_volume_effects) {
+	*out_effects = 0;
+	*out_volume_effects = 0;
 	const xm_pattern_slot_t* slot = ctx->pattern_slots;
+
 	for(uint32_t i = ctx->module.num_rows * ctx->module.num_channels;
 	    i; --i, ++slot) {
 		assert(slot->effect_type < 64); /* XXX */
@@ -67,45 +65,118 @@ void xm_analyze(const xm_context_t* ctx, char* out) {
 		if(slot->effect_type == 0) {
 			/* Do not count "000" as an arpeggio */
 			if(slot->effect_param) {
-				used_effects |= 1;
+				*out_effects |= 1;
 			}
 		} else {
-			used_effects |= (uint64_t)1 << slot->effect_type;
+			*out_effects |= (uint64_t)1 << slot->effect_type;
 		}
 
-		used_volume_effects |= (uint16_t)1 << (VOLUME_COLUMN(slot) >> 4);
-
-		if(slot->effect_type == EFFECT_SET_VIBRATO_CONTROL
-		   || slot->effect_type == EFFECT_SET_TREMOLO_CONTROL) {
-			used_waveforms |=
-				(uint16_t)1 << (slot->effect_param & 3);
-		}
+		*out_volume_effects |= (uint16_t)1 << (VOLUME_COLUMN(slot) >> 4);
 	}
+}
 
-	for(uint8_t i = 0; i < ctx->module.num_instruments; ++i) {
-		xm_instrument_t* inst = ctx->instruments + i;
+static void scan_envelopes(const xm_context_t* ctx, uint16_t* out_envelopes,
+                           uint16_t* out_autovibrato_waveforms) {
+	*out_envelopes = 0;
+	*out_autovibrato_waveforms = 0;
+	xm_instrument_t* inst = ctx->instruments;
 
+	for(uint8_t i = ctx->module.num_instruments; i; --i, ++inst) {
 		if(inst->volume_envelope.num_points) {
-			used_envelopes |= 1;
+			*out_envelopes |= 1;
 		}
 
 		if(inst->panning_envelope.num_points) {
-			used_envelopes |= 2;
+			*out_envelopes |= 2;
 		}
 
 		if(inst->volume_fadeout) {
-			used_envelopes |= 4;
+			*out_envelopes |= 4;
 		}
 
-		if(inst->vibrato_depth) {
-			if(inst->vibrato_rate > 0
-			   || inst->vibrato_type == WAVEFORM_SQUARE) {
-				used_envelopes |= 8;
-				used_waveforms |=
-					(uint16_t)1 << inst->vibrato_type;
+		if(inst->vibrato_depth
+		   && (inst->vibrato_rate > 0
+		       || inst->vibrato_type == WAVEFORM_SQUARE)) {
+			/* A zero vibrato_rate effectively turns off
+			   autovibrato, except for square waveforms */
+			*out_envelopes |= 8;
+			*out_autovibrato_waveforms |=
+				(uint16_t)1 << inst->vibrato_type;
+		}
+	}
+}
+
+static void scan_control_waveforms(const xm_context_t* ctx, uint16_t* out) {
+	*out = 0;
+	bool has_jumps = false;
+
+	for(uint8_t c = 0; c < ctx->module.num_channels; ++c) {
+		uint8_t vibrato_control_param = 0;
+		uint8_t tremolo_control_param = 0;
+
+		for(uint16_t i = 0; i < ctx->module.length; ++i) {
+			const xm_pattern_t* pat =
+				ctx->patterns + ctx->module.pattern_table[i];
+
+			for(uint32_t row = 0; row < pat->num_rows; ++row) {
+				const xm_pattern_slot_t* slot =
+					ctx->pattern_slots
+					+ (pat->rows_index
+					   * ctx->module.num_channels)
+					+ c;
+
+				if(slot->effect_type == EFFECT_JUMP_TO_ORDER
+				   || slot->effect_type == EFFECT_PATTERN_BREAK
+				   || slot->effect_type == EFFECT_PATTERN_LOOP) {
+					has_jumps = true;
+				} else if(slot->effect_type
+				   == EFFECT_SET_VIBRATO_CONTROL) {
+					vibrato_control_param =
+						slot->effect_param;
+				} else if(slot->effect_type
+				   == EFFECT_SET_TREMOLO_CONTROL) {
+					tremolo_control_param =
+						slot->effect_param;
+				} else if(slot->effect_type == EFFECT_TREMOLO) {
+					*out |= (uint16_t)1
+						<< (tremolo_control_param & 3);
+				}
+
+				if(slot->effect_type == EFFECT_VIBRATO
+				   || (slot->effect_type
+				       == EFFECT_VIBRATO_VOLUME_SLIDE)
+				   || (VOLUME_COLUMN(slot) >> 4
+				       == VOLUME_EFFECT_VIBRATO)) {
+					*out |= (uint16_t)1
+						<< (vibrato_control_param & 3);
+				}
 			}
 		}
 	}
+
+	if(has_jumps) {
+		/* XXX: cannot guarantee ordering of vibrato control/vibrato
+		   anymore, assume sine is always used */
+		*out |= 1;
+	}
+}
+
+void xm_analyze(const xm_context_t* ctx, char* out) {
+	uint16_t off = 0;
+
+	append_str(out, &off, "-DXM_FREQUENCY_TYPES=");
+	append_str(out, &off, AMIGA_FREQUENCIES(&ctx->module) ? "2" : "1");
+
+	uint64_t used_effects;
+	uint16_t used_volume_effects;
+	scan_effects(ctx, &used_effects, &used_volume_effects);
+
+	uint16_t used_envelopes;
+	uint16_t used_autovibrato_waveforms;
+	scan_envelopes(ctx, &used_envelopes, &used_autovibrato_waveforms);
+
+	uint16_t used_control_waveforms;
+	scan_control_waveforms(ctx, &used_control_waveforms);
 
 	append_str(out, &off, " -DXM_DISABLED_EFFECTS=0x");
 	append_u64(out, &off, (uint64_t)(~used_effects));
@@ -117,7 +188,8 @@ void xm_analyze(const xm_context_t* ctx, char* out) {
 	append_u16(out, &off, (uint16_t)(~used_envelopes));
 
 	append_str(out, &off, " -DXM_DISABLED_WAVEFORMS=0x");
-	append_u16(out, &off, (uint16_t)(~used_waveforms));
+	append_u16(out, &off, (uint16_t)(~(used_autovibrato_waveforms
+	                                   | used_control_waveforms)));
 
 	if(off < XM_ANALYZE_OUTPUT_SIZE) {
 		out[off] = '\0';
