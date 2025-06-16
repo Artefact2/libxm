@@ -13,7 +13,7 @@
 
 [[maybe_unused]] static int8_t xm_waveform(uint8_t, uint8_t) __attribute__((warn_unused_result));
 
-#if HAS_AUTOVIBRATO
+#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
 static void xm_autovibrato(xm_channel_context_t*) __attribute__((nonnull));
 #endif
 
@@ -44,10 +44,8 @@ static void xm_tone_portamento_target(const xm_context_t*, xm_channel_context_t*
 [[maybe_unused]] static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
 static void xm_tick_effects(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
-#if HAS_VOLUME_ENVELOPES || HAS_PANNING_ENVELOPES
-static uint8_t xm_envelope_lerp(const xm_envelope_point_t* restrict, const xm_envelope_point_t* restrict, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
-static uint8_t xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16_t*) __attribute__((nonnull)) __attribute__((warn_unused_result));
-#endif
+[[maybe_unused]] static uint8_t xm_envelope_lerp(const xm_envelope_point_t* restrict, const xm_envelope_point_t* restrict, uint16_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
+[[maybe_unused]] static uint8_t xm_tick_envelope(xm_channel_context_t*, const xm_envelope_t*, uint16_t*) __attribute__((nonnull)) __attribute__((warn_unused_result));
 
 static void xm_tick_envelopes(xm_channel_context_t*) __attribute__((nonnull));
 
@@ -120,7 +118,7 @@ static bool NOTE_IS_KEY_OFF([[maybe_unused]] uint8_t n) {
 	static_assert(NOTE_RETRIGGER < 128);
 	static_assert(NOTE_SWITCH < 128);
 
-	#if HAS_NOTE_KEY_OFF
+	#if HAS_FEATURE(FEATURE_NOTE_KEY_OFF)
 	return n & 128;
 	#else
 	return false;
@@ -144,7 +142,7 @@ static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
 
 	switch(waveform & 3) {
 
-	#if HAS_WAVEFORM(WAVEFORM_SINE)
+	#if HAS_FEATURE(FEATURE_WAVEFORM_SINE)
 	case WAVEFORM_SINE:
 		static const int8_t sin_lut[] = {
 			/* 128*sinf(2πx/64) for x in 0..16 */
@@ -155,18 +153,18 @@ static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
 		return (step < 0x20) ? -sin_lut[idx] : sin_lut[idx];
 	#endif
 
-	#if HAS_WAVEFORM(WAVEFORM_SQUARE)
+	#if HAS_FEATURE(FEATURE_WAVEFORM_SQUARE)
 	case WAVEFORM_SQUARE:
 		return (step < 0x20) ? INT8_MIN : INT8_MAX;
 	#endif
 
-	#if HAS_WAVEFORM(WAVEFORM_RAMP_DOWN)
+	#if HAS_FEATURE(FEATURE_WAVEFORM_RAMP_DOWN)
 	case WAVEFORM_RAMP_DOWN:
 		/* Starts at zero, wraps around at the middle */
 		return (int8_t)(-step * 4 - 1);
 	#endif
 
-	#if HAS_WAVEFORM(WAVEFORM_RAMP_UP)
+	#if HAS_FEATURE(FEATURE_WAVEFORM_RAMP_UP)
 	case WAVEFORM_RAMP_UP:
 		/* Only used by autovibrato, regular E4y/E7y will use a square
 		   wave instead (this is set by load.c) */
@@ -178,7 +176,7 @@ static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
 	assert(0);
 }
 
-#if HAS_AUTOVIBRATO
+#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
 static void xm_autovibrato(xm_channel_context_t* ch) {
 	xm_instrument_t* instr = ch->instrument;
 	if(instr == NULL) return;
@@ -687,12 +685,13 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_ENVELOPE_POSITION) \
-		&& (HAS_VOLUME_ENVELOPES || HAS_PANNING_ENVELOPES)
+		&& (HAS_FEATURE(FEATURE_VOLUME_ENVELOPES) \
+		    || HAS_FEATURE(FEATURE_PANNING_ENVELOPES))
 	case EFFECT_SET_ENVELOPE_POSITION:
-		#if HAS_VOLUME_ENVELOPES
+		#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 		ch->volume_envelope_frame_count = s->effect_param;
 		#endif
-		#if HAS_PANNING_ENVELOPES
+		#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 		ch->panning_envelope_frame_count = s->effect_param;
 		#endif
 		break;
@@ -798,11 +797,11 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 	ch->sustained = true;
 	#endif
 
-	#if HAS_VOLUME_ENVELOPES
+	#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 	ch->volume_envelope_frame_count = 0;
 	#endif
 
-	#if HAS_PANNING_ENVELOPES
+	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	ch->panning_envelope_frame_count = 0;
 	#endif
 
@@ -814,7 +813,7 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 	ch->tremor_ticks = 0;
 	#endif
 
-	#if HAS_AUTOVIBRATO
+	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
 	ch->autovibrato_ticks = 0;
 	#endif
 
@@ -877,9 +876,11 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		+ ch->instrument->samples_index
 		+ ch->instrument->sample_of_notes[ch->orig_note - 1];
 
-	if(HAS_NOTE_SWITCH && ch->current->note == NOTE_SWITCH) {
+	#if HAS_FEATURE(FEATURE_NOTE_SWITCH)
+	if(ch->current->note == NOTE_SWITCH) {
 		return;
 	}
+	#endif
 
 	/* Update period */
 	int16_t note = (int16_t)(ch->orig_note + ch->sample->relative_note);
@@ -950,7 +951,7 @@ static void xm_key_off(xm_channel_context_t* ch) {
 	#endif
 
 	/* If no volume envelope is used, also cut the note */
-	#if HAS_VOLUME_ENVELOPES
+	#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 	if(ch->instrument == NULL
 	   || ch->instrument->volume_envelope.num_points == 0) {
 		xm_cut_note(ch);
@@ -1049,7 +1050,6 @@ static void xm_row(xm_context_t* ctx) {
 	}
 }
 
-#if HAS_VOLUME_ENVELOPES || HAS_PANNING_ENVELOPES
 static uint8_t xm_envelope_lerp(const xm_envelope_point_t* restrict a,
                                 const xm_envelope_point_t* restrict b,
                                 uint16_t pos) {
@@ -1065,7 +1065,7 @@ static uint8_t xm_envelope_lerp(const xm_envelope_point_t* restrict a,
 	return (uint8_t)val;
 }
 
-static uint8_t xm_tick_envelope(xm_channel_context_t* ch,
+static uint8_t xm_tick_envelope([[maybe_unused]] xm_channel_context_t* ch,
                                 const xm_envelope_t* env,
                                 uint16_t* counter) {
 	assert(env->num_points >= 2);
@@ -1095,17 +1095,16 @@ static uint8_t xm_tick_envelope(xm_channel_context_t* ch,
 
 	assert(0);
 }
-#endif
 
 static void xm_tick_envelopes(xm_channel_context_t* ch) {
 	xm_instrument_t* inst = ch->instrument;
 	if(inst == NULL) return;
 
-	#if HAS_AUTOVIBRATO
+	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
 	xm_autovibrato(ch);
 	#endif
 
-	#if HAS_FADEOUT_VOLUME
+	#if HAS_FEATURE(FEATURE_FADEOUT_VOLUME)
 	if(!SUSTAINED(ch)) {
 		ch->fadeout_volume =
 			(ch->fadeout_volume < inst->volume_fadeout) ?
@@ -1115,7 +1114,7 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 	}
 	#endif
 
-	#if HAS_VOLUME_ENVELOPES
+	#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 	ch->volume_envelope_volume =
 		inst->volume_envelope.num_points
 		? xm_tick_envelope(ch, &(inst->volume_envelope),
@@ -1123,7 +1122,7 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 		: MAX_ENVELOPE_VALUE;
 	#endif
 
-	#if HAS_PANNING_ENVELOPES
+	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	ch->panning_envelope_panning =
 		inst->panning_envelope.num_points
 		? xm_tick_envelope(ch, &(inst->panning_envelope),

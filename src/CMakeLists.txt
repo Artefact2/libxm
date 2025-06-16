@@ -72,19 +72,15 @@ set(XM_AMIGA_STEREO_SEPARATION "7" CACHE STRING
 target_compile_definitions(xm PRIVATE XM_AMIGA_STEREO_SEPARATION=${XM_AMIGA_STEREO_SEPARATION})
 
 set(XM_DISABLED_EFFECTS "0" CACHE STRING
-	"Bit mask of effects to disable (eg 0x28000000 disables Txy and Rxy effects)")
+	"Bit mask of effects to disable, see xm_internal.h for EFFECT_ constants")
 target_compile_definitions(xm PRIVATE "XM_DISABLED_EFFECTS=${XM_DISABLED_EFFECTS}ULL")
 
 set(XM_DISABLED_VOLUME_EFFECTS "0" CACHE STRING
-	"Bit mask of volume effects to disable (eg 0xF00 disables Ux/Dx fine volume slides and Sx/Vx vibratos, 0xFFFF completely disables the volume column)")
+	"Bit mask of volume effects to disable, see xm_internal.h for VOLUME_EFFECT_ constants")
 target_compile_definitions(xm PRIVATE "XM_DISABLED_VOLUME_EFFECTS=${XM_DISABLED_VOLUME_EFFECTS}ULL")
 
-set(XM_DISABLED_WAVEFORMS "0" CACHE STRING
-	"Bit mask of waveforms to disable for vibrato, autovibrato and tremolo (eg 0x9 disables ramp down and ramp up, 0xF disables all waveforms)")
-target_compile_definitions(xm PRIVATE "XM_DISABLED_ENVELOPES=${XM_DISABLED_ENVELOPES}ULL")
-
 set(XM_DISABLED_FEATURES "0" CACHE STRING
-	"Bit mask of features to disable (bit 0 = pingpong samples, bit 1 = key-off note, bit 2 = accurate .MOD instrument triggers, bit 3 = unused, bit 4 = volume envelopes, bit 5 = panning envelopes, bit 6 = instrument fadeout, bit 7 = instrument autovibrato, bit 8 = linear frequencies, bit 9 = Amiga frequencies)")
+	"Bit mask of features to disable, see xm_internal.h for FEATURE_ constants")
 target_compile_definitions(xm PRIVATE "XM_DISABLED_FEATURES=${XM_DISABLED_FEATURES}ULL")
 
 configure_file(xm.h.in xm.h @ONLY)

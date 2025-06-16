@@ -41,21 +41,8 @@
 #define HAS_VOLUME_COLUMN ((~(XM_DISABLED_VOLUME_EFFECTS)) & 65534)
 #define HAS_VOLUME_EFFECT(x) (!(((XM_DISABLED_VOLUME_EFFECTS) >> (x)) & 1))
 
-#define HAS_WAVEFORM(x) (!(((XM_DISABLED_WAVEFORMS) >> (x)) & 1))
+#define HAS_FEATURE(x) (!(((XM_DISABLED_FEATURES) >> (x)) & 1))
 
-
-#define HAS_PINGPONG_LOOPS (!((XM_DISABLED_FEATURES) & 1))
-#define HAS_NOTE_KEY_OFF (!(((XM_DISABLED_FEATURES) >> 1) & 1))
-#define HAS_NOTE_SWITCH (!(((XM_DISABLED_FEATURES) >> 2) & 1))
-#define HAS_VOLUME_ENVELOPES (!(((XM_DISABLED_FEATURES) >> 4) & 1))
-#define HAS_PANNING_ENVELOPES (!(((XM_DISABLED_FEATURES) >> 5) & 1))
-#define HAS_FADEOUT_VOLUME (!(((XM_DISABLED_FEATURES) >> 6) & 1))
-#define HAS_AUTOVIBRATO (!(((XM_DISABLED_FEATURES) >> 7) & 1))
-#define HAS_LINEAR_FREQUENCIES (!(((XM_DISABLED_FEATURES) >> 8) & 1))
-#define HAS_AMIGA_FREQUENCIES (!(((XM_DISABLED_FEATURES) >> 9) & 1))
-
-static_assert(HAS_LINEAR_FREQUENCIES || HAS_AMIGA_FREQUENCIES,
-               "Must enable at least one frequency type (linear or Amiga)");
 static_assert(_Generic((xm_sample_point_t){},
                         int8_t: true, int16_t: true, float: true,
                         default: false),
@@ -67,6 +54,29 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
                "with XM_SAMPLE_TYPE=float");
 
 /* ----- Libxm constants ----- */
+
+#define WAVEFORM_SINE 0
+#define WAVEFORM_RAMP_DOWN 1
+#define WAVEFORM_SQUARE 2
+#define WAVEFORM_RAMP_UP 3
+
+#define FEATURE_PINGPONG_LOOPS 0
+#define FEATURE_NOTE_KEY_OFF 1
+#define FEATURE_NOTE_SWITCH 2
+#define FEATURE_VOLUME_ENVELOPES 4
+#define FEATURE_PANNING_ENVELOPES 5
+#define FEATURE_FADEOUT_VOLUME 6
+#define FEATURE_AUTOVIBRATO 7
+#define FEATURE_LINEAR_FREQUENCIES 8
+#define FEATURE_AMIGA_FREQUENCIES 9
+#define FEATURE_WAVEFORM_SINE (12|WAVEFORM_SINE)
+#define FEATURE_WAVEFORM_RAMP_DOWN (12|WAVEFORM_RAMP_DOWN)
+#define FEATURE_WAVEFORM_SQUARE (12|WAVEFORM_SQUARE)
+#define FEATURE_WAVEFORM_RAMP_UP (12|WAVEFORM_RAMP_UP)
+
+static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
+              || HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES),
+               "Must enable at least one frequency type (linear or Amiga)");
 
 /* These are not a 1:1 match with XM semantics, rather, they are the values
    stored after a context has been loaded. */
@@ -119,11 +129,6 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define VOLUME_EFFECT_PANNING_SLIDE_LEFT 0xD
 #define VOLUME_EFFECT_PANNING_SLIDE_RIGHT 0xE
 #define VOLUME_EFFECT_TONE_PORTAMENTO 0xF
-
-#define WAVEFORM_SINE 0
-#define WAVEFORM_RAMP_DOWN 1
-#define WAVEFORM_SQUARE 2
-#define WAVEFORM_RAMP_UP 3
 
 /* These are the lengths we store in the context, including the terminating
    NUL, not necessarily the lengths of strings in loaded formats. */
@@ -222,7 +227,7 @@ struct xm_sample_s {
 	                    invalid anyway) */
 	uint32_t loop_length; /* is zero for sample without looping */
 
-	#if HAS_PINGPONG_LOOPS
+	#if HAS_FEATURE(FEATURE_PINGPONG_LOOPS)
 	#define PING_PONG(smp) ((smp)->ping_pong)
 	bool ping_pong: 1;
 	static_assert(MAX_VOLUME < (1<<7));
@@ -248,11 +253,11 @@ struct xm_instrument_s {
 	uint32_t latest_trigger;
 	#endif
 
-	#if HAS_VOLUME_ENVELOPES
+	#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 	xm_envelope_t volume_envelope;
 	#endif
 
-	#if HAS_PANNING_ENVELOPES
+	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	xm_envelope_t panning_envelope;
 	#endif
 
@@ -260,13 +265,13 @@ struct xm_instrument_s {
 	/* ctx->samples[index..(index+num_samples)] */
 	uint16_t samples_index;
 
-	#if HAS_FADEOUT_VOLUME
+	#if HAS_FEATURE(FEATURE_FADEOUT_VOLUME)
 	uint16_t volume_fadeout;
 	#endif
 
 	uint8_t num_samples;
 
-	#if HAS_AUTOVIBRATO
+	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
 	uint8_t vibrato_type;
 	uint8_t vibrato_sweep;
 	uint8_t vibrato_depth;
@@ -281,8 +286,8 @@ struct xm_instrument_s {
 	#endif
 
 	#define INSTRUMENT_PADDING (2 \
-		+ 4*!HAS_AUTOVIBRATO \
-		+ 2*!HAS_FADEOUT_VOLUME)
+		+ 4*!HAS_FEATURE(FEATURE_AUTOVIBRATO) \
+		+ 2*!HAS_FEATURE(FEATURE_FADEOUT_VOLUME))
 	#define INSTRUMENT_ALIGN (XM_TIMING_FUNCTIONS ? 4 : 2)
 	#if INSTRUMENT_PADDING % INSTRUMENT_ALIGN
 	char __pad[INSTRUMENT_PADDING % INSTRUMENT_ALIGN];
@@ -333,10 +338,11 @@ struct xm_module_s {
 	uint8_t tempo; /* 0..MIN_BPM */
 	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
 
-	#if HAS_LINEAR_FREQUENCIES && HAS_AMIGA_FREQUENCIES
+	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
+		&& HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)
 	#define AMIGA_FREQUENCIES(mod) ((mod)->amiga_frequencies)
 	bool amiga_frequencies;
-	#elif HAS_AMIGA_FREQUENCIES
+	#elif HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)
 	#define AMIGA_FREQUENCIES(mod) true
 	#else
 	#define AMIGA_FREQUENCIES(mod) false
@@ -350,7 +356,8 @@ struct xm_module_s {
 	#endif
 
 	#define MODULE_PADDING (1 \
-		+ !(HAS_LINEAR_FREQUENCIES && HAS_AMIGA_FREQUENCIES))
+		+ !(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
+		    && HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)))
 	#if MODULE_PADDING % 4
 	char __pad[MODULE_PADDING % 4];
 	#endif
@@ -389,33 +396,33 @@ struct xm_channel_context_s {
 	uint16_t tone_portamento_target_period;
 	#endif
 
-	#if HAS_FADEOUT_VOLUME
+	#if HAS_FEATURE(FEATURE_FADEOUT_VOLUME)
 	#define FADEOUT_VOLUME(ch) ((ch)->fadeout_volume)
 	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
 	#else
 	#define FADEOUT_VOLUME(ch) MAX_FADEOUT_VOLUME
 	#endif
 
-	#if HAS_AUTOVIBRATO
+	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
 	uint16_t autovibrato_ticks;
 	#endif
 
-	#if HAS_VOLUME_ENVELOPES
+	#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 	uint16_t volume_envelope_frame_count;
 	#endif
 
-	#if HAS_PANNING_ENVELOPES
+	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	uint16_t panning_envelope_frame_count;
 	#endif
 
-	#if HAS_VOLUME_ENVELOPES
+	#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 	#define VOLUME_ENVELOPE_VOLUME(ch) ((ch)->volume_envelope_volume)
 	uint8_t volume_envelope_volume; /* 0..=MAX_ENVELOPE_VALUE  */
 	#else
 	#define VOLUME_ENVELOPE_VOLUME(ch) MAX_ENVELOPE_VALUE
 	#endif
 
-	#if HAS_PANNING_ENVELOPES
+	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	#define PANNING_ENVELOPE_PANNING(ch) ((ch)->panning_envelope_panning)
 	uint8_t panning_envelope_panning; /* 0..=MAX_ENVELOPE_VALUE */
 	#else
@@ -558,7 +565,7 @@ struct xm_channel_context_s {
 	#define VIBRATO_CONTROL_PARAM(ch) 0
 	#endif
 
-	#if HAS_AUTOVIBRATO
+	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
 	#define AUTOVIBRATO_OFFSET(ch) ((ch)->autovibrato_offset)
 	int8_t autovibrato_offset; /* in 1/64 semitone increments */
 	#else
@@ -579,7 +586,8 @@ struct xm_channel_context_s {
 	bool tremor_on;
 	#endif
 
-	#define HAS_SUSTAIN (HAS_NOTE_KEY_OFF || HAS_EFFECT(EFFECT_KEY_OFF))
+	#define HAS_SUSTAIN (HAS_FEATURE(FEATURE_NOTE_KEY_OFF) \
+			|| HAS_EFFECT(EFFECT_KEY_OFF))
 	#if HAS_SUSTAIN
 	#define SUSTAINED(ch) ((ch)->sustained)
 	bool sustained;
@@ -616,10 +624,10 @@ struct xm_channel_context_s {
 		+ !HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_DOWN) \
 		+ !HAS_EFFECT(EFFECT_FINE_PORTAMENTO_UP) \
 		+ !HAS_EFFECT(EFFECT_FINE_PORTAMENTO_DOWN) \
-		+ 3*!HAS_AUTOVIBRATO \
-		+ 2*!HAS_FADEOUT_VOLUME \
-		+ 3*!HAS_VOLUME_ENVELOPES \
-		+ 3*!HAS_PANNING_ENVELOPES \
+		+ 3*!HAS_FEATURE(FEATURE_AUTOVIBRATO) \
+		+ 2*!HAS_FEATURE(FEATURE_FADEOUT_VOLUME) \
+		+ 3*!HAS_FEATURE(FEATURE_VOLUME_ENVELOPES) \
+		+ 3*!HAS_FEATURE(FEATURE_PANNING_ENVELOPES) \
 		+ !HAS_SUSTAIN)
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];

@@ -11,7 +11,6 @@
 const uint16_t XM_ANALYZE_OUTPUT_SIZE =
 	41 /* disabled effects */
 	+ 36 /* disabled volume effects */
-	+ 31 /* disabled waveforms */
 	+ 30 /* disabled features */
 	+ 1; /* terminating NUL */
 
@@ -159,25 +158,25 @@ static void scan_features(const xm_context_t* ctx, uint16_t* out,
 
 	const xm_instrument_t* inst = ctx->instruments;
 	for(uint8_t i = ctx->module.num_instruments; i; --i, ++inst) {
-		#if HAS_VOLUME_ENVELOPES
+		#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 		if(inst->volume_envelope.num_points) {
 			*out |= 16;
 		}
 		#endif
 
-		#if HAS_PANNING_ENVELOPES
+		#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 		if(inst->panning_envelope.num_points) {
 			*out |= 32;
 		}
 		#endif
 
-		#if HAS_FADEOUT_VOLUME
+		#if HAS_FEATURE(FEATURE_FADEOUT_VOLUME)
 		if(inst->volume_fadeout) {
 			*out |= 64;
 		}
 		#endif
 
-		#if HAS_AUTOVIBRATO
+		#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
 		if(inst->vibrato_depth
 		   && (inst->vibrato_rate > 0
 		       || inst->vibrato_type == WAVEFORM_SQUARE)) {
@@ -194,9 +193,10 @@ static void scan_features(const xm_context_t* ctx, uint16_t* out,
 void xm_analyze(const xm_context_t* ctx, char* out) {
 	uint16_t off = 0;
 
-	#if XM_DISABLED_FEATURES > 0
-	NOTICE("suggested flags might be inaccurate; "
-	       "recompile libxmize with XM_DISABLED_FEATURES=0");
+	#if XM_DISABLED_FEATURES > 0 || XM_DISABLED_EFFECTS > 0
+	NOTICE("suggested flags will be inaccurate; recompile libxm with"
+	       " -DXM_DISABLED_FEATURES=0 -DXM_DISABLED_EFFECTS=0"
+	       " to suppress this warning");
 	#endif
 
 	uint64_t used_effects;
@@ -212,11 +212,11 @@ void xm_analyze(const xm_context_t* ctx, char* out) {
 	uint16_t used_control_waveforms;
 	scan_features(ctx, &used_features, &used_autovibrato_waveforms);
 	scan_control_waveforms(ctx, &used_control_waveforms);
-	append_str(out, &off, " -DXM_DISABLED_WAVEFORMS=0x");
-	append_u16(out, &off, (uint16_t)(~(used_autovibrato_waveforms
-	                                   | used_control_waveforms)));
 	append_str(out, &off, " -DXM_DISABLED_FEATURES=0x");
-	append_u16(out, &off, (uint16_t)(~used_features));
+	append_u16(out, &off, (uint16_t)(~(used_features
+	                                   | ((used_autovibrato_waveforms
+	                                       | used_control_waveforms)
+	                                      << 12))));
 
 	if(off < XM_ANALYZE_OUTPUT_SIZE) {
 		out[off] = '\0';

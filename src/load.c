@@ -720,7 +720,8 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 
 	uint16_t flags = READ_U16(offset + 14);
 
-	#if HAS_LINEAR_FREQUENCIES && HAS_AMIGA_FREQUENCIES
+	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
+		&& HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)
 	mod->amiga_frequencies = !(flags & 1);
 	#endif
 
@@ -876,7 +877,7 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	/* Read extra header properties */
 	READ_MEMCPY(instr->sample_of_notes, offset + 33, MAX_NOTE);
 
-	#if HAS_VOLUME_ENVELOPES
+	#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 	xm_load_xm0104_envelope_points(&instr->volume_envelope,
 	                               moddata + offset + 129);
 	instr->volume_envelope.num_points = READ_U8(offset + 225);
@@ -888,7 +889,7 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	xm_check_and_fix_envelope(&(instr->volume_envelope), vol_env_flags);
 	#endif
 
-	#if HAS_PANNING_ENVELOPES
+	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	xm_load_xm0104_envelope_points(&instr->panning_envelope,
 	                               moddata + offset + 177);
 	instr->panning_envelope.num_points = READ_U8(offset + 226);
@@ -900,7 +901,7 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	xm_check_and_fix_envelope(&(instr->panning_envelope), pan_env_flags);
 	#endif
 
-	#if HAS_AUTOVIBRATO
+	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
 	instr->vibrato_type = READ_U8(offset + 235);
 	/* Swap around autovibrato waveforms to match xm_waveform() semantics */
 	/* FT2 values: 0 = Sine, 1 = Square, 2 = Ramp down, 3 = Ramp up */
@@ -916,7 +917,7 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	instr->vibrato_rate = READ_U8(offset + 238);
 	#endif
 
-	#if HAS_FADEOUT_VOLUME
+	#if HAS_FEATURE(FEATURE_FADEOUT_VOLUME)
 	instr->volume_fadeout = READ_U16(offset + 239);
 	#endif
 
@@ -1088,7 +1089,7 @@ static uint32_t xm_load_xm0104_sample_header(xm_sample_t* sample, bool* is_16bit
 	sample->finetune = (int8_t)READ_U8(offset + 13);
 	sample->finetune = (int8_t)((sample->finetune - INT8_MIN) / 8 - 16);
 
-	#if HAS_PINGPONG_LOOPS
+	#if HAS_FEATURE(FEATURE_PINGPONG_LOOPS)
 	/* The XM spec doesn't quite say what to do when bits 0 and 1
 	   are set, but FT2 loads it as ping-pong, so it seems bit 1 has
 	   precedence. */
@@ -1248,7 +1249,8 @@ static void xm_load_mod(xm_context_t* ctx,
 	READ_MEMCPY(ctx->module.name, 0, 20);
 	#endif
 
-	#if HAS_LINEAR_FREQUENCIES && HAS_AMIGA_FREQUENCIES
+	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
+		&& HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)
 	ctx->module.amiga_frequencies = true;
 	#endif
 
