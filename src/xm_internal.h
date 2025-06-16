@@ -221,9 +221,17 @@ struct xm_sample_s {
 	uint32_t length; /* same as loop_end (seeking beyond a loop with 9xx is
 	                    invalid anyway) */
 	uint32_t loop_length; /* is zero for sample without looping */
+
+	#if HAS_PINGPONG_LOOPS
+	#define PING_PONG(smp) ((smp)->ping_pong)
 	bool ping_pong: 1;
 	static_assert(MAX_VOLUME < (1<<7));
 	uint8_t volume:7; /* 0..=MAX_VOLUME  */
+	#else
+	#define PING_PONG(smp) false
+	uint8_t volume;
+	#endif
+
 	uint8_t panning; /* 0..MAX_PANNING */
 	int8_t finetune; /* -16..15 (-1 semitone..+15/16 semitone) */
 	int8_t relative_note;
@@ -240,17 +248,31 @@ struct xm_instrument_s {
 	uint32_t latest_trigger;
 	#endif
 
+	#if HAS_VOLUME_ENVELOPES
 	xm_envelope_t volume_envelope;
+	#endif
+
+	#if HAS_PANNING_ENVELOPES
 	xm_envelope_t panning_envelope;
+	#endif
+
 	uint8_t sample_of_notes[MAX_NOTE];
 	/* ctx->samples[index..(index+num_samples)] */
 	uint16_t samples_index;
+
+	#if HAS_FADEOUT_VOLUME
 	uint16_t volume_fadeout;
+	#endif
+
 	uint8_t num_samples;
+
+	#if HAS_AUTOVIBRATO
 	uint8_t vibrato_type;
 	uint8_t vibrato_sweep;
 	uint8_t vibrato_depth;
 	uint8_t vibrato_rate;
+	#endif
+
 	bool muted;
 
 	#if XM_STRINGS
@@ -258,7 +280,13 @@ struct xm_instrument_s {
 	char name[INSTRUMENT_NAME_LENGTH];
 	#endif
 
-	char __pad[2];
+	#define INSTRUMENT_PADDING (2 \
+		+ 4*!HAS_AUTOVIBRATO \
+		+ 2*!HAS_FADEOUT_VOLUME)
+	#define INSTRUMENT_ALIGN (XM_TIMING_FUNCTIONS ? 4 : 2)
+	#if INSTRUMENT_PADDING % INSTRUMENT_ALIGN
+	char __pad[INSTRUMENT_PADDING % INSTRUMENT_ALIGN];
+	#endif
 };
 typedef struct xm_instrument_s xm_instrument_t;
 

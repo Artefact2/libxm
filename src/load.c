@@ -99,8 +99,8 @@ static void xm_load_xm0104(xm_context_t*, const char*, uint32_t);
 static uint32_t xm_load_xm0104_module_header(xm_context_t*, const char*, uint32_t);
 static uint32_t xm_load_xm0104_pattern(xm_context_t*, xm_pattern_t*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_xm0104_instrument(xm_context_t*, xm_instrument_t*, const char*, uint32_t, uint32_t);
-static void xm_load_xm0104_envelope_points(xm_envelope_t*, const char*);
-static void xm_check_and_fix_envelope(xm_envelope_t*, uint8_t);
+[[maybe_unused]] static void xm_load_xm0104_envelope_points(xm_envelope_t*, const char*);
+[[maybe_unused]] static void xm_check_and_fix_envelope(xm_envelope_t*, uint8_t);
 static uint32_t xm_load_xm0104_sample_header(xm_sample_t*, bool*, const char*, uint32_t, uint32_t);
 static void xm_load_xm0104_8b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 static void xm_load_xm0104_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
@@ -876,26 +876,31 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	/* Read extra header properties */
 	READ_MEMCPY(instr->sample_of_notes, offset + 33, MAX_NOTE);
 
+	#if HAS_VOLUME_ENVELOPES
 	xm_load_xm0104_envelope_points(&instr->volume_envelope,
 	                               moddata + offset + 129);
-	xm_load_xm0104_envelope_points(&instr->panning_envelope,
-	                               moddata + offset + 177);
-
 	instr->volume_envelope.num_points = READ_U8(offset + 225);
-	instr->panning_envelope.num_points = READ_U8(offset + 226);
 	instr->volume_envelope.sustain_point = READ_U8(offset + 227);
 	instr->volume_envelope.loop_start_point = READ_U8(offset + 228);
 	instr->volume_envelope.loop_end_point = READ_U8(offset + 229);
+
+	uint8_t vol_env_flags = READ_U8(offset + 233);
+	xm_check_and_fix_envelope(&(instr->volume_envelope), vol_env_flags);
+	#endif
+
+	#if HAS_PANNING_ENVELOPES
+	xm_load_xm0104_envelope_points(&instr->panning_envelope,
+	                               moddata + offset + 177);
+	instr->panning_envelope.num_points = READ_U8(offset + 226);
 	instr->panning_envelope.sustain_point = READ_U8(offset + 230);
 	instr->panning_envelope.loop_start_point = READ_U8(offset + 231);
 	instr->panning_envelope.loop_end_point = READ_U8(offset + 232);
 
-	uint8_t vol_env_flags = READ_U8(offset + 233);
 	uint8_t pan_env_flags = READ_U8(offset + 234);
-
-	xm_check_and_fix_envelope(&(instr->volume_envelope), vol_env_flags);
 	xm_check_and_fix_envelope(&(instr->panning_envelope), pan_env_flags);
+	#endif
 
+	#if HAS_AUTOVIBRATO
 	instr->vibrato_type = READ_U8(offset + 235);
 	/* Swap around autovibrato waveforms to match xm_waveform() semantics */
 	/* FT2 values: 0 = Sine, 1 = Square, 2 = Ramp down, 3 = Ramp up */
@@ -909,7 +914,11 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	instr->vibrato_sweep = READ_U8(offset + 236);
 	instr->vibrato_depth = READ_U8(offset + 237);
 	instr->vibrato_rate = READ_U8(offset + 238);
+	#endif
+
+	#if HAS_FADEOUT_VOLUME
 	instr->volume_fadeout = READ_U16(offset + 239);
+	#endif
 
 	offset += ins_header_size;
 	moddata_length = orig_moddata_length;
@@ -1079,10 +1088,13 @@ static uint32_t xm_load_xm0104_sample_header(xm_sample_t* sample, bool* is_16bit
 	sample->finetune = (int8_t)READ_U8(offset + 13);
 	sample->finetune = (int8_t)((sample->finetune - INT8_MIN) / 8 - 16);
 
+	#if HAS_PINGPONG_LOOPS
 	/* The XM spec doesn't quite say what to do when bits 0 and 1
 	   are set, but FT2 loads it as ping-pong, so it seems bit 1 has
 	   precedence. */
 	sample->ping_pong = flags & SAMPLE_FLAG_PING_PONG;
+	#endif
+
 	if(!(flags & (SAMPLE_FLAG_FORWARD | SAMPLE_FLAG_PING_PONG))) {
 		/* Not a looping sample */
 		sample->loop_length = 0;

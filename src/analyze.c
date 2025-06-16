@@ -142,7 +142,7 @@ static void scan_features(const xm_context_t* ctx, uint16_t* out,
 
 	const xm_sample_t* smp = ctx->samples;
 	for(uint16_t i = ctx->module.num_samples; i; --i, ++smp) {
-		if(smp->ping_pong) {
+		if(PING_PONG(smp)) {
 			*out |= 1;
 		}
 	}
@@ -159,18 +159,25 @@ static void scan_features(const xm_context_t* ctx, uint16_t* out,
 
 	const xm_instrument_t* inst = ctx->instruments;
 	for(uint8_t i = ctx->module.num_instruments; i; --i, ++inst) {
+		#if HAS_VOLUME_ENVELOPES
 		if(inst->volume_envelope.num_points) {
 			*out |= 16;
 		}
+		#endif
 
+		#if HAS_PANNING_ENVELOPES
 		if(inst->panning_envelope.num_points) {
 			*out |= 32;
 		}
+		#endif
 
+		#if HAS_FADEOUT_VOLUME
 		if(inst->volume_fadeout) {
 			*out |= 64;
 		}
+		#endif
 
+		#if HAS_AUTOVIBRATO
 		if(inst->vibrato_depth
 		   && (inst->vibrato_rate > 0
 		       || inst->vibrato_type == WAVEFORM_SQUARE)) {
@@ -180,6 +187,7 @@ static void scan_features(const xm_context_t* ctx, uint16_t* out,
 			*out_autovibrato_waveforms |=
 				(uint16_t)1 << inst->vibrato_type;
 		}
+		#endif
 	}
 }
 

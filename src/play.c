@@ -950,11 +950,14 @@ static void xm_key_off(xm_channel_context_t* ch) {
 	#endif
 
 	/* If no volume envelope is used, also cut the note */
-	if(!HAS_VOLUME_ENVELOPES
-	   || ch->instrument == NULL
+	#if HAS_VOLUME_ENVELOPES
+	if(ch->instrument == NULL
 	   || ch->instrument->volume_envelope.num_points == 0) {
 		xm_cut_note(ch);
 	}
+	#else
+	xm_cut_note(ch);
+	#endif
 }
 
 static void xm_row(xm_context_t* ctx) {
@@ -1526,7 +1529,7 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 		uint32_t off = (uint32_t)
 			((smp->length - smp->loop_length) * SAMPLE_MICROSTEPS);
 		ch->sample_position -= off;
-		ch->sample_position %= (HAS_PINGPONG_LOOPS && smp->ping_pong)
+		ch->sample_position %= PING_PONG(smp)
 			? smp->loop_length * SAMPLE_MICROSTEPS * 2
 			: smp->loop_length * SAMPLE_MICROSTEPS;
 		ch->sample_position += off;
@@ -1545,7 +1548,7 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 	   apply ping-pong logic */
 	if(smp->loop_length == 0) {
 		b = (a+1 < ch->sample->length) ? (a+1) : a;
-	} else if(!(HAS_PINGPONG_LOOPS && smp->ping_pong)) {
+	} else if(!PING_PONG(smp)) {
 		b = (a+1 == smp->length) ?
 			smp->length - smp->loop_length : (a+1);
 	} else {
