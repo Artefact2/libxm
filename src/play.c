@@ -308,7 +308,7 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 #if HAS_EFFECT(EFFECT_ARPEGGIO)
 static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch) {
-	uint8_t t = ctx->tempo - ctx->current_tick;
+	uint8_t t = CURRENT_TEMPO(ctx) - ctx->current_tick;
 
 	if(ctx->current_tick == 0 /* This can happen with EEy */
 	   || t == 16 /* FT2 overflow quirk */
@@ -669,13 +669,13 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 	#if HAS_EFFECT(EFFECT_SET_TEMPO)
 	case EFFECT_SET_TEMPO:
-		ctx->tempo = s->effect_param;
+		ctx->current_tempo = s->effect_param;
 		break;
 	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_BPM)
 	case EFFECT_SET_BPM:
-		ctx->bpm = s->effect_param;
+		ctx->current_bpm = s->effect_param;
 		break;
 	#endif
 
@@ -1131,7 +1131,7 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 
 static void xm_tick(xm_context_t* ctx) {
 	#if HAS_EFFECT(EFFECT_DELAY_PATTERN)
-	if(ctx->current_tick >= ctx->tempo) {
+	if(ctx->current_tick >= CURRENT_TEMPO(ctx)) {
 		ctx->current_tick = 0;
 		ctx->extra_rows_done++;
 	}
@@ -1145,7 +1145,7 @@ static void xm_tick(xm_context_t* ctx) {
 		xm_row(ctx);
 	}
 	#else
-	if(ctx->current_tick == 0 || ctx->current_tick >= ctx->tempo) {
+	if(ctx->current_tick == 0 || ctx->current_tick >= CURRENT_TEMPO(ctx)) {
 		ctx->current_tick = 0;
 		xm_row(ctx);
 	}
@@ -1167,8 +1167,8 @@ static void xm_tick(xm_context_t* ctx) {
 		   formula, see SAMPLE_MICROSTEPS comment) */
 		ch->step = (uint32_t)
 			(((uint64_t)xm_frequency(ctx, ch) * SAMPLE_MICROSTEPS
-			  + ctx->rate / 2)
-			 / ctx->rate);
+			  + ctx->module.rate / 2)
+			 / ctx->module.rate);
 
 		uint8_t panning = (uint8_t)
 			(ch->panning
@@ -1219,12 +1219,13 @@ static void xm_tick(xm_context_t* ctx) {
 	/* FT2 manual says number of ticks / second = BPM * 0.4 */
 	static_assert(_Generic(ctx->remaining_samples_in_tick,
 	                       uint32_t: true, default: false));
-	static_assert(_Generic(ctx->rate, uint16_t: true, default: false));
+	static_assert(_Generic(ctx->module.rate,
+	                       uint16_t: true, default: false));
 	static_assert(TICK_SUBSAMPLES % 4 == 0);
 	static_assert(10 * (TICK_SUBSAMPLES / 4) * UINT16_MAX <= UINT32_MAX);
-	uint32_t samples_in_tick = ctx->rate;
+	uint32_t samples_in_tick = ctx->module.rate;
 	samples_in_tick *= 10 * TICK_SUBSAMPLES / 4;
-	samples_in_tick /= ctx->bpm;
+	samples_in_tick /= CURRENT_BPM(ctx);
 	ctx->remaining_samples_in_tick += samples_in_tick;
 }
 
@@ -1590,8 +1591,8 @@ static void xm_next_of_channel(xm_context_t* ctx, xm_channel_context_t* ch,
 	const float fval = xm_next_of_sample(ctx, ch) * AMPLIFICATION;
 
 	if(ch->muted || (ch->instrument != NULL && ch->instrument->muted)
-	   || (ctx->max_loop_count > 0
-	       && ctx->loop_count >= ctx->max_loop_count)) {
+	   || (ctx->module.max_loop_count > 0
+	       && ctx->loop_count >= ctx->module.max_loop_count)) {
 		return;
 	}
 

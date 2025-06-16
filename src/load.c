@@ -249,11 +249,7 @@ xm_context_t* xm_create_context(char* restrict mempool,
 
 	assert(mempool - (char*)ctx == ctx_size);
 
-	ctx->rate = rate;
-
-	#if HAS_GLOBAL_VOLUME
-	ctx->global_volume = MAX_VOLUME;
-	#endif
+	ctx->module.rate = rate;
 
 	switch(p->format) {
 	case XM_FORMAT_XM0104:
@@ -314,6 +310,18 @@ static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
 }
 
 static void xm_fixup_context(xm_context_t* ctx) {
+	#if HAS_GLOBAL_VOLUME
+	ctx->global_volume = MAX_VOLUME;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_SET_TEMPO)
+	ctx->current_tempo = ctx->module.tempo;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_SET_BPM)
+	ctx->current_bpm = ctx->module.bpm;
+	#endif
+
 	xm_pattern_slot_t* slot = ctx->pattern_slots;
 	static_assert(MAX_PATTERNS * MAX_ROWS_PER_PATTERN * MAX_CHANNELS
 	              <= UINT32_MAX);
@@ -472,8 +480,8 @@ void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
 	uint32_t ctx_size = xm_context_size(ctx);
 	[[maybe_unused]] uint64_t old_hash = xm_fnv1a((void*)ctx, ctx_size);
 
-	uint16_t old_rate = ctx->rate;
-	ctx->rate = 0;
+	uint16_t old_rate = ctx->module.rate;
+	ctx->module.rate = 0;
 
 	#if XM_LIBXM_DELTA_SAMPLES
 	for(uint32_t i = ctx->module.samples_data_length - 1; i > 0; --i) {
@@ -500,7 +508,7 @@ void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
 xm_context_t* xm_create_context_from_libxm(char* data, uint16_t rate) {
 	ASSERT_ALIGNED(data, xm_context_t);
 	xm_context_t* ctx = (void*)data;
-	ctx->rate = rate;
+	ctx->module.rate = rate;
 
 	/* Reverse steps of xm_context_to_libxm() */
 	APPLY_OFFSET(ctx->patterns, ctx);
@@ -730,8 +738,8 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 		NOTICE("clamping bpm (%u -> %u)", bpm, MAX_BPM);
 		bpm = MAX_BPM;
 	}
-	ctx->tempo = (uint8_t)tempo;
-	ctx->bpm = (uint8_t)bpm;
+	ctx->module.tempo = (uint8_t)tempo;
+	ctx->module.bpm = (uint8_t)bpm;
 
 	READ_MEMCPY(mod->pattern_table, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
 
@@ -1232,8 +1240,8 @@ static void xm_load_mod(xm_context_t* ctx,
 	ctx->module.amiga_frequencies = true;
 	#endif
 
-	ctx->bpm = 125;
-	ctx->tempo = 6;
+	ctx->module.bpm = 125;
+	ctx->module.tempo = 6;
 
 	ctx->module.num_channels = p->num_channels;
 	ctx->module.num_instruments = p->num_instruments;

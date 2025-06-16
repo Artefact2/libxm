@@ -11,7 +11,7 @@
 
 
 void xm_set_max_loop_count(xm_context_t* context, uint8_t loopcnt) {
-	context->max_loop_count = loopcnt;
+	context->module.max_loop_count = loopcnt;
 }
 
 uint8_t xm_get_loop_count(const xm_context_t* context) {
@@ -118,8 +118,8 @@ xm_sample_point_t* xm_get_sample_waveform(xm_context_t* ctx,
 
 void xm_get_playing_speed(const xm_context_t* ctx,
                           uint8_t* bpm, uint8_t* tempo) {
-	if(bpm) *bpm = ctx->bpm;
-	if(tempo) *tempo = ctx->tempo;
+	if(bpm) *bpm = CURRENT_BPM(ctx);
+	if(tempo) *tempo = CURRENT_TEMPO(ctx);
 }
 
 void xm_get_position(const xm_context_t* ctx, uint8_t* pattern_index,
@@ -169,7 +169,7 @@ bool xm_is_channel_active(const xm_context_t* ctx, uint8_t chn) {
 
 float xm_get_frequency_of_channel(const xm_context_t* ctx, uint8_t chn) {
 	return (float)ctx->channels[chn - 1].step
-		* (float)ctx->rate / (float)SAMPLE_MICROSTEPS;
+		* (float)ctx->module.rate / (float)SAMPLE_MICROSTEPS;
 }
 
 float xm_get_volume_of_channel(const xm_context_t* ctx, uint8_t chn) {
@@ -193,4 +193,41 @@ uint8_t xm_get_instrument_of_channel(const xm_context_t* ctx, uint8_t chn) {
 	if(ch->instrument == NULL) return 0;
 	assert(ch->instrument - ctx->instruments < UINT8_MAX);
 	return (uint8_t)(1 + (ch->instrument - ctx->instruments));
+}
+
+void xm_reset_context(xm_context_t* ctx) {
+	__builtin_memset(ctx->channels, 0, sizeof(xm_channel_context_t)
+	                                     * ctx->module.num_channels);
+
+	__builtin_memset((char*)ctx
+	                   + offsetof(xm_context_t, remaining_samples_in_tick),
+	                 0,
+	                 sizeof(xm_context_t)
+	                   - offsetof(xm_context_t, remaining_samples_in_tick));
+
+	#if HAS_GLOBAL_VOLUME
+	ctx->global_volume = MAX_VOLUME;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_SET_TEMPO)
+	ctx->current_tempo = ctx->module.tempo;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_SET_BPM)
+	ctx->current_bpm = ctx->module.bpm;
+	#endif
+
+	#if XM_TIMING_FUNCTIONS
+	xm_instrument_t* inst = ctx->instruments;
+	for(typeof(ctx->module.num_instruments) i = ctx->module.num_instruments;
+	    i; --i, ++inst) {
+		inst->latest_trigger = 0;
+	}
+
+	xm_sample_t* smp = ctx->samples;
+	for(typeof(ctx->module.num_samples) i = ctx->module.num_samples;
+	    i; --i, ++smp) {
+		smp->latest_trigger = 0;
+	}
+	#endif
 }

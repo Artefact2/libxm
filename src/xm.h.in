@@ -108,8 +108,9 @@ __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
 /** Save a context to the libxm format. This format is highly non-portable and
- * is meant for static linking only. Do not use this function on a context that
- * has been used to generate audio samples.
+ * is meant for static linking only. If the context has been used to generate
+ * audio samples, its current playback position (and effect memories, etc) will
+ * also be saved; use xm_reset_context() before saving to prevent this.
  *
  *  @param ctx the context to save
  *
@@ -436,8 +437,19 @@ __attribute__((nonnull));
 
 
 
+/** Reset a context. This essentially seeks back to the first row of the first
+ * pattern in the POT, and resets most of the effect's internal memory.
+ *
+ * In essence, this is like reloading the context from stratch, but is much
+ * faster. However, some fields like tempo/BPM are not reset. */
+void xm_reset_context(xm_context_t*);
+
+
+
 /** Analyse a module and check for unused features. Write a NUL-terminated list
- *  of build flag suggestions in a string.
+ * of build flag suggestions in a string.
+ *
+ * You should call xm_reset_context() before and after xm_analyze().
  *
  * @param out Should point to a writeable area, at least XM_ANALYZE_OUTPUT_SIZE
  * bytes long. */

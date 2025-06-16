@@ -10,6 +10,7 @@
 #include <math.h>
 #include <string.h>
 #include <stdckdint.h>
+#include <stddef.h>
 
 #define POINTER_SIZE (UINTPTR_MAX == UINT64_MAX ? 8 : 4)
 
@@ -291,10 +292,18 @@ struct xm_module_s {
 	uint16_t length;
 	uint16_t num_patterns;
 	uint16_t num_samples;
+	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
 	uint8_t num_channels;
 	uint8_t num_instruments;
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 	uint8_t restart_position;
+	uint8_t max_loop_count;
+
+	/* These are the values stored in the loaded file, not changed by any
+	   Fxx effect. Without these, it's impossible to properly implement
+	   xm_reset_context(). */
+	uint8_t tempo; /* 0..MIN_BPM */
+	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
 
 	#if HAS_LINEAR_FREQUENCIES && HAS_AMIGA_FREQUENCIES
 	#define AMIGA_FREQUENCIES(mod) ((mod)->amiga_frequencies)
@@ -312,7 +321,11 @@ struct xm_module_s {
 	char trackername[TRACKER_NAME_LENGTH];
 	#endif
 
-	char __pad[2 + !(HAS_LINEAR_FREQUENCIES && HAS_AMIGA_FREQUENCIES)];
+	#define MODULE_PADDING (1 \
+		+ !(HAS_LINEAR_FREQUENCIES && HAS_AMIGA_FREQUENCIES))
+	#if MODULE_PADDING % 4
+	char __pad[MODULE_PADDING % 4];
+	#endif
 };
 typedef struct xm_module_s xm_module_t;
 
@@ -548,8 +561,8 @@ struct xm_channel_context_s {
 
 	bool muted;
 
-	#define CHANNEL_CONTEXT_PADDING (1 \
-		+ 4*XM_TIMING_FUNCTIONS \
+	#define CHANNEL_CONTEXT_PADDING (5 \
+		+ 4*!XM_TIMING_FUNCTIONS \
 		+ 2*!HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
 		+ 3*!HAS_EFFECT(EFFECT_TREMOR) \
 		+ 2*!HAS_EFFECT(EFFECT_ARPEGGIO) \
@@ -598,13 +611,14 @@ struct xm_context_s {
 
 	xm_module_t module;
 
-	#if XM_TIMING_FUNCTIONS
-	uint32_t generated_samples;
-	#endif
+	/* Anything below this *will* be zeroed by xm_reset_context(). Fields
+	   that should not be zeroed belong in ctx->module. */
 
 	uint32_t remaining_samples_in_tick; /* In 1/TICK_SUBSAMPLE increments */
 
-	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
+	#if XM_TIMING_FUNCTIONS
+	uint32_t generated_samples;
+	#endif
 
 	uint8_t current_tick; /* Typically 0..(ctx->tempo) */
 	uint8_t current_row;
@@ -628,8 +642,19 @@ struct xm_context_s {
 	#define GLOBAL_VOLUME(ctx) MAX_VOLUME
 	#endif
 
-	uint8_t tempo; /* 0..MIN_BPM */
-	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
+	#if HAS_EFFECT(EFFECT_SET_TEMPO)
+	#define CURRENT_TEMPO(ctx) ((ctx)->current_tempo)
+	uint8_t current_tempo; /* 0..MIN_BPM */
+	#else
+	#define CURRENT_TEMPO(ctx) ((ctx)->module.tempo)
+	#endif
+
+	#if HAS_EFFECT(EFFECT_SET_BPM)
+	#define CURRENT_BPM(ctx) ((ctx)->current_bpm)
+	uint8_t current_bpm; /* MIN_BPM..=MAX_BPM */
+	#else
+	#define CURRENT_BPM(ctx) ((ctx)->module.bpm)
+	#endif
 
 	#if HAS_EFFECT(EFFECT_PATTERN_BREAK)
 	#define PATTERN_BREAK(ctx) ((ctx)->pattern_break)
@@ -655,15 +680,16 @@ struct xm_context_s {
 	#endif
 
 	uint8_t loop_count;
-	uint8_t max_loop_count;
 
-	#define CONTEXT_PADDING (0 \
-		+ 4*XM_TIMING_FUNCTIONS \
+	#define CONTEXT_PADDING (3 \
+		+ 4*!XM_TIMING_FUNCTIONS \
 		+ !HAS_GLOBAL_VOLUME \
 		+ 2*!HAS_POSITION_JUMP \
 		+ !HAS_EFFECT(EFFECT_PATTERN_BREAK) \
 		+ !HAS_JUMP_ROW \
-		+ 2*!HAS_EFFECT(EFFECT_DELAY_PATTERN))
+		+ 2*!HAS_EFFECT(EFFECT_DELAY_PATTERN) \
+		+ !HAS_EFFECT(EFFECT_SET_TEMPO) \
+		+ !HAS_EFFECT(EFFECT_SET_BPM))
 	#if CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CONTEXT_PADDING % POINTER_SIZE];
 	#endif

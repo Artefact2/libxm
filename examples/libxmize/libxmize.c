@@ -101,6 +101,7 @@ int main(int argc, char** argv) {
 			xm_analyze(ctx, analyze_out);
 			NOTICE("xm_analyze() : %s", analyze_out);
 			free(analyze_out);
+			xm_reset_context(ctx);
 		} else {
 			NOTICE("unknown command-line argument: %s", argv[i]);
 			exit(1);
