@@ -884,7 +884,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	/* Update period */
 	int16_t note = (int16_t)(ch->orig_note + ch->sample->relative_note);
 	if(note <= 0 || note >= 120) {
-		ch->period = 0;
+		ch->sample = NULL;
 		return;
 	}
 
@@ -910,7 +910,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		}
 		ch->sample_position = ch->sample_offset_param * 256;
 		if(ch->sample_position >= ch->sample->length) {
-			ch->period = 0;
+			ch->sample = NULL;
 			return;
 		}
 	} else
