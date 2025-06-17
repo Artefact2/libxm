@@ -37,10 +37,7 @@
 #endif
 
 #define HAS_EFFECT(x) (!(((XM_DISABLED_EFFECTS) >> (x)) & 1))
-
-#define HAS_VOLUME_COLUMN ((~(XM_DISABLED_VOLUME_EFFECTS)) & 65534)
 #define HAS_VOLUME_EFFECT(x) (!(((XM_DISABLED_VOLUME_EFFECTS) >> (x)) & 1))
-
 #define HAS_FEATURE(x) (!(((XM_DISABLED_FEATURES) >> (x)) & 1))
 
 static_assert(_Generic((xm_sample_point_t){},
@@ -299,6 +296,7 @@ struct xm_pattern_slot_s {
 	uint8_t note; /* 0..=MAX_NOTE or NOTE_KEY_OFF or NOTE_RETRIGGER */
 	uint8_t instrument; /* 1..=128 */
 
+	#define HAS_VOLUME_COLUMN ((~(XM_DISABLED_VOLUME_EFFECTS)) & 65534)
 	#if HAS_VOLUME_COLUMN
 	#define VOLUME_COLUMN(s) ((s)->volume_column)
 	uint8_t volume_column;
@@ -730,3 +728,7 @@ struct xm_context_s {
 	char __pad[CONTEXT_PADDING % POINTER_SIZE];
 	#endif
 };
+
+/* ----- Internal functions ----- */
+
+void xm_tick(xm_context_t*) __attribute__((nonnull)) __attribute__((visibility("hidden")));

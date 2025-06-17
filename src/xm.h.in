@@ -453,7 +453,7 @@ void xm_reset_context(xm_context_t*);
  *
  * @param out Should point to a writeable area, at least XM_ANALYZE_OUTPUT_SIZE
  * bytes long. */
-void xm_analyze(const xm_context_t*, char* out)
+void xm_analyze(xm_context_t* restrict, char* restrict out)
 __attribute__((nonnull));
 
 extern const uint16_t XM_ANALYZE_OUTPUT_SIZE;

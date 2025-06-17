@@ -199,6 +199,9 @@ void xm_reset_context(xm_context_t* ctx) {
 	__builtin_memset(ctx->channels, 0, sizeof(xm_channel_context_t)
 	                                     * ctx->module.num_channels);
 
+	__builtin_memset(ctx->row_loop_count, 0, MAX_ROWS_PER_PATTERN
+	                                           * ctx->module.length);
+
 	__builtin_memset((char*)ctx
 	                   + offsetof(xm_context_t, remaining_samples_in_tick),
 	                 0,

@@ -71,7 +71,6 @@ static void xm_key_off(xm_channel_context_t*) __attribute__((nonnull));
 
 static void xm_post_pattern_change(xm_context_t*) __attribute__((nonnull));
 static void xm_row(xm_context_t*) __attribute__((nonnull));
-static void xm_tick(xm_context_t*) __attribute__((nonnull));
 
 static float xm_sample_at(const xm_context_t*, const xm_sample_t*, uint32_t) __attribute__((warn_unused_result)) __attribute__((nonnull)) __attribute__((const));
 static float xm_next_of_sample(xm_context_t*, xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull));
@@ -1131,7 +1130,7 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 	#endif
 }
 
-static void xm_tick(xm_context_t* ctx) {
+void xm_tick(xm_context_t* ctx) {
 	#if HAS_EFFECT(EFFECT_DELAY_PATTERN)
 	if(ctx->current_tick >= CURRENT_TEMPO(ctx)) {
 		ctx->current_tick = 0;
