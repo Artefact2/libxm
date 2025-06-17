@@ -144,7 +144,7 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			}
 			#endif
 
-			#if HAS_FEATURE(FEATURE_FADEOUT_VOLUME)
+			#if HAS_FADEOUT_VOLUME
 			if(ch->instrument->volume_fadeout) {
 				used_features |= (uint16_t)1
 					<< FEATURE_FADEOUT_VOLUME;

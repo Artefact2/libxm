@@ -262,7 +262,11 @@ struct xm_instrument_s {
 	/* ctx->samples[index..(index+num_samples)] */
 	uint16_t samples_index;
 
-	#if HAS_FEATURE(FEATURE_FADEOUT_VOLUME)
+	#define HAS_SUSTAIN (HAS_FEATURE(FEATURE_NOTE_KEY_OFF) \
+			|| HAS_EFFECT(EFFECT_KEY_OFF))
+	#define HAS_FADEOUT_VOLUME (HAS_FEATURE(FEATURE_FADEOUT_VOLUME) \
+		&& HAS_SUSTAIN)
+	#if HAS_FADEOUT_VOLUME
 	uint16_t volume_fadeout;
 	#endif
 
@@ -284,7 +288,7 @@ struct xm_instrument_s {
 
 	#define INSTRUMENT_PADDING (2 \
 		+ 4*!HAS_FEATURE(FEATURE_AUTOVIBRATO) \
-		+ 2*!HAS_FEATURE(FEATURE_FADEOUT_VOLUME))
+		+ 2*!HAS_FADEOUT_VOLUME)
 	#define INSTRUMENT_ALIGN (XM_TIMING_FUNCTIONS ? 4 : 2)
 	#if INSTRUMENT_PADDING % INSTRUMENT_ALIGN
 	char __pad[INSTRUMENT_PADDING % INSTRUMENT_ALIGN];
@@ -394,7 +398,7 @@ struct xm_channel_context_s {
 	uint16_t tone_portamento_target_period;
 	#endif
 
-	#if HAS_FEATURE(FEATURE_FADEOUT_VOLUME)
+	#if HAS_FADEOUT_VOLUME
 	#define FADEOUT_VOLUME(ch) ((ch)->fadeout_volume)
 	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
 	#else
@@ -584,8 +588,6 @@ struct xm_channel_context_s {
 	bool tremor_on;
 	#endif
 
-	#define HAS_SUSTAIN (HAS_FEATURE(FEATURE_NOTE_KEY_OFF) \
-			|| HAS_EFFECT(EFFECT_KEY_OFF))
 	#if HAS_SUSTAIN
 	#define SUSTAINED(ch) ((ch)->sustained)
 	bool sustained;
@@ -623,7 +625,7 @@ struct xm_channel_context_s {
 		+ !HAS_EFFECT(EFFECT_FINE_PORTAMENTO_UP) \
 		+ !HAS_EFFECT(EFFECT_FINE_PORTAMENTO_DOWN) \
 		+ 3*!HAS_FEATURE(FEATURE_AUTOVIBRATO) \
-		+ 2*!HAS_FEATURE(FEATURE_FADEOUT_VOLUME) \
+		+ 2*!HAS_FADEOUT_VOLUME \
 		+ 3*!HAS_FEATURE(FEATURE_VOLUME_ENVELOPES) \
 		+ 3*!HAS_FEATURE(FEATURE_PANNING_ENVELOPES) \
 		+ !HAS_SUSTAIN)

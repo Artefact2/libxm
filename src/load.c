@@ -917,7 +917,7 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	instr->vibrato_rate = READ_U8(offset + 238);
 	#endif
 
-	#if HAS_FEATURE(FEATURE_FADEOUT_VOLUME)
+	#if HAS_FADEOUT_VOLUME
 	instr->volume_fadeout = READ_U16(offset + 239);
 	#endif
 

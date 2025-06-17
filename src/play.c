@@ -1103,7 +1103,7 @@ static void xm_tick_envelopes(xm_channel_context_t* ch) {
 	xm_autovibrato(ch);
 	#endif
 
-	#if HAS_FEATURE(FEATURE_FADEOUT_VOLUME)
+	#if HAS_FADEOUT_VOLUME
 	if(!SUSTAINED(ch)) {
 		ch->fadeout_volume =
 			(ch->fadeout_volume < inst->volume_fadeout) ?
@@ -1233,7 +1233,8 @@ void xm_tick(xm_context_t* ctx) {
 /* These effects only do something every tick after the first tick of every row.
    Immediate effects (like Cxx or Fxx) are handled in
    xm_handle_pattern_slot(). */
-static void xm_tick_effects(xm_context_t* ctx, xm_channel_context_t* ch) {
+static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
+                            xm_channel_context_t* ch) {
 	switch(VOLUME_COLUMN(ch->current) >> 4) {
 
 	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_SLIDE_DOWN)
