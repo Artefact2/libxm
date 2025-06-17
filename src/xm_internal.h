@@ -70,6 +70,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define FEATURE_WAVEFORM_RAMP_DOWN (12|WAVEFORM_RAMP_DOWN)
 #define FEATURE_WAVEFORM_SQUARE (12|WAVEFORM_SQUARE)
 #define FEATURE_WAVEFORM_RAMP_UP (12|WAVEFORM_RAMP_UP)
+#define FEATURE_ACCURATE_SAMPLE_OFFSET_EFFECT 16
 
 static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
               || HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES),
@@ -521,8 +522,18 @@ struct xm_channel_context_s {
 	uint8_t pattern_loop_count; /* How many loop passes have been done */
 	#endif
 
+	#define HAS_SAMPLE_OFFSET_INVALID (HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET) \
+	                 && HAS_FEATURE(FEATURE_ACCURATE_SAMPLE_OFFSET_EFFECT))
 	#if HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET)
 	uint8_t sample_offset_param;
+	#endif
+
+	#if HAS_SAMPLE_OFFSET_INVALID
+	#define SAMPLE_OFFSET_INVALID(ch) ((ch)->sample_offset_invalid)
+	bool sample_offset_invalid; /* Set to true when seeking beyond sample
+	                               end; used by xm_next_of_sample() */
+	#else
+	#define SAMPLE_OFFSET_INVALID(ch) false
 	#endif
 
 	#if HAS_EFFECT(EFFECT_TREMOLO)
@@ -597,7 +608,7 @@ struct xm_channel_context_s {
 
 	bool muted;
 
-	#define CHANNEL_CONTEXT_PADDING (5 \
+	#define CHANNEL_CONTEXT_PADDING (4 \
 		+ 4*!XM_TIMING_FUNCTIONS \
 		+ 2*!HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
 		+ 3*!HAS_EFFECT(EFFECT_TREMOR) \
@@ -620,6 +631,7 @@ struct xm_channel_context_s {
 		+ !HAS_EFFECT(EFFECT_PANNING_SLIDE) \
 		+ 2*!HAS_EFFECT(EFFECT_PATTERN_LOOP) \
 		+ !HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET) \
+		+ !HAS_SAMPLE_OFFSET_INVALID \
 		+ !HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_UP) \
 		+ !HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_DOWN) \
 		+ !HAS_EFFECT(EFFECT_FINE_PORTAMENTO_UP) \

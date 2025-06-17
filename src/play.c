@@ -417,6 +417,7 @@ static void xm_post_pattern_change(xm_context_t* ctx) {
 		ctx->current_table_index = ctx->module.restart_position;
 	}
 }
+
 static uint16_t xm_linear_period(int16_t note) {
 	assert(7680 - note * 4 > 0);
 	assert(7860 - note * 4 < UINT16_MAX);
@@ -865,28 +866,37 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	if(ch->instrument->sample_of_notes[ch->orig_note - 1]
 	   >= ch->instrument->num_samples) {
-		/* XXX: does it also reset instrument? cut the note? zero the
-		   period? */
-		ch->sample = NULL;
+		/* XXX: requires hex editing to test since FT2 will not allow
+		   this to happen */
+		/* static xm_sample_t default_sample = { */
+		/* 	.panning = 0x80, */
+		/* 	.volume = MAX_VOLUME, */
+		/* 	.finetune = 0, */
+		/* 	.relative_note = 0, */
+		/* 	.length = 0, */
+		/* 	.loop_length = 0, */
+		/* }; */
+		/* ch->sample = &default_sample; */
 		return;
 	}
 
-	ch->sample = ctx->samples
+	xm_sample_t* new_sample = ctx->samples
 		+ ch->instrument->samples_index
 		+ ch->instrument->sample_of_notes[ch->orig_note - 1];
+
+	int16_t note = (int16_t)(ch->orig_note + new_sample->relative_note);
+	if(note <= 0 || note >= 120) {
+		/* Invalid notes seem to be completely ignored in FT2 */
+		return;
+	}
+
+	ch->sample = new_sample;
 
 	#if HAS_FEATURE(FEATURE_NOTE_SWITCH)
 	if(ch->current->note == NOTE_SWITCH) {
 		return;
 	}
 	#endif
-
-	/* Update period */
-	int16_t note = (int16_t)(ch->orig_note + ch->sample->relative_note);
-	if(note <= 0 || note >= 120) {
-		ch->sample = NULL;
-		return;
-	}
 
 	/* Handle E5y: Set note fine-tune here; this effect only works in tandem
 	   with a note and overrides the finetune value stored in the sample. If
@@ -898,6 +908,8 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	} else {
 		ch->finetune = ch->sample->finetune;
 	}
+
+	/* Update period */
 	ch->period = xm_period(ctx, (int16_t)(16 * (note - 1) + ch->finetune));
 
 	/* Handle 9xx: Sample offset here, since it does nothing outside of a
@@ -908,16 +920,24 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		if(ch->current->effect_param > 0) {
 			ch->sample_offset_param = ch->current->effect_param;
 		}
-		ch->sample_position = ch->sample_offset_param * 256;
-		if(ch->sample_position >= ch->sample->length) {
-			ch->sample = NULL;
-			return;
-		}
+		ch->sample_position = ch->sample_offset_param
+			* 256 * SAMPLE_MICROSTEPS;
+
+		#if HAS_SAMPLE_OFFSET_INVALID
+		/* An invalid 9xx will *not* clear ch->sample, and if we have an
+		   instrument trigger, ch->volume and ch->panning will still be
+		   set; this can affect later ghost notes */
+		ch->sample_offset_invalid = ch->sample_position
+			>= ch->sample->length * SAMPLE_MICROSTEPS;
+		#endif
 	} else
 	#endif
-	ch->sample_position = 0;
-
-	ch->sample_position *= SAMPLE_MICROSTEPS;
+	{
+		ch->sample_position = 0;
+		#if HAS_SAMPLE_OFFSET_INVALID
+		ch->sample_offset_invalid = false;
+		#endif
+	}
 
 	#if HAS_GLISSANDO_CONTROL
 	ch->glissando_control_error = 0;
@@ -1507,7 +1527,7 @@ static float xm_next_of_sample(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	/* Zero-length samples are also handled here, since loop_length will
 	   always be zero for these */
-	if(smp == NULL
+	if(SAMPLE_OFFSET_INVALID(ch) || smp == NULL
 	   || (smp->loop_length == 0
 	       && ch->sample_position >= smp->length * SAMPLE_MICROSTEPS)) {
 		#if XM_RAMPING

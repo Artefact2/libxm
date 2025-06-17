@@ -11,7 +11,7 @@
 const uint16_t XM_ANALYZE_OUTPUT_SIZE =
 	41 /* disabled effects */
 	+ 36 /* disabled volume effects */
-	+ 30 /* disabled features */
+	+ 42 /* disabled features */
 	+ 1; /* terminating NUL */
 
 /* ----- Static functions ----- */
@@ -58,11 +58,11 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	       " to suppress this warning");
 	#endif
 
+	uint64_t used_features = AMIGA_FREQUENCIES(&ctx->module)
+		? ((uint64_t)1 << FEATURE_AMIGA_FREQUENCIES)
+		: ((uint64_t)1 << FEATURE_LINEAR_FREQUENCIES);
 	uint64_t used_effects = 0;
 	uint16_t used_volume_effects = 0;
-	uint16_t used_features = AMIGA_FREQUENCIES(&ctx->module)
-		? ((uint16_t)1 << FEATURE_AMIGA_FREQUENCIES)
-		: ((uint16_t)1 << FEATURE_LINEAR_FREQUENCIES);
 	uint16_t off = 0;
 
 	while(ctx->loop_count == 0) {
@@ -100,7 +100,7 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			    || VOLUME_COLUMN(ch->current) >> 4
 			           == VOLUME_EFFECT_VIBRATO)
 			   && ch->vibrato_param & 0xF) {
-				used_features |= (uint16_t)1
+				used_features |= (uint64_t)1
 					<< (12|(VIBRATO_CONTROL_PARAM(ch) & 3));
 			}
 			#endif
@@ -108,13 +108,13 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			#if HAS_EFFECT(EFFECT_TREMOLO)
 			if(ch->current->effect_type == EFFECT_TREMOLO
 			   && ch->tremolo_param & 0xF) {
-				used_features |= (uint16_t)1
+				used_features |= (uint64_t)1
 					<< (12|(TREMOLO_CONTROL_PARAM(ch) & 3));
 			}
 			#endif
 
 			if(PING_PONG(ch->sample)) {
-				used_features |= (uint16_t)1
+				used_features |= (uint64_t)1
 					<< FEATURE_PINGPONG_LOOPS;
 			}
 
@@ -123,30 +123,30 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			}
 
 			if(ch->current->note == NOTE_KEY_OFF) {
-				used_features |= (uint16_t)1
+				used_features |= (uint64_t)1
 					<< FEATURE_NOTE_KEY_OFF;
 			} else if(ch->current->note == NOTE_SWITCH) {
-				used_features |= (uint16_t)1
+				used_features |= (uint64_t)1
 					<< FEATURE_NOTE_SWITCH;
 			}
 
 			#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 			if(ch->instrument->volume_envelope.num_points) {
-				used_features |= (uint16_t)1
+				used_features |= (uint64_t)1
 					<< FEATURE_VOLUME_ENVELOPES;
 			}
 			#endif
 
 			#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 			if(ch->instrument->panning_envelope.num_points) {
-				used_features |= (uint16_t)1
+				used_features |= (uint64_t)1
 					<< FEATURE_PANNING_ENVELOPES;
 			}
 			#endif
 
 			#if HAS_FADEOUT_VOLUME
-			if(ch->instrument->volume_fadeout) {
-				used_features |= (uint16_t)1
+			if(ch->instrument->volume_fadeout && !SUSTAINED(ch)) {
+				used_features |= (uint64_t)1
 					<< FEATURE_FADEOUT_VOLUME;
 			}
 			#endif
@@ -158,9 +158,9 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			               == WAVEFORM_SQUARE)) {
 				/* A zero vibrato_rate effectively turns off
 				   autovibrato, except for square waveforms */
-				used_features |= (uint16_t)1
+				used_features |= (uint64_t)1
 					<< FEATURE_AUTOVIBRATO;
-				used_features |= (uint16_t)1
+				used_features |= (uint64_t)1
 					<< (12|ch->instrument->vibrato_type);
 			}
 			#endif
@@ -172,7 +172,7 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	append_str(out, &off, " -DXM_DISABLED_VOLUME_EFFECTS=0x");
 	append_u16(out, &off, (uint16_t)(~used_volume_effects));
 	append_str(out, &off, " -DXM_DISABLED_FEATURES=0x");
-	append_u16(out, &off, (uint16_t)(~used_features));
+	append_u64(out, &off, (uint64_t)(~used_features));
 
 	if(off < XM_ANALYZE_OUTPUT_SIZE) {
 		out[off] = '\0';
