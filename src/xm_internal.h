@@ -398,7 +398,7 @@ struct xm_channel_context_s {
 	#define FADEOUT_VOLUME(ch) ((ch)->fadeout_volume)
 	uint16_t fadeout_volume; /* 0..=MAX_FADEOUT_VOLUME */
 	#else
-	#define FADEOUT_VOLUME(ch) MAX_FADEOUT_VOLUME
+	#define FADEOUT_VOLUME(ch) (MAX_FADEOUT_VOLUME-1)
 	#endif
 
 	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
