@@ -93,6 +93,22 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 				continue;
 			}
 
+			if(ch->current->effect_type == EFFECT_ARPEGGIO
+			   && ch->current->effect_param > 0
+			   && CURRENT_TEMPO(ctx) >= 16) {
+				used_features |= (uint64_t)1
+					<< FEATURE_ACCURATE_ARPEGGIO_OVERFLOW;
+			}
+
+			#if HAS_GLISSANDO_CONTROL
+			if(ch->current->effect_type == EFFECT_ARPEGGIO
+			   && ch->current->effect_param > 0
+			   && ch->glissando_control_error != 0) {
+				used_features |= (uint64_t)1
+					<< FEATURE_ACCURATE_ARPEGGIO_GLISSANDO;
+			}
+			#endif
+
 			#if HAS_VIBRATO
 			if((ch->current->effect_type == EFFECT_VIBRATO
 			    || ch->current->effect_type

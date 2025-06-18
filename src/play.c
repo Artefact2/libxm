@@ -307,18 +307,21 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch) {
 	uint8_t t = CURRENT_TEMPO(ctx) - ctx->current_tick;
 
-	if(ctx->current_tick == 0 /* This can happen with EEy */
-	   || t == 16 /* FT2 overflow quirk */
-	   || (t < 16 && t % 3 == 0) /* Normal case */) {
+	if((HAS_EFFECT(EFFECT_DELAY_PATTERN) && ctx->current_tick == 0)
+	   || (HAS_FEATURE(FEATURE_ACCURATE_ARPEGGIO_OVERFLOW) && t == 16)
+	   || ((!HAS_FEATURE(FEATURE_ACCURATE_ARPEGGIO_OVERFLOW) || t < 16)
+	       && t % 3 == 0)) {
 		ch->arp_note_offset = 0;
 		return;
 	}
 
+	#if HAS_ARPEGGIO_RESET
 	ch->should_reset_arpeggio = true;
 	xm_round_period_to_semitone(ctx, ch);
+	#endif
 
-	if(t > 16 /* FT2 overflow quirk */
-	   || t % 3 == 2 /* Normal case */) {
+	if((HAS_FEATURE(FEATURE_ACCURATE_ARPEGGIO_OVERFLOW) && t > 16)
+	   || t % 3 == 2) {
 		ch->arp_note_offset = ch->current->effect_param & 0x0F;
 		return;
 	}
@@ -1027,7 +1030,7 @@ static void xm_row(xm_context_t* ctx) {
 		}
 		#endif
 
-		#if HAS_EFFECT(EFFECT_ARPEGGIO)
+		#if HAS_ARPEGGIO_RESET
 		if(ch->should_reset_arpeggio) {
 			/* Reset glissando control error */
 			xm_pitch_slide(ch, 0);
