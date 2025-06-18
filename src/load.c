@@ -620,7 +620,8 @@ static bool xm_prescan_xm0104(const char* moddata, uint32_t moddata_length,
 			return false;
 		}
 		uint32_t inst_samples_bytes = 0;
-		out->num_samples += num_samples;
+		out->num_samples += HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+			? num_samples : 1;
 
 		/* Notice that, even if there's a "sample header size" in the
 		   instrument header, that value seems ignored, and might even
@@ -660,7 +661,12 @@ static bool xm_prescan_xm0104(const char* moddata, uint32_t moddata_length,
 				       "(%u > %u)", j, i+1, sample_length, max);
 				return false;
 			}
-			out->samples_data_length += sample_length;
+
+			if(HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+			   || j == 0) {
+				out->samples_data_length += sample_length;
+			}
+
 			inst_samples_bytes += sample_bytes;
 			offset += SAMPLE_HEADER_SIZE;
 		}
@@ -842,7 +848,7 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 }
 
 static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
-                                          xm_instrument_t* instr,
+                                          [[maybe_unused]] xm_instrument_t* instr,
                                           const char* moddata,
                                           uint32_t moddata_length,
                                           uint32_t offset) {
@@ -869,13 +875,19 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 
 	/* Prescan already checked MAX_SAMPLES_PER_INSTRUMENT */
 	static_assert(MAX_SAMPLES_PER_INSTRUMENT <= UINT8_MAX);
-	instr->num_samples = READ_U8(offset + 27);
-	if(instr->num_samples == 0) {
+	uint8_t num_samples = READ_U8(offset + 27);
+	if(num_samples == 0) {
+		#if !HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+		ctx->module.num_samples += 1;
+		#endif
 		return offset + ins_header_size;
 	}
 
 	/* Read extra header properties */
+
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	READ_MEMCPY(instr->sample_of_notes, offset + 33, MAX_NOTE);
+	#endif
 
 	#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 	xm_load_xm0104_envelope_points(&instr->volume_envelope,
@@ -925,23 +937,36 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	moddata_length = orig_moddata_length;
 
 	/* Read sample headers */
-	instr->samples_index = ctx->module.num_samples;
-	ctx->module.num_samples += instr->num_samples;
-	for(uint16_t i = 0; i < instr->num_samples; ++i) {
-		bool is_16bit;
-		offset = xm_load_xm0104_sample_header(ctx->samples + instr->samples_index + i, &is_16bit, moddata, moddata_length, offset);
-		if(is_16bit) {
-			/* Find some free bit in the struct to pack the
-			   16bitness */
-			static_assert(MAX_SAMPLE_LENGTH < (1u << 31));
-			ctx->samples[instr->samples_index+i].length
-				|= (1u << 31);
+	uint16_t samples_index = ctx->module.num_samples;
+	uint32_t extra_samples_size = 0;
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+	instr->samples_index = samples_index;
+	instr->num_samples = num_samples;
+	ctx->module.num_samples += num_samples;
+	#else
+	ctx->module.num_samples += 1;
+	#endif
+
+	for(uint16_t i = 0; i < num_samples; ++i) {
+		if(HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS) || i == 0) {
+			bool is_16bit;
+			offset = xm_load_xm0104_sample_header(ctx->samples + samples_index + i, &is_16bit, moddata, moddata_length, offset);
+			if(is_16bit) {
+				/* Find some free bit in the struct to pack the
+				   16bitness */
+				static_assert(MAX_SAMPLE_LENGTH < (1u << 31));
+				ctx->samples[samples_index + i].length
+					|= (1u << 31);
+			}
+		} else {
+			extra_samples_size += READ_U32(offset);
+			offset += SAMPLE_HEADER_SIZE;
 		}
 	}
 
 	/* Read sample data */
-	for(uint16_t i = 0; i < instr->num_samples; ++i) {
-		xm_sample_t* s = ctx->samples + instr->samples_index + i;
+	for(uint16_t i = 0; i < num_samples; ++i) {
+		xm_sample_t* s = ctx->samples + samples_index + i;
 		/* As currently loaded, s->index is the real sample length in
 		   the xm file, s->length is after trimming to loop_end (and the
 		   actual sample length as stored in the context) */
@@ -966,6 +991,11 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 		}
 		s->index = ctx->module.samples_data_length;
 		ctx->module.samples_data_length += s->length;
+
+		#if !HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+		offset += extra_samples_size;
+		break;
+		#endif
 	}
 
 	return offset;
@@ -1268,7 +1298,12 @@ static void xm_load_mod(xm_context_t* ctx,
 
 	/* Read instruments */
 	for(uint8_t i = 0; i < ctx->module.num_samples; ++i) {
+		#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 		xm_instrument_t* ins = ctx->instruments + i;
+		ins->num_samples = 1;
+		ins->samples_index = i;
+		#endif
+
 		xm_sample_t* smp = ctx->samples + i;
 
 		#if XM_STRINGS
@@ -1306,8 +1341,6 @@ static void xm_load_mod(xm_context_t* ctx,
 			smp->loop_length = loop_length;
 		}
 
-		ins->num_samples = 1;
-		ins->samples_index = i;
 		offset += 30;
 	}
 

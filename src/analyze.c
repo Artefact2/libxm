@@ -65,15 +65,26 @@ static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
 		return;
 	}
 
+	xm_sample_t* smp;
+
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	xm_instrument_t* inst = ctx->instruments + ch->next_instrument - 1;
 
 	if(inst->sample_of_notes[ch->orig_note - 1] >= inst->num_samples) {
 		*used_features |= (uint64_t)1 << FEATURE_INVALID_SAMPLES;
 		return;
 	}
-
-	xm_sample_t* smp = ctx->samples + inst->samples_index
+	smp = ctx->samples + inst->samples_index
 		+ inst->sample_of_notes[ch->orig_note - 1];
+
+	if(inst->sample_of_notes[ch->orig_note - 1]) {
+		*used_features |= (uint64_t)1 << FEATURE_MULTISAMPLE_INSTRUMENTS;
+	}
+
+	#else
+	smp = ctx->samples + ch->next_instrument - 1;
+	#endif
+
 	int16_t note = (int16_t)(ch->orig_note + smp->relative_note);
 
 	if(note <= 0 || note >= 120) {

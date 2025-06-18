@@ -102,14 +102,29 @@ uint8_t xm_get_number_of_instruments(const xm_context_t* ctx) {
 	return ctx->module.num_instruments;
 }
 
-uint8_t xm_get_number_of_samples(const xm_context_t* ctx, uint8_t i) {
+uint8_t xm_get_number_of_samples([[maybe_unused]] const xm_context_t* ctx,
+                                 [[maybe_unused]] uint8_t i) {
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	return ctx->instruments[i-1].num_samples;
+	#else
+	return 1;
+	#endif
 }
 
 xm_sample_point_t* xm_get_sample_waveform(xm_context_t* ctx,
                                           uint8_t instrument,
                                           uint8_t sample, uint32_t* length) {
-	xm_sample_t* s = ctx->samples + ctx->instruments[instrument-1].samples_index + sample;
+	assert(instrument > 0 && instrument <= ctx->module.num_instruments);
+
+	xm_sample_t* s;
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+	assert(sample < ctx->instruments[instrument-1].num_samples);
+	s = ctx->samples + ctx->instruments[instrument-1].samples_index + sample;
+	#else
+	assert(sample == 0);
+	s = ctx->samples + instrument - 1;
+	#endif
+
 	*length = s->length;
 	return ctx->samples_data + s->index;
 }

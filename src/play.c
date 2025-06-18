@@ -502,7 +502,6 @@ static void xm_round_period_to_semitone([[maybe_unused]] const xm_context_t* ctx
 	xm_pitch_slide(ch, 0);
 
 	if(AMIGA_FREQUENCIES(&ctx->module)) {
-		TRACE();
 		xm_round_amiga_period_to_semitone(ch);
 	} else {
 		xm_round_linear_period_to_semitone(ch);
@@ -875,10 +874,18 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 	#endif
 
-	xm_sample_t* new_sample = ctx->samples
+	xm_sample_t* new_sample;
+
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+	new_sample = ctx->samples
 		+ ch->instrument->samples_index
 		+ ch->instrument->sample_of_notes[ch->orig_note - 1];
-	#if HAS_FEATURE(FEATURE_INVALID_SAMPLES)
+	#else
+	new_sample = ctx->samples + ch->next_instrument - 1;
+	#endif
+
+	#if HAS_FEATURE(FEATURE_INVALID_SAMPLES) \
+		&& HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	if(ch->instrument->sample_of_notes[ch->orig_note - 1]
 	   >= ch->instrument->num_samples) {
 		/* XXX: requires hex editing to test since FT2 will not allow

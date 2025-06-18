@@ -60,6 +60,7 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 #define FEATURE_PINGPONG_LOOPS 0
 #define FEATURE_NOTE_KEY_OFF 1
 #define FEATURE_NOTE_SWITCH 2
+#define FEATURE_MULTISAMPLE_INSTRUMENTS 3
 #define FEATURE_VOLUME_ENVELOPES 4
 #define FEATURE_PANNING_ENVELOPES 5
 #define FEATURE_FADEOUT_VOLUME 6
@@ -265,9 +266,12 @@ struct xm_instrument_s {
 	xm_envelope_t panning_envelope;
 	#endif
 
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+	static_assert(MAX_NOTE % 2 == 0);
 	uint8_t sample_of_notes[MAX_NOTE];
 	/* ctx->samples[index..(index+num_samples)] */
 	uint16_t samples_index;
+	#endif
 
 	#define HAS_SUSTAIN (HAS_FEATURE(FEATURE_NOTE_KEY_OFF) \
 			|| HAS_EFFECT(EFFECT_KEY_OFF))
@@ -277,7 +281,9 @@ struct xm_instrument_s {
 	uint16_t volume_fadeout;
 	#endif
 
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	uint8_t num_samples;
+	#endif
 
 	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
 	uint8_t vibrato_type;
@@ -295,7 +301,8 @@ struct xm_instrument_s {
 
 	#define INSTRUMENT_PADDING (2 \
 		+ 4*!HAS_FEATURE(FEATURE_AUTOVIBRATO) \
-		+ 2*!HAS_FADEOUT_VOLUME)
+		+ 2*!HAS_FADEOUT_VOLUME \
+		+ (MAX_NOTE + 3)*!HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS))
 	#define INSTRUMENT_ALIGN (XM_TIMING_FUNCTIONS ? 4 : 2)
 	#if INSTRUMENT_PADDING % INSTRUMENT_ALIGN
 	char __pad[INSTRUMENT_PADDING % INSTRUMENT_ALIGN];
