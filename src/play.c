@@ -1048,6 +1048,8 @@ static void xm_row(xm_context_t* ctx) {
 			ch->should_reset_arpeggio = false;
 			ch->arp_note_offset = 0;
 		}
+		#elif HAS_EFFECT(EFFECT_ARPEGGIO)
+		ch->arp_note_offset = 0;
 		#endif
 
 		#if HAS_VIBRATO
