@@ -395,10 +395,14 @@ static void xm_pitch_slide(xm_channel_context_t* ch,
 	ch->vibrato_offset = 0;
 	#endif
 
+	#if HAS_FEATURE(FEATURE_CLAMP_PERIODS)
 	/* Clamp period when sliding up (matches FT2 behaviour), wrap around
 	   when sliding down (albeit still in a broken way compared to FT2) */
 	ch->period = (ch->period + period_offset < 1)
 		? 1 : (uint16_t)(ch->period + period_offset);
+	#else
+	ch->period = (uint16_t)(ch->period + period_offset);
+	#endif
 }
 
 static void xm_param_slide(uint8_t* param, uint8_t rawval, uint8_t max) {

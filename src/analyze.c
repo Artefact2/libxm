@@ -166,6 +166,11 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 					<< FEATURE_PINGPONG_LOOPS;
 			}
 
+			if(ch->period == 1) {
+				used_features |= (uint64_t)1
+					<< FEATURE_CLAMP_PERIODS;
+			}
+
 			if(ch->instrument == NULL) {
 				continue;
 			}
