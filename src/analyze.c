@@ -21,6 +21,8 @@ static void append_str(char* restrict, uint16_t*, const char* restrict);
 static void append_u16(char*, uint16_t*, uint16_t);
 static void append_u64(char*, uint16_t*, uint64_t);
 
+static void analyze_note_trigger(xm_context_t*, xm_channel_context_t*, uint64_t*);
+
 /* ----- Function definitions ----- */
 
 static void append_char(char* dest, uint16_t* dest_offset, char x) {
@@ -49,6 +51,34 @@ static void append_u64(char* dest, uint16_t* dest_offset, uint64_t x) {
 	append_u16(dest, dest_offset, (uint16_t)((x >> 32) & 0xFFFF));
 	append_u16(dest, dest_offset, (uint16_t)((x >> 16) & 0xFFFF));
 	append_u16(dest, dest_offset, (uint16_t)(x & 0xFFFF));
+}
+
+static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
+                                 uint64_t* used_features) {
+	if(ch->current->note == 0 || ch->current->note == NOTE_KEY_OFF) {
+		return;
+	}
+
+	if(ch->next_instrument == 0
+	   || ch->next_instrument > ctx->module.num_instruments) {
+		*used_features |= (uint64_t)1 << FEATURE_INVALID_INSTRUMENTS;
+		return;
+	}
+
+	xm_instrument_t* inst = ctx->instruments + ch->next_instrument - 1;
+
+	if(inst->sample_of_notes[ch->orig_note - 1] >= inst->num_samples) {
+		*used_features |= (uint64_t)1 << FEATURE_INVALID_SAMPLES;
+		return;
+	}
+
+	xm_sample_t* smp = ctx->samples + inst->samples_index
+		+ inst->sample_of_notes[ch->orig_note - 1];
+	int16_t note = (int16_t)(ch->orig_note + smp->relative_note);
+
+	if(note <= 0 || note >= 120) {
+		*used_features |= (uint64_t)1 << FEATURE_INVALID_NOTES;
+	}
 }
 
 void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
@@ -83,6 +113,8 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			}
 			used_volume_effects |=
 				(uint16_t)1 << (VOLUME_COLUMN(ch->current) >> 4);
+
+			analyze_note_trigger(ctx, ch, &used_features);
 
 			if(ch->actual_volume[0] == 0.f
 			   && ch->actual_volume[1] == 0.f) {

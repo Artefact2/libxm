@@ -369,8 +369,10 @@ static void xm_tone_portamento_target(const xm_context_t* ctx,
 	   note. */
 	int16_t note = (int16_t)(ch->current->note + ch->sample->relative_note);
 
+	#if HAS_FEATURE(FEATURE_INVALID_NOTES)
 	/* Invalid notes keep whatever target period was there before. */
 	if(note <= 0 || note >= 120) return;
+	#endif
 
 	/* 3xx/Mx ignores E5y, but will reuse whatever finetune was set when
 	   initially triggering the note */
@@ -859,6 +861,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	/* Update ch->sample and ch->instrument */
 	ch->instrument = ctx->instruments + ch->next_instrument - 1;
+	#if HAS_FEATURE(FEATURE_INVALID_INSTRUMENTS)
 	if(ch->next_instrument == 0
 	   || ch->next_instrument > ctx->module.num_instruments) {
 		ch->instrument = NULL;
@@ -866,7 +869,12 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		xm_cut_note(ch);
 		return;
 	}
+	#endif
 
+	xm_sample_t* new_sample = ctx->samples
+		+ ch->instrument->samples_index
+		+ ch->instrument->sample_of_notes[ch->orig_note - 1];
+	#if HAS_FEATURE(FEATURE_INVALID_SAMPLES)
 	if(ch->instrument->sample_of_notes[ch->orig_note - 1]
 	   >= ch->instrument->num_samples) {
 		/* XXX: requires hex editing to test since FT2 will not allow
@@ -882,16 +890,15 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		/* ch->sample = &default_sample; */
 		return;
 	}
-
-	xm_sample_t* new_sample = ctx->samples
-		+ ch->instrument->samples_index
-		+ ch->instrument->sample_of_notes[ch->orig_note - 1];
+	#endif
 
 	int16_t note = (int16_t)(ch->orig_note + new_sample->relative_note);
+	#if HAS_FEATURE(FEATURE_INVALID_NOTES)
 	if(note <= 0 || note >= 120) {
 		/* Invalid notes seem to be completely ignored in FT2 */
 		return;
 	}
+	#endif
 
 	ch->sample = new_sample;
 
