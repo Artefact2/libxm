@@ -101,12 +101,12 @@ Here are some interesting modules, most showcase unusual or advanced
 tracking techniques (and thus are a good indicator of a player's
 accuracy):
 
-* [Cerror - Expatarimental](http://modarchive.org/module.php?136603)
-* [Lamb - Among the stars](http://modarchive.org/module.php?165819)
-* [Raina - Cyberculosis](http://modarchive.org/module.php?165308)
-* [Raina - Slumberjack](http://modarchive.org/module.php?148721)
-* [Strobe - One for all](http://modarchive.org/module.php?161246)
-* [Strobe - Paralysicical death](http://modarchive.org/module.php?65817)
+* [Cerror - Expatarimental](https://artefact2.github.io/libxm.js/#136603)
+* [Lamb - Among the stars](https://artefact2.github.io/libxm.js/#165819)
+* [Raina - Cyberculosis](https://artefact2.github.io/libxm.js/#165308)
+* [Raina - Slumberjack](https://artefact2.github.io/libxm.js/#148721)
+* [Strobe - One for all](https://artefact2.github.io/libxm.js/#161246)
+* [Strobe - Paralysicical death](https://artefact2.github.io/libxm.js/#65817)
 
 Known inaccuracies
 ==================
@@ -121,6 +121,7 @@ Known inaccuracies
 * Tone portamento (3xx/Mx) does not "lock" its direction
 * Arpeggio (0xy) does not reset vibrato offset (Vy) when Spd=1
 * (MOD only) Sample offset (9xx) beyond sample loop end will cut the note
+  * Can be manually toggled with `FEATURE_ACCURATE_SAMPLE_OFFSET_EFFECT`
 
 To report more, please [open an issue](../../issues?q=is%3Aissue%20state%3Aopen%20label%3Abug).
 

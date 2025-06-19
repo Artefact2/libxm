@@ -863,15 +863,21 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	#endif
 
 	/* Update ch->sample and ch->instrument */
-	ch->instrument = ctx->instruments + ch->next_instrument - 1;
+
 	#if HAS_FEATURE(FEATURE_INVALID_INSTRUMENTS)
 	if(ch->next_instrument == 0
-	   || ch->next_instrument > ctx->module.num_instruments) {
+	   || ch->next_instrument > NUM_INSTRUMENTS(&ctx->module)) {
+		#if HAS_INSTRUMENTS
 		ch->instrument = NULL;
+		#endif
 		ch->sample = NULL;
 		xm_cut_note(ch);
 		return;
 	}
+	#endif
+
+	#if HAS_INSTRUMENTS
+	ch->instrument = ctx->instruments + ch->next_instrument - 1;
 	#endif
 
 	xm_sample_t* new_sample;
@@ -1138,8 +1144,8 @@ static uint8_t xm_tick_envelope([[maybe_unused]] xm_channel_context_t* ch,
 	assert(0);
 }
 
-static void xm_tick_envelopes(xm_channel_context_t* ch) {
-	xm_instrument_t* inst = ch->instrument;
+static void xm_tick_envelopes([[maybe_unused]] xm_channel_context_t* ch) {
+	xm_instrument_t* inst = INSTRUMENT(ch);
 	if(inst == NULL) return;
 
 	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
@@ -1373,7 +1379,9 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 		}
 	#elif HAS_EFFECT(EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE)
 	case EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE:
+		#if HAS_TONE_PORTAMENTO
 		xm_tone_portamento(ctx, ch);
+		#endif
 		goto volume_slide;
 	#elif HAS_EFFECT(EFFECT_TONE_PORTAMENTO)
 	case EFFECT_TONE_PORTAMENTO:
@@ -1398,10 +1406,12 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 		}
 	#elif HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)
 	case EFFECT_VIBRATO_VOLUME_SLIDE:
+		#if HAS_VIBRATO
 		#if HAS_VIBRATO_RESET
 		ch->should_reset_vibrato = true;
 		#endif
 		xm_vibrato(ch);
+		#endif
 		goto volume_slide;
 	#elif HAS_EFFECT(EFFECT_VIBRATO)
 	case EFFECT_VIBRATO:
@@ -1636,7 +1646,7 @@ static void xm_next_of_channel(xm_context_t* ctx, xm_channel_context_t* ch,
 	const float fval = xm_next_of_sample(ctx, ch) * AMPLIFICATION;
 
 	if(CHANNEL_MUTED(ch)
-	   || (ch->instrument != NULL && INSTRUMENT_MUTED(ch->instrument))
+	   || (INSTRUMENT(ch) != NULL && INSTRUMENT_MUTED(INSTRUMENT(ch)))
 	   || (ctx->module.max_loop_count > 0
 	       && ctx->loop_count >= ctx->module.max_loop_count)) {
 		return;

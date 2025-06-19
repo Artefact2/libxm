@@ -253,6 +253,19 @@ struct xm_sample_s {
 };
 typedef struct xm_sample_s xm_sample_t;
 
+#define HAS_SUSTAIN (HAS_FEATURE(FEATURE_NOTE_KEY_OFF) \
+                     || HAS_EFFECT(EFFECT_KEY_OFF))
+#define HAS_FADEOUT_VOLUME (HAS_FEATURE(FEATURE_FADEOUT_VOLUME) \
+                            && HAS_SUSTAIN)
+#define HAS_INSTRUMENTS (XM_TIMING_FUNCTIONS \
+                         || HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)     \
+                         || HAS_FEATURE(FEATURE_PANNING_ENVELOPES) \
+                         || HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS) \
+                         || HAS_FADEOUT_VOLUME \
+                         || HAS_FEATURE(FEATURE_AUTOVIBRATO) \
+                         || XM_MUTING_FUNCTIONS \
+                         || XM_STRINGS)
+#if HAS_INSTRUMENTS
 struct xm_instrument_s {
 	#if XM_TIMING_FUNCTIONS
 	uint32_t latest_trigger;
@@ -273,10 +286,6 @@ struct xm_instrument_s {
 	uint16_t samples_index;
 	#endif
 
-	#define HAS_SUSTAIN (HAS_FEATURE(FEATURE_NOTE_KEY_OFF) \
-			|| HAS_EFFECT(EFFECT_KEY_OFF))
-	#define HAS_FADEOUT_VOLUME (HAS_FEATURE(FEATURE_FADEOUT_VOLUME) \
-		&& HAS_SUSTAIN)
 	#if HAS_FADEOUT_VOLUME
 	uint16_t volume_fadeout;
 	#endif
@@ -314,6 +323,10 @@ struct xm_instrument_s {
 	char __pad[INSTRUMENT_PADDING % INSTRUMENT_ALIGN];
 	#endif
 };
+#else
+#define INSTRUMENT_MUTED(inst) false
+struct xm_instrument_s;
+#endif
 typedef struct xm_instrument_s xm_instrument_t;
 
 struct xm_pattern_slot_s {
@@ -349,7 +362,14 @@ struct xm_module_s {
 	uint16_t num_samples;
 	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
 	uint8_t num_channels;
+
+	#if HAS_INSTRUMENTS
+	#define NUM_INSTRUMENTS(mod) ((mod)->num_instruments)
 	uint8_t num_instruments;
+	#else
+	#define NUM_INSTRUMENTS(mod) ((uint8_t)(mod)->num_samples)
+	#endif
+
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 	uint8_t restart_position;
 	uint8_t max_loop_count;
@@ -379,7 +399,8 @@ struct xm_module_s {
 
 	#define MODULE_PADDING (1 \
 		+ !(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
-		    && HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)))
+		    && HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)) \
+		+ !HAS_INSTRUMENTS)
 	#if MODULE_PADDING % 4
 	char __pad[MODULE_PADDING % 4];
 	#endif
@@ -387,8 +408,14 @@ struct xm_module_s {
 typedef struct xm_module_s xm_module_t;
 
 struct xm_channel_context_s {
+	#if HAS_INSTRUMENTS
+	#define INSTRUMENT(ch) ((ch)->instrument)
 	xm_instrument_t* instrument; /* Last instrument triggered by a note.
 	                                Could be NULL. */
+	#else
+	#define INSTRUMENT(ch) NULL
+	#endif
+
 	xm_sample_t* sample; /* Last sample triggered by a note. Could be
 	                        NULL */
 	xm_pattern_slot_t* current;
@@ -683,8 +710,12 @@ typedef struct xm_channel_context_s xm_channel_context_t;
 struct xm_context_s {
 	xm_pattern_t* patterns;
 	xm_pattern_slot_t* pattern_slots;
+
+	#if HAS_INSTRUMENTS
 	xm_instrument_t* instruments; /* Instrument 1 has index 0,
 	                               * instrument 2 has index 1, etc. */
+	#endif
+
 	xm_sample_t* samples;
 	xm_sample_point_t* samples_data;
 	xm_channel_context_t* channels;

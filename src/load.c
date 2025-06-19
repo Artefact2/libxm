@@ -96,7 +96,7 @@ static void xm_fixup_context(xm_context_t*);
 
 static bool xm_prescan_xm0104(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_xm0104(xm_context_t*, const char*, uint32_t);
-static uint32_t xm_load_xm0104_module_header(xm_context_t*, const char*, uint32_t);
+static uint32_t xm_load_xm0104_module_header(xm_context_t*, uint8_t*, const char*, uint32_t);
 static uint32_t xm_load_xm0104_pattern(xm_context_t*, xm_pattern_t*, const char*, uint32_t, uint32_t);
 static uint32_t xm_load_xm0104_instrument(xm_context_t*, xm_instrument_t*, const char*, uint32_t, uint32_t);
 [[maybe_unused]] static void xm_load_xm0104_envelope_points(xm_envelope_t*, const char*);
@@ -179,7 +179,9 @@ bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
 	if(ckd_add(&sz, sz, sizeof(xm_pattern_t) * out->num_patterns)
 	   || ckd_add(&sz, sz, sizeof(xm_pattern_slot_t)
 	              * out->num_rows * out->num_channels)
+	   #if HAS_INSTRUMENTS
 	   || ckd_add(&sz, sz, sizeof(xm_instrument_t) * out->num_instruments)
+	   #endif
 	   || ckd_add(&sz, sz, sizeof(xm_sample_t) * out->num_samples)
 	   || ckd_add(&sz, sz, sizeof(xm_sample_point_t)
 	              * out->samples_data_length)
@@ -223,9 +225,11 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	ctx->channels = (xm_channel_context_t*)mempool;
 	mempool += sizeof(xm_channel_context_t) * p->num_channels;
 
+	#if HAS_INSTRUMENTS
 	ASSERT_ALIGNED(mempool, xm_instrument_t);
 	ctx->instruments = (xm_instrument_t*)mempool;
 	mempool += sizeof(xm_instrument_t) * p->num_instruments;
+	#endif
 
 	ASSERT_ALIGNED(mempool, xm_sample_t);
 	ctx->samples = (xm_sample_t*)mempool;
@@ -268,7 +272,7 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	assert(ctx->module.length == p->pot_length);
 	assert(ctx->module.num_patterns == p->num_patterns);
 	assert(ctx->module.num_rows == p->num_rows);
-	assert(ctx->module.num_instruments == p->num_instruments);
+	assert(NUM_INSTRUMENTS(&ctx->module) == p->num_instruments);
 	assert(ctx->module.num_samples == p->num_samples);
 	assert(ctx->module.samples_data_length == p->samples_data_length);
 	assert(xm_context_size(ctx) == ctx_size);
@@ -467,7 +471,10 @@ void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
 	   needed with correct usage of this function) */
 	for(uint16_t i = 0; i < ctx->module.num_channels; ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
+		#if HAS_INSTRUMENTS
 		ch->instrument = 0;
+		#endif
+		ch->next_instrument = 0;
 		ch->sample = 0;
 		ch->current = 0;
 	}
@@ -491,7 +498,11 @@ void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
 
 	CALC_OFFSET(ctx->patterns, ctx);
 	CALC_OFFSET(ctx->pattern_slots, ctx);
+
+	#if HAS_INSTRUMENTS
 	CALC_OFFSET(ctx->instruments, ctx);
+	#endif
+
 	CALC_OFFSET(ctx->samples, ctx);
 	CALC_OFFSET(ctx->samples_data, ctx);
 	CALC_OFFSET(ctx->channels, ctx);
@@ -513,7 +524,11 @@ xm_context_t* xm_create_context_from_libxm(char* data, uint16_t rate) {
 	/* Reverse steps of xm_context_to_libxm() */
 	APPLY_OFFSET(ctx->patterns, ctx);
 	APPLY_OFFSET(ctx->pattern_slots, ctx);
+
+	#if HAS_INSTRUMENTS
 	APPLY_OFFSET(ctx->instruments, ctx);
+	#endif
+
 	APPLY_OFFSET(ctx->samples, ctx);
 	APPLY_OFFSET(ctx->samples_data, ctx);
 	APPLY_OFFSET(ctx->channels, ctx);
@@ -678,6 +693,7 @@ static bool xm_prescan_xm0104(const char* moddata, uint32_t moddata_length,
 }
 
 static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
+                                             uint8_t* out_num_instruments,
                                              const char* moddata,
                                              uint32_t moddata_length) {
 	uint32_t offset = 0;
@@ -709,9 +725,13 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 	mod->num_channels = READ_U8(offset + 8);
 	mod->num_patterns = READ_U16(offset + 10);
 	assert(mod->num_patterns <= MAX_PATTERNS);
+
 	/* Prescan already checked MAX_INSTRUMENTS */
 	static_assert(MAX_INSTRUMENTS <= UINT8_MAX);
-	mod->num_instruments = READ_U8(offset + 12);
+	*out_num_instruments = READ_U8(offset + 12);
+	#if HAS_INSTRUMENTS
+	mod->num_instruments = *out_num_instruments;
+	#endif
 
 	if(mod->restart_position >= mod->length) {
 		NOTICE("invalid restart_position, resetting to zero");
@@ -1183,8 +1203,9 @@ static void xm_load_xm0104_16b_sample_data(uint32_t length,
 static void xm_load_xm0104(xm_context_t* ctx,
                            const char* moddata, uint32_t moddata_length) {
 	/* Read module header */
-	uint32_t offset = xm_load_xm0104_module_header(ctx, moddata,
-	                                               moddata_length);
+	uint8_t num_instruments;
+	uint32_t offset = xm_load_xm0104_module_header(ctx, &num_instruments,
+	                                               moddata, moddata_length);
 
 	/* Read pattern headers + slots */
 	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
@@ -1220,8 +1241,15 @@ static void xm_load_xm0104(xm_context_t* ctx,
 	}
 
 	/* Read instruments, samples and sample data */
-	for(uint16_t i = 0; i < ctx->module.num_instruments; ++i) {
-		offset = xm_load_xm0104_instrument(ctx, ctx->instruments + i,
+	for(uint16_t i = 0; i < num_instruments; ++i) {
+		xm_instrument_t* inst;
+		#if HAS_INSTRUMENTS
+		inst = ctx->instruments + i;
+		#else
+		inst = NULL;
+		#endif
+
+		offset = xm_load_xm0104_instrument(ctx, inst,
 		                                   moddata, moddata_length,
 		                                   offset);
 	}
@@ -1288,11 +1316,14 @@ static void xm_load_mod(xm_context_t* ctx,
 	ctx->module.tempo = 6;
 
 	ctx->module.num_channels = p->num_channels;
-	ctx->module.num_instruments = p->num_instruments;
 	ctx->module.num_patterns = p->num_patterns;
 	ctx->module.num_rows = p->num_rows;
 	ctx->module.num_samples = p->num_samples;
 	assert(p->num_instruments == p->num_samples);
+
+	#if HAS_INSTRUMENTS
+	ctx->module.num_instruments = p->num_instruments;
+	#endif
 
 	uint32_t offset = 20;
 
@@ -1405,7 +1436,7 @@ static void xm_load_mod(xm_context_t* ctx,
 	}
 
 	/* Read sample data */
-	for(uint8_t i = 0; i < ctx->module.num_instruments; ++i) {
+	for(uint8_t i = 0; i < ctx->module.num_samples; ++i) {
 		xm_sample_point_t* out = ctx->samples_data
 			+ ctx->module.samples_data_length;
 		for(uint32_t k = 0; k < ctx->samples[i].length; ++k) {

@@ -44,7 +44,7 @@ bool xm_mute_channel(xm_context_t* ctx, uint8_t channel,
 
 bool xm_mute_instrument(xm_context_t* ctx, uint8_t instr,
                         [[maybe_unused]] bool mute) {
-	assert(instr >= 1 && instr <= ctx->module.num_instruments);
+	assert(instr >= 1 && instr <= NUM_INSTRUMENTS(&ctx->module));
 
 	#if XM_MUTING_FUNCTIONS
 	bool old = ctx->instruments[instr - 1].muted;
@@ -67,11 +67,25 @@ const char* xm_get_tracker_name(const xm_context_t* ctx) {
 }
 
 const char* xm_get_instrument_name(const xm_context_t* ctx, uint8_t i) {
+	assert(i >= 1 && i <= NUM_INSTRUMENTS(&ctx->module));
+
+	#if HAS_INSTRUMENTS
 	return ctx->instruments[i-1].name;
+	#else
+	return "";
+	#endif
 }
 
 const char* xm_get_sample_name(const xm_context_t* ctx, uint8_t i, uint8_t s) {
+	assert(i >= 1 && i <= NUM_INSTRUMENTS(&ctx->module));
+
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+	assert(s < ctx->instruments[i-1].num_samples);
 	return ctx->samples[ctx->instruments[i-1].samples_index + s].name;
+	#else
+	assert(s == 0);
+	return ctx->samples[i-1].name;
+	#endif
 }
 #else
 const char* xm_get_module_name([[maybe_unused]] const xm_context_t* ctx) {
@@ -113,11 +127,12 @@ uint16_t xm_get_number_of_rows(const xm_context_t* ctx, uint16_t pattern) {
 }
 
 uint8_t xm_get_number_of_instruments(const xm_context_t* ctx) {
-	return ctx->module.num_instruments;
+	return NUM_INSTRUMENTS(&ctx->module);
 }
 
-uint8_t xm_get_number_of_samples([[maybe_unused]] const xm_context_t* ctx,
-                                 [[maybe_unused]] uint8_t i) {
+uint8_t xm_get_number_of_samples(const xm_context_t* ctx, uint8_t i) {
+	assert(i >= 1 && i <= NUM_INSTRUMENTS(&ctx->module));
+
 	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	return ctx->instruments[i-1].num_samples;
 	#else
@@ -128,7 +143,7 @@ uint8_t xm_get_number_of_samples([[maybe_unused]] const xm_context_t* ctx,
 xm_sample_point_t* xm_get_sample_waveform(xm_context_t* ctx,
                                           uint8_t instrument,
                                           uint8_t sample, uint32_t* length) {
-	assert(instrument > 0 && instrument <= ctx->module.num_instruments);
+	assert(instrument > 0 && instrument <= NUM_INSTRUMENTS(&ctx->module));
 
 	xm_sample_t* s;
 	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
@@ -165,30 +180,45 @@ void xm_get_position(const xm_context_t* ctx, uint8_t* pattern_index,
 	}
 }
 
-#if XM_TIMING_FUNCTIONS
 uint32_t xm_get_latest_trigger_of_instrument(const xm_context_t* ctx,
                                              uint8_t instr) {
+	assert(instr >= 1 && instr <= NUM_INSTRUMENTS(&ctx->module));
+
+	#if XM_TIMING_FUNCTIONS
 	return ctx->instruments[instr-1].latest_trigger;
+	#else
+	return 0;
+	#endif
 }
+
 uint32_t xm_get_latest_trigger_of_sample(const xm_context_t* ctx,
-                                         uint8_t instr, uint8_t sample) {
+                                         uint8_t instr,
+                                         [[maybe_unused]] uint8_t sample) {
+	assert(instr >= 1 && instr <= NUM_INSTRUMENTS(&ctx->module));
+
+	#if XM_TIMING_FUNCTIONS
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+	assert(sample < ctx->instruments[instr-1].num_samples);
 	return ctx->samples[ctx->instruments[instr-1].samples_index + sample].latest_trigger;
+	#else
+	assert(sample == 0);
+	return ctx->samples[instr-1].latest_trigger;
+	#endif
+	#else
+	return 0;
+	#endif
 }
+
 uint32_t xm_get_latest_trigger_of_channel(const xm_context_t* ctx,
                                           uint8_t chn) {
+	assert(chn >= 1 && chn <= ctx->module.num_channels);
+
+	#if XM_TIMING_FUNCTIONS
 	return ctx->channels[chn - 1].latest_trigger;
-}
-#else
-uint32_t xm_get_latest_trigger_of_instrument([[maybe_unused]] const xm_context_t* ctx, [[maybe_unused]] uint8_t instr) {
+	#else
 	return 0;
+	#endif
 }
-uint32_t xm_get_latest_trigger_of_sample([[maybe_unused]] const xm_context_t* ctx, [[maybe_unused]] uint8_t instr, [[maybe_unused]] uint8_t sample) {
-	return 0;
-}
-uint32_t xm_get_latest_trigger_of_channel([[maybe_unused]] const xm_context_t* ctx, [[maybe_unused]] uint8_t chn) {
-	return 0;
-}
-#endif
 
 bool xm_is_channel_active(const xm_context_t* ctx, uint8_t chn) {
 	const xm_channel_context_t* ch = ctx->channels + (chn - 1);
@@ -218,10 +248,18 @@ float xm_get_panning_of_channel(const xm_context_t* ctx, uint8_t chn) {
 }
 
 uint8_t xm_get_instrument_of_channel(const xm_context_t* ctx, uint8_t chn) {
+	assert(chn >= 1 && chn <= ctx->module.num_channels);
 	const xm_channel_context_t* ch = ctx->channels + (chn - 1);
+
+	#if HAS_INSTRUMENTS
 	if(ch->instrument == NULL) return 0;
 	assert(ch->instrument - ctx->instruments < UINT8_MAX);
 	return (uint8_t)(1 + (ch->instrument - ctx->instruments));
+	#else
+	if(ch->sample == NULL) return 0;
+	assert(ch->sample - ctx->samples < UINT8_MAX);
+	return (uint8_t)(1 + (ch->sample - ctx->samples));
+	#endif
 }
 
 void xm_reset_context(xm_context_t* ctx) {

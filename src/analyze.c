@@ -60,7 +60,7 @@ static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
 	}
 
 	if(ch->next_instrument == 0
-	   || ch->next_instrument > ctx->module.num_instruments) {
+	   || ch->next_instrument > NUM_INSTRUMENTS(&ctx->module)) {
 		*used_features |= (uint64_t)1 << FEATURE_INVALID_INSTRUMENTS;
 		return;
 	}
@@ -180,10 +180,6 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			if(ch->period == 1) {
 				used_features |= (uint64_t)1
 					<< FEATURE_CLAMP_PERIODS;
-			}
-
-			if(ch->instrument == NULL) {
-				continue;
 			}
 
 			if(ch->current->note == NOTE_KEY_OFF) {
