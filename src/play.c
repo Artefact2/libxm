@@ -1372,7 +1372,7 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 			break;
 		}
 	#elif HAS_EFFECT(EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE)
-	case TONE_PORTAMENTO_VOLUME_SLIDE:
+	case EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE:
 		xm_tone_portamento(ctx, ch);
 		goto volume_slide;
 	#elif HAS_EFFECT(EFFECT_TONE_PORTAMENTO)
