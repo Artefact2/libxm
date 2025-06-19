@@ -221,17 +221,21 @@ uint32_t xm_get_latest_trigger_of_channel(const xm_context_t* ctx,
 }
 
 bool xm_is_channel_active(const xm_context_t* ctx, uint8_t chn) {
+	assert(chn >= 1 && chn <= ctx->module.num_channels);
 	const xm_channel_context_t* ch = ctx->channels + (chn - 1);
 	return ch->sample != NULL
 		&& (ch->actual_volume[0] + ch->actual_volume[1]) > 0.001f;
 }
 
 float xm_get_frequency_of_channel(const xm_context_t* ctx, uint8_t chn) {
+	assert(chn >= 1 && chn <= ctx->module.num_channels);
 	return (float)ctx->channels[chn - 1].step
 		* (float)ctx->module.rate / (float)SAMPLE_MICROSTEPS;
 }
 
 float xm_get_volume_of_channel(const xm_context_t* ctx, uint8_t chn) {
+	assert(chn >= 1 && chn <= ctx->module.num_channels);
+
 	/* Instead of duplicating the panning and volume formulas, just
 	   reciprocate the panning math from cached computed volumes */
 	float x = ctx->channels[chn-1].actual_volume[0];
@@ -240,6 +244,8 @@ float xm_get_volume_of_channel(const xm_context_t* ctx, uint8_t chn) {
 }
 
 float xm_get_panning_of_channel(const xm_context_t* ctx, uint8_t chn) {
+	assert(chn >= 1 && chn <= ctx->module.num_channels);
+
 	float x = ctx->channels[chn-1].actual_volume[0];
 	float y = ctx->channels[chn-1].actual_volume[1];
 	x *= x;

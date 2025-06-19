@@ -143,7 +143,7 @@ static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
 
 	#if HAS_FEATURE(FEATURE_WAVEFORM_SINE)
 	case WAVEFORM_SINE:
-		static const int8_t sin_lut[] = {
+		static constexpr int8_t sin_lut[] = {
 			/* 128*sinf(2πx/64) for x in 0..16 */
 			0, 12, 24, 37, 48, 60, 71, 81,
 			90, 98, 106, 112, 118, 122, 125, 127,
@@ -284,10 +284,10 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		return;
 	}
 
-	static const uint8_t add[] = {
+	static constexpr uint8_t add[] = {
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 4, 8, 16, 0, 0,
 	};
-	static const uint8_t mul[] = {
+	static constexpr uint8_t mul[] = {
 		1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 3, 2,
 	};
 	uint8_t x = (uint8_t)(ch->multi_retrig_param >> 4);
@@ -542,7 +542,9 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	if(s->instrument) {
 		if(ch->sample) {
 			ch->volume = ch->sample->volume;
+			#if HAS_PANNING
 			ch->panning = ch->sample->panning;
+			#endif
 		}
 		if(!NOTE_IS_KEY_OFF(s->note)) {
 			xm_trigger_instrument(ctx, ch);
@@ -559,10 +561,11 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		RESET_VOLUME_OFFSET(ch);
 		ch->volume = (uint8_t)(VOLUME_COLUMN(s) - 0x10);
 	}
-	if(HAS_VOLUME_EFFECT(VOLUME_EFFECT_SET_PANNING)
-	   && VOLUME_COLUMN(s) >> 4 == VOLUME_EFFECT_SET_PANNING) {
+	#if HAS_PANNING && HAS_VOLUME_EFFECT(VOLUME_EFFECT_SET_PANNING)
+	if(VOLUME_COLUMN(s) >> 4 == VOLUME_EFFECT_SET_PANNING) {
 		ch->panning = VOLUME_COLUMN(s) << 4;
 	}
+	#endif
 
 	#if HAS_TONE_PORTAMENTO
 	/* Set tone portamento memory (even on tick 0) */
@@ -650,7 +653,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_SET_PANNING)
+	#if HAS_PANNING && HAS_EFFECT(EFFECT_SET_PANNING)
 	case EFFECT_SET_PANNING:
 		ch->panning = s->effect_param;
 		break;
@@ -699,7 +702,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 		ch->volume_envelope_frame_count = s->effect_param;
 		#endif
-		#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
+		#if HAS_PANNING && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 		ch->panning_envelope_frame_count = s->effect_param;
 		#endif
 		break;
@@ -809,7 +812,7 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 	ch->volume_envelope_frame_count = 0;
 	#endif
 
-	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	ch->panning_envelope_frame_count = 0;
 	#endif
 
@@ -1170,7 +1173,7 @@ static void xm_tick_envelopes([[maybe_unused]] xm_channel_context_t* ch) {
 		: MAX_ENVELOPE_VALUE;
 	#endif
 
-	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	ch->panning_envelope_panning =
 		inst->panning_envelope.num_points
 		? xm_tick_envelope(ch, &(inst->panning_envelope),
@@ -1220,14 +1223,6 @@ void xm_tick(xm_context_t* ctx) {
 			  + ctx->module.rate / 2)
 			 / ctx->module.rate);
 
-		uint8_t panning = (uint8_t)
-			(ch->panning
-			 + (PANNING_ENVELOPE_PANNING(ch)
-			    - MAX_ENVELOPE_VALUE / 2)
-			 * (MAX_PANNING/2
-			    - __builtin_abs(ch->panning - MAX_PANNING / 2))
-			 / (MAX_ENVELOPE_VALUE / 2));
-
 		assert(ch->volume <= MAX_VOLUME);
 		assert(VOLUME_OFFSET(ch) >= -MAX_VOLUME
 		       && VOLUME_OFFSET(ch) <= MAX_VOLUME);
@@ -1256,12 +1251,51 @@ void xm_tick(xm_context_t* ctx) {
 		float* out = ch->actual_volume;
 		#endif
 
+		#if HAS_PANNING
+		uint8_t panning = (uint8_t)
+			(ch->panning
+			 + (PANNING_ENVELOPE_PANNING(ch)
+			    - MAX_ENVELOPE_VALUE / 2)
+			 * (MAX_PANNING/2
+			    - __builtin_abs(ch->panning - MAX_PANNING / 2))
+			 / (MAX_ENVELOPE_VALUE / 2));
+
 		/* See https://modarchive.org/forums/index.php?topic=3517.0
 		 * and https://github.com/Artefact2/libxm/pull/16 */
 		out[0] = volume * sqrtf((float)(MAX_PANNING - panning)
 		                        / (float)MAX_PANNING);
 		out[1] = volume * sqrtf((float)panning
 		                        / (float)MAX_PANNING);
+
+		#elif XM_PANNING_TYPE
+		static constexpr float panning_lut[2] = {
+			/* No constexpr sqrtf() in C23 :-( */
+			#if XM_PANNING_TYPE == 1
+			0.66015625f,  0.75f
+			#elif XM_PANNING_TYPE == 2
+			0.609375f, 0.7890625f
+			#elif XM_PANNING_TYPE == 3
+			0.55859375f, 0.828125f
+			#elif XM_PANNING_TYPE == 4
+			0.5f, 0.86328125f
+			#elif XM_PANNING_TYPE == 5
+			0.431640625f, 0.8984375f
+			#elif XM_PANNING_TYPE == 6
+			0.353515625f, 0.93359375f
+			#else
+			0.25f, 0.96484375f
+			#endif
+		};
+		if(((i >> 1) ^ i) & 1) {
+			out[0] = volume * panning_lut[0];
+			out[1] = volume * panning_lut[1];
+		} else {
+			out[0] = volume * panning_lut[1];
+			out[1] = volume * panning_lut[0];
+		}
+		#else
+		out[0] = out[1] = volume * 0.70703125f;
+		#endif
 	}
 
 	ctx->current_tick++;
@@ -1315,14 +1349,14 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 		break;
 	#endif
 
-	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_PANNING_SLIDE_LEFT)
+	#if HAS_PANNING && HAS_VOLUME_EFFECT(VOLUME_EFFECT_PANNING_SLIDE_LEFT)
 	case VOLUME_EFFECT_PANNING_SLIDE_LEFT:
 		xm_param_slide(&ch->panning, VOLUME_COLUMN(ch->current) & 0x0F,
 		               MAX_PANNING-1);
 		break;
 	#endif
 
-	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_PANNING_SLIDE_RIGHT)
+	#if HAS_PANNING && HAS_VOLUME_EFFECT(VOLUME_EFFECT_PANNING_SLIDE_RIGHT)
 	case VOLUME_EFFECT_PANNING_SLIDE_RIGHT:
 		xm_param_slide(&ch->panning, VOLUME_COLUMN(ch->current) << 4,
 		               MAX_PANNING-1);
@@ -1465,7 +1499,7 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 		break;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_PANNING_SLIDE)
+	#if HAS_PANNING && HAS_EFFECT(EFFECT_PANNING_SLIDE)
 	case EFFECT_PANNING_SLIDE:
 		if(ch->current->effect_param > 0) {
 			ch->panning_slide_param = ch->current->effect_param;

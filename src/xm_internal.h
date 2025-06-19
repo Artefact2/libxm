@@ -50,6 +50,9 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
                "XM_LIBXM_DELTA_SAMPLES cannot be used "
                "with XM_SAMPLE_TYPE=float");
 
+static_assert(XM_PANNING_TYPE >= 0 && XM_PANNING_TYPE <= 8);
+#define HAS_PANNING (XM_PANNING_TYPE == 8)
+
 /* ----- Libxm constants ----- */
 
 #define WAVEFORM_SINE 0
@@ -259,7 +262,8 @@ typedef struct xm_sample_s xm_sample_t;
                             && HAS_SUSTAIN)
 #define HAS_INSTRUMENTS (XM_TIMING_FUNCTIONS \
                          || HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)     \
-                         || HAS_FEATURE(FEATURE_PANNING_ENVELOPES) \
+                         || (HAS_PANNING \
+                             && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)) \
                          || HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS) \
                          || HAS_FADEOUT_VOLUME \
                          || HAS_FEATURE(FEATURE_AUTOVIBRATO) \
@@ -275,7 +279,7 @@ struct xm_instrument_s {
 	xm_envelope_t volume_envelope;
 	#endif
 
-	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	xm_envelope_t panning_envelope;
 	#endif
 
@@ -333,7 +337,8 @@ struct xm_pattern_slot_s {
 	uint8_t note; /* 0..=MAX_NOTE or NOTE_KEY_OFF or NOTE_RETRIGGER */
 	uint8_t instrument; /* 1..=128 */
 
-	#define HAS_VOLUME_COLUMN ((~(XM_DISABLED_VOLUME_EFFECTS)) & 65534)
+	#define HAS_VOLUME_COLUMN ((~(XM_DISABLED_VOLUME_EFFECTS)) & \
+	             (HAS_PANNING ? 0b1111111111111110 : 0b1000111111111110))
 	#if HAS_VOLUME_COLUMN
 	#define VOLUME_COLUMN(s) ((s)->volume_column)
 	uint8_t volume_column;
@@ -460,7 +465,7 @@ struct xm_channel_context_s {
 	uint16_t volume_envelope_frame_count;
 	#endif
 
-	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	uint16_t panning_envelope_frame_count;
 	#endif
 
@@ -471,7 +476,7 @@ struct xm_channel_context_s {
 	#define VOLUME_ENVELOPE_VOLUME(ch) MAX_ENVELOPE_VALUE
 	#endif
 
-	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	#define PANNING_ENVELOPE_PANNING(ch) ((ch)->panning_envelope_panning)
 	uint8_t panning_envelope_panning; /* 0..=MAX_ENVELOPE_VALUE */
 	#else
@@ -493,7 +498,10 @@ struct xm_channel_context_s {
 	#define RESET_VOLUME_OFFSET(ch)
 	#endif
 
+	#if HAS_PANNING
 	uint8_t panning; /* 0..MAX_PANNING  */
+	#endif
+
 	uint8_t orig_note; /* Last valid note seen in a slot. Could be 0. */
 	int8_t finetune;
 	uint8_t next_instrument; /* Last instrument seen in the
@@ -518,7 +526,7 @@ struct xm_channel_context_s {
 	uint8_t global_volume_slide_param;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_PANNING_SLIDE)
+	#if HAS_PANNING && HAS_EFFECT(EFFECT_PANNING_SLIDE)
 	uint8_t panning_slide_param;
 	#endif
 
@@ -687,7 +695,7 @@ struct xm_channel_context_s {
 		+ 2*!HAS_GLISSANDO_CONTROL \
 		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_UP) \
 		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_DOWN) \
-		+ !HAS_EFFECT(EFFECT_PANNING_SLIDE) \
+		+ !(HAS_PANNING && HAS_EFFECT(EFFECT_PANNING_SLIDE)) \
 		+ 2*!HAS_EFFECT(EFFECT_PATTERN_LOOP) \
 		+ !HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET) \
 		+ !HAS_SAMPLE_OFFSET_INVALID \
@@ -698,9 +706,10 @@ struct xm_channel_context_s {
 		+ 3*!HAS_FEATURE(FEATURE_AUTOVIBRATO) \
 		+ 2*!HAS_FADEOUT_VOLUME \
 		+ 3*!HAS_FEATURE(FEATURE_VOLUME_ENVELOPES) \
-		+ 3*!HAS_FEATURE(FEATURE_PANNING_ENVELOPES) \
+		+ 3*!(HAS_PANNING && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)) \
 		+ !HAS_SUSTAIN \
-		+ !XM_MUTING_FUNCTIONS)
+		+ !XM_MUTING_FUNCTIONS \
+		+ !HAS_PANNING)
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif

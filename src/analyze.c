@@ -12,6 +12,7 @@ const uint16_t XM_ANALYZE_OUTPUT_SIZE =
 	41 /* disabled effects */
 	+ 36 /* disabled volume effects */
 	+ 42 /* disabled features */
+	+ 20 /* panning type */
 	+ 1; /* terminating NUL */
 
 /* ----- Static functions ----- */
@@ -105,12 +106,14 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	uint64_t used_effects = 0;
 	uint16_t used_volume_effects = 0;
 	uint16_t off = 0;
+	int16_t pannings[4] = { -1, -1, -1, -1 };
+	uint8_t panning_type = 0;
 
 	while(ctx->loop_count == 0) {
 		xm_tick(ctx);
 
 		xm_channel_context_t* ch = ctx->channels;
-		for(uint8_t i = ctx->module.num_channels; i; --i, ++ch) {
+		for(uint8_t i = 0; i < ctx->module.num_channels; ++i, ++ch) {
 			assert(ch->current->effect_type < 64); /* XXX */
 			static_assert(EFFECT_ARPEGGIO == 0);
 			if(ch->current->effect_type == 0) {
@@ -224,6 +227,27 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 					<< (12|ch->instrument->vibrato_type);
 			}
 			#endif
+
+			int16_t panning = (int16_t)
+				(xm_get_panning_of_channel(ctx, i+1)
+				 * UINT8_MAX);
+			if(pannings[i % 4] == -1) {
+				pannings[i % 4] = panning;
+			} else if(pannings[i % 4] != panning) {
+				panning_type = 8;
+			}
+		}
+	}
+
+	if(panning_type == 0
+	   && pannings[0] == pannings[3]
+	   && pannings[1] == pannings[2]) {
+		if(pannings[0] <= pannings[1]) {
+			panning_type = (uint8_t)
+				(8 * (pannings[1] - pannings[0]) / 256);
+			assert(panning_type < 8);
+		} else {
+			panning_type = 8;
 		}
 	}
 
@@ -233,6 +257,8 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	append_u16(out, &off, (uint16_t)(~used_volume_effects));
 	append_str(out, &off, " -DXM_DISABLED_FEATURES=0x");
 	append_u64(out, &off, (uint64_t)(~used_features));
+	append_str(out, &off, " -DXM_PANNING_TYPE=");
+	append_char(out, &off, (char)('0' + panning_type));
 
 	if(off < XM_ANALYZE_OUTPUT_SIZE) {
 		out[off] = '\0';

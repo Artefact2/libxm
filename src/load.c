@@ -1156,7 +1156,10 @@ static uint32_t xm_load_xm0104_sample_header(xm_sample_t* sample, bool* is_16bit
 		NOTICE("ignoring unknown flags (%d) in sample", flags);
 	}
 
+	#if HAS_PANNING
 	sample->panning = READ_U8(offset + 15);
+	#endif
+
 	sample->relative_note = (int8_t)READ_U8(offset + 16);
 
 	#if XM_STRINGS
@@ -1358,7 +1361,10 @@ static void xm_load_mod(xm_context_t* ctx,
 			volume = MAX_VOLUME;
 		}
 		smp->volume = (unsigned)volume & 0x7F;
+
+		#if HAS_PANNING
 		smp->panning = MAX_PANNING/2;
+		#endif
 
 		smp->length = (uint32_t)(READ_U16BE(offset + 22) * 2);
 		smp->index = smp->length;
@@ -1450,14 +1456,11 @@ static void xm_load_mod(xm_context_t* ctx,
 	xm_pattern_slot_t* slot = ctx->pattern_slots;
 	for(uint32_t row = 0; row < ctx->module.num_rows; ++row) {
 		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
-			static_assert(XM_AMIGA_STEREO_SEPARATION >= 0);
-			static_assert(XM_AMIGA_STEREO_SEPARATION <= 7);
-			#if HAS_VOLUME_COLUMN && XM_AMIGA_STEREO_SEPARATION > 0
+			#if HAS_VOLUME_COLUMN
 			/* Emulate hard panning (LRRL LRRL etc) */
 			if(!has_panning_effects && slot->instrument) {
 				slot->volume_column = (((ch >> 1) ^ ch) & 1)
-					? (0xC8 + XM_AMIGA_STEREO_SEPARATION)
-					: (0xC8 - XM_AMIGA_STEREO_SEPARATION);
+					? 0xCF : 0xC1;
 			}
 			#endif
 

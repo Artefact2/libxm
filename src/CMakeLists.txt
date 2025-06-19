@@ -70,9 +70,9 @@ set(XM_MICROSTEP_BITS "12" CACHE STRING
 	"Precision of sample stepping (8..12, higher = better pitch accuracy, lower = can load larger samples)")
 target_compile_definitions(xm PRIVATE XM_MICROSTEP_BITS=${XM_MICROSTEP_BITS})
 
-set(XM_AMIGA_STEREO_SEPARATION "7" CACHE STRING
-	"Stereo separation strength for MODs without panning effects (0=Mono to 7=Hard Amiga panning)")
-target_compile_definitions(xm PRIVATE XM_AMIGA_STEREO_SEPARATION=${XM_AMIGA_STEREO_SEPARATION})
+set(XM_PANNING_TYPE "8" CACHE STRING
+	"Panning type (0=Mono, 1..7=Hard Amiga panning, 8=Full stereo panning)")
+target_compile_definitions(xm PRIVATE XM_PANNING_TYPE=${XM_PANNING_TYPE})
 
 set(XM_DISABLED_EFFECTS "0" CACHE STRING
 	"Bit mask of effects to disable, see xm_internal.h for EFFECT_ constants")
