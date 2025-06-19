@@ -58,7 +58,10 @@ option_and_define(XM_STRINGS
 	"Store module, instrument and sample names in context" "ON")
 
 option_and_define(XM_TIMING_FUNCTIONS
-	"Enable timing functions for instruments, samples and channels" "ON")
+	"Enable xm_latest_trigger_of_*() functions for instruments, samples and channels" "ON")
+
+option_and_define(XM_MUTING_FUNCTIONS
+	"Enable xm_mute_*() functions for instruments and channels" "ON")
 
 set(XM_SAMPLE_TYPE "int16_t" CACHE STRING
 	"Sample type of internal samples (int8_t,int16_t,float)")

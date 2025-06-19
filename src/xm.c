@@ -29,16 +29,30 @@ void xm_seek(xm_context_t* ctx, uint8_t pot, uint8_t row, uint8_t tick) {
 
 
 
-bool xm_mute_channel(xm_context_t* ctx, uint8_t channel, bool mute) {
+bool xm_mute_channel(xm_context_t* ctx, uint8_t channel,
+                     [[maybe_unused]] bool mute) {
+	assert(channel <= ctx->module.num_channels);
+
+	#if XM_MUTING_FUNCTIONS
 	bool old = ctx->channels[channel - 1].muted;
 	ctx->channels[channel - 1].muted = mute;
 	return old;
+	#else
+	return false;
+	#endif
 }
 
-bool xm_mute_instrument(xm_context_t* ctx, uint8_t instr, bool mute) {
+bool xm_mute_instrument(xm_context_t* ctx, uint8_t instr,
+                        [[maybe_unused]] bool mute) {
+	assert(instr >= 1 && instr <= ctx->module.num_instruments);
+
+	#if XM_MUTING_FUNCTIONS
 	bool old = ctx->instruments[instr - 1].muted;
 	ctx->instruments[instr - 1].muted = mute;
 	return old;
+	#else
+	return false;
+	#endif
 }
 
 

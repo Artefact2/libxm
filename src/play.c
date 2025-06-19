@@ -1635,7 +1635,8 @@ static void xm_next_of_channel(xm_context_t* ctx, xm_channel_context_t* ch,
                                float* out_left, float* out_right) {
 	const float fval = xm_next_of_sample(ctx, ch) * AMPLIFICATION;
 
-	if(ch->muted || (ch->instrument != NULL && ch->instrument->muted)
+	if(CHANNEL_MUTED(ch)
+	   || (ch->instrument != NULL && INSTRUMENT_MUTED(ch->instrument))
 	   || (ctx->module.max_loop_count > 0
 	       && ctx->loop_count >= ctx->module.max_loop_count)) {
 		return;

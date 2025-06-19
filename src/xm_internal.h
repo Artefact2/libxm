@@ -292,7 +292,12 @@ struct xm_instrument_s {
 	uint8_t vibrato_rate;
 	#endif
 
+	#if XM_MUTING_FUNCTIONS
+	#define INSTRUMENT_MUTED(inst) ((inst)->muted)
 	bool muted;
+	#else
+	#define INSTRUMENT_MUTED(inst) false
+	#endif
 
 	#if XM_STRINGS
 	static_assert(INSTRUMENT_NAME_LENGTH % 8 == 0);
@@ -302,7 +307,8 @@ struct xm_instrument_s {
 	#define INSTRUMENT_PADDING (2 \
 		+ 4*!HAS_FEATURE(FEATURE_AUTOVIBRATO) \
 		+ 2*!HAS_FADEOUT_VOLUME \
-		+ (MAX_NOTE + 3)*!HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS))
+		+ (MAX_NOTE + 3)*!HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS) \
+		+ !XM_MUTING_FUNCTIONS)
 	#define INSTRUMENT_ALIGN (XM_TIMING_FUNCTIONS ? 4 : 2)
 	#if INSTRUMENT_PADDING % INSTRUMENT_ALIGN
 	char __pad[INSTRUMENT_PADDING % INSTRUMENT_ALIGN];
@@ -626,7 +632,12 @@ struct xm_channel_context_s {
 	#define SUSTAINED(ch) true
 	#endif
 
+	#if XM_MUTING_FUNCTIONS
+	#define CHANNEL_MUTED(ch) ((ch)->muted)
 	bool muted;
+	#else
+	#define CHANNEL_MUTED(ch) false
+	#endif
 
 	#define CHANNEL_CONTEXT_PADDING (4 \
 		+ 4*!XM_TIMING_FUNCTIONS \
@@ -661,7 +672,8 @@ struct xm_channel_context_s {
 		+ 2*!HAS_FADEOUT_VOLUME \
 		+ 3*!HAS_FEATURE(FEATURE_VOLUME_ENVELOPES) \
 		+ 3*!HAS_FEATURE(FEATURE_PANNING_ENVELOPES) \
-		+ !HAS_SUSTAIN)
+		+ !HAS_SUSTAIN \
+		+ !XM_MUTING_FUNCTIONS)
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif
