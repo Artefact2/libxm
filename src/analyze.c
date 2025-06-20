@@ -94,10 +94,11 @@ static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
 }
 
 void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
-	#if XM_DISABLED_FEATURES > 0 || XM_DISABLED_EFFECTS > 0
+	#if XM_DISABLED_FEATURES > 0 || XM_DISABLED_EFFECTS > 0 \
+		|| XM_LOOPING_TYPE != 2
 	NOTICE("suggested flags will be inaccurate; recompile libxm with"
 	       " -DXM_DISABLED_FEATURES=0 -DXM_DISABLED_EFFECTS=0"
-	       " to suppress this warning");
+	       " -DXM_LOOPING_TYPE=2 to suppress this warning");
 	#endif
 
 	uint64_t used_features = AMIGA_FREQUENCIES(&ctx->module)
@@ -109,7 +110,7 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	int16_t pannings[4] = { -1, -1, -1, -1 };
 	uint8_t panning_type = 0;
 
-	while(ctx->loop_count == 0) {
+	while(XM_LOOPING_TYPE != 0 && LOOP_COUNT(ctx) == 0) {
 		xm_tick(ctx);
 
 		xm_channel_context_t* ch = ctx->channels;

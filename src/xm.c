@@ -10,12 +10,15 @@
 
 
 
-void xm_set_max_loop_count(xm_context_t* context, uint8_t loopcnt) {
+void xm_set_max_loop_count([[maybe_unused]] xm_context_t* context,
+                           [[maybe_unused]] uint8_t loopcnt) {
+	#if XM_LOOPING_TYPE == 2
 	context->module.max_loop_count = loopcnt;
+	#endif
 }
 
-uint8_t xm_get_loop_count(const xm_context_t* context) {
-	return context->loop_count;
+uint8_t xm_get_loop_count([[maybe_unused]] const xm_context_t* context) {
+	return LOOP_COUNT(context);
 }
 
 
@@ -168,7 +171,8 @@ void xm_get_playing_speed(const xm_context_t* ctx,
 
 void xm_get_position(const xm_context_t* ctx, uint8_t* pattern_index,
                      uint8_t* pattern, uint8_t* row, uint32_t* samples) {
-	if(pattern_index) *pattern_index = ctx->current_table_index;
+	static_assert(PATTERN_ORDER_TABLE_LENGTH - 1 <= UINT8_MAX);
+	if(pattern_index) *pattern_index = (uint8_t)ctx->current_table_index;
 	if(pattern) *pattern = ctx->module.pattern_table[ctx->current_table_index];
 	if(row) *row = ctx->current_row - 1;
 	if(samples) {
@@ -272,8 +276,10 @@ void xm_reset_context(xm_context_t* ctx) {
 	__builtin_memset(ctx->channels, 0, sizeof(xm_channel_context_t)
 	                                     * ctx->module.num_channels);
 
+	#if XM_LOOPING_TYPE == 2
 	__builtin_memset(ctx->row_loop_count, 0, MAX_ROWS_PER_PATTERN
 	                                           * ctx->module.length);
+	#endif
 
 	__builtin_memset((char*)ctx
 	                   + offsetof(xm_context_t, remaining_samples_in_tick),

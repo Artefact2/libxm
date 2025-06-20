@@ -69,7 +69,6 @@ static void xm_trigger_note(xm_context_t*, xm_channel_context_t*) __attribute__(
 static void xm_cut_note(xm_channel_context_t*) __attribute__((nonnull));
 static void xm_key_off(xm_channel_context_t*) __attribute__((nonnull));
 
-static void xm_post_pattern_change(xm_context_t*) __attribute__((nonnull));
 static void xm_row(xm_context_t*) __attribute__((nonnull));
 
 static float xm_sample_at(const xm_context_t*, const xm_sample_t*, uint32_t) __attribute__((warn_unused_result)) __attribute__((nonnull)) __attribute__((const));
@@ -417,13 +416,6 @@ static void xm_param_slide(uint8_t* param, uint8_t rawval, uint8_t max) {
 		if(ckd_sub(param, *param, rawval)) {
 			*param = 0;
 		}
-	}
-}
-
-static void xm_post_pattern_change(xm_context_t* ctx) {
-	/* Loop if necessary */
-	if(ctx->current_table_index >= ctx->module.length) {
-		ctx->current_table_index = ctx->module.restart_position;
 	}
 }
 
@@ -781,7 +773,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			ch->pattern_loop_count++;
 			ctx->position_jump = true;
 			ctx->jump_row = ch->pattern_loop_origin;
-			ctx->jump_dest = ctx->current_table_index;
+			assert(ctx->current_table_index <= UINT8_MAX);
+			ctx->jump_dest = (uint8_t)ctx->current_table_index;
 		} else {
 			/* Set loop start point */
 			ch->pattern_loop_origin = ctx->current_row;
@@ -1017,7 +1010,10 @@ static void xm_row(xm_context_t* ctx) {
 			ctx->current_table_index = ctx->jump_dest;
 		} else
 		#endif
-		ctx->current_table_index++;
+		{
+			ctx->current_table_index++;
+			MAYBE_RESTART_POT(ctx);
+		}
 
 		#if HAS_EFFECT(EFFECT_PATTERN_BREAK)
 		ctx->pattern_break = false;
@@ -1031,8 +1027,6 @@ static void xm_row(xm_context_t* ctx) {
 		ctx->current_row = ctx->jump_row;
 		ctx->jump_row = 0;
 		#endif
-
-		xm_post_pattern_change(ctx);
 	}
 
 	xm_pattern_t* cur = ctx->patterns
@@ -1078,7 +1072,11 @@ static void xm_row(xm_context_t* ctx) {
 
 	if(!in_a_loop) {
 		/* No E6y loop is in effect (or we are in the first pass) */
-		ctx->loop_count = (ctx->row_loop_count[MAX_ROWS_PER_PATTERN * ctx->current_table_index + ctx->current_row]++);
+		#if XM_LOOPING_TYPE == 2
+		ctx->loop_count = ctx->row_loop_count[ctx->current_table_index
+		                                      * MAX_ROWS_PER_PATTERN
+		                                      + ctx->current_row]++;
+		#endif
 	}
 
 	ctx->current_row++; /* Since this is an uint8, this line can
@@ -1087,8 +1085,6 @@ static void xm_row(xm_context_t* ctx) {
 	                     * pattern. */
 	if(!POSITION_JUMP(ctx) && !PATTERN_BREAK(ctx) &&
 	   (ctx->current_row >= cur->num_rows || ctx->current_row == 0)) {
-		ctx->current_table_index++;
-
 		#if HAS_JUMP_ROW
 		/* This will be 0 most of the time, except when E60 is used */
 		ctx->current_row = ctx->jump_row;
@@ -1097,7 +1093,8 @@ static void xm_row(xm_context_t* ctx) {
 		ctx->current_row = 0;
 		#endif
 
-		xm_post_pattern_change(ctx);
+		ctx->current_table_index++;
+		MAYBE_RESTART_POT(ctx);
 	}
 }
 
@@ -1681,8 +1678,8 @@ static void xm_next_of_channel(xm_context_t* ctx, xm_channel_context_t* ch,
 
 	if(CHANNEL_MUTED(ch)
 	   || (INSTRUMENT(ch) != NULL && INSTRUMENT_MUTED(INSTRUMENT(ch)))
-	   || (ctx->module.max_loop_count > 0
-	       && ctx->loop_count >= ctx->module.max_loop_count)) {
+	   || (MAX_LOOP_COUNT(&ctx->module) > 0
+	       && LOOP_COUNT(ctx) >= MAX_LOOP_COUNT(&ctx->module))) {
 		return;
 	}
 

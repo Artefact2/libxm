@@ -186,8 +186,11 @@ bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
 	   || ckd_add(&sz, sz, sizeof(xm_sample_point_t)
 	              * out->samples_data_length)
 	   || ckd_add(&sz, sz, sizeof(xm_channel_context_t) * out->num_channels)
+	   #if XM_LOOPING_TYPE == 2
 	   || ckd_add(&sz, sz, sizeof(uint8_t) * MAX_ROWS_PER_PATTERN
-	              * out->pot_length)) {
+	                                       * out->pot_length)
+	   #endif
+	   ) {
 		NOTICE("module too big for uint32");
 		return false;
 	}
@@ -247,9 +250,11 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	ctx->pattern_slots = (xm_pattern_slot_t*)mempool;
 	mempool += sizeof(xm_pattern_slot_t) * p->num_rows * p->num_channels;
 
+	#if XM_LOOPING_TYPE == 2
 	ASSERT_ALIGNED(mempool, uint8_t);
 	ctx->row_loop_count = (uint8_t*)mempool;
 	mempool += sizeof(uint8_t) * MAX_ROWS_PER_PATTERN * p->pot_length;
+	#endif
 
 	assert(mempool - (char*)ctx == ctx_size);
 
@@ -286,12 +291,21 @@ uint32_t xm_size_for_context(const xm_prescan_data_t* p) {
 }
 
 uint32_t xm_context_size(const xm_context_t* ctx) {
-	/* Prescan already checked that ctx size < UINT32_MAX */
-	/* This prevents duplicating the logic from prescan, but assumes
-	   row_loop_count comes *last* in the allocated memory */
-	return (uint32_t)((char*)ctx->row_loop_count - (char*)ctx)
-		+ (uint32_t)(sizeof(uint8_t) * MAX_ROWS_PER_PATTERN
-		             * ctx->module.length);
+	return (uint32_t)
+		(sizeof(xm_context_t)
+		 + sizeof(xm_channel_context_t) * ctx->module.num_channels
+		 #if HAS_INSTRUMENTS
+		 + sizeof(xm_instrument_t) * ctx->module.num_instruments
+		 #endif
+		 + sizeof(xm_sample_t) * ctx->module.num_samples
+		 + sizeof(xm_pattern_t) * ctx->module.num_patterns
+		 + sizeof(xm_sample_point_t) * ctx->module.samples_data_length
+		 + sizeof(xm_pattern_slot_t) * ctx->module.num_rows
+		                             * ctx->module.num_channels
+		 #if XM_LOOPING_TYPE == 2
+		 + sizeof(uint8_t) * ctx->module.length * MAX_ROWS_PER_PATTERN
+		 #endif
+		 );
 }
 
 
@@ -428,6 +442,7 @@ static void xm_fixup_context(xm_context_t* ctx) {
 
 		if(slot->effect_type == EFFECT_SET_TEMPO
 		   && slot->effect_param == 0) {
+			#if XM_LOOPING_TYPE != 1
 			/* F00 is not great for a player, as it stops playback.
 			   Some modules use this to indicate the end of the
 			   song. Just loop back to the start of the module and
@@ -435,6 +450,7 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			   on max_loop_count. */
 			slot->effect_type = EFFECT_JUMP_TO_ORDER;
 			slot->effect_param = ctx->module.restart_position;
+			#endif
 		}
 
 		if(slot->effect_type == EFFECT_KEY_OFF
@@ -506,7 +522,10 @@ void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
 	CALC_OFFSET(ctx->samples, ctx);
 	CALC_OFFSET(ctx->samples_data, ctx);
 	CALC_OFFSET(ctx->channels, ctx);
+
+	#if XM_LOOPING_TYPE == 2
 	CALC_OFFSET(ctx->row_loop_count, ctx);
+	#endif
 
 	__builtin_memcpy(out, ctx, ctx_size);
 
@@ -532,7 +551,10 @@ xm_context_t* xm_create_context_from_libxm(char* data, uint16_t rate) {
 	APPLY_OFFSET(ctx->samples, ctx);
 	APPLY_OFFSET(ctx->samples_data, ctx);
 	APPLY_OFFSET(ctx->channels, ctx);
+
+	#if XM_LOOPING_TYPE == 2
 	APPLY_OFFSET(ctx->row_loop_count, ctx);
+	#endif
 
 	#if XM_LIBXM_DELTA_SAMPLES
 	for(uint32_t i = 1; i < ctx->module.samples_data_length; ++i) {
@@ -712,14 +734,23 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 	uint32_t header_size = READ_U32(offset);
 
 	mod->length = READ_U16(offset + 4);
+	if(mod->length > PATTERN_ORDER_TABLE_LENGTH) {
+		NOTICE("clamping module pot length %d to %d\n",
+		       mod->length, PATTERN_ORDER_TABLE_LENGTH);
+		mod->length = PATTERN_ORDER_TABLE_LENGTH;
+	}
+
+	#if XM_LOOPING_TYPE != 1
 	uint16_t restart_position = READ_U16(offset + 6);
-	if(restart_position >= PATTERN_ORDER_TABLE_LENGTH) {
+	if(restart_position >= mod->length) {
 		NOTICE("zeroing invalid restart position (%u -> 0)",
 		       restart_position);
 		restart_position = 0;
 	}
 	static_assert(UINT8_MAX >= PATTERN_ORDER_TABLE_LENGTH - 1);
 	mod->restart_position = (uint8_t)restart_position;
+	#endif
+
 	/* Prescan already checked MAX_CHANNELS */
 	static_assert(MAX_CHANNELS <= UINT8_MAX);
 	mod->num_channels = READ_U8(offset + 8);
@@ -732,17 +763,6 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 	#if HAS_INSTRUMENTS
 	mod->num_instruments = *out_num_instruments;
 	#endif
-
-	if(mod->restart_position >= mod->length) {
-		NOTICE("invalid restart_position, resetting to zero");
-		mod->restart_position = 0;
-	}
-
-	if(mod->length > PATTERN_ORDER_TABLE_LENGTH) {
-		NOTICE("clamping module pot length %d to %d\n",
-		       mod->length, PATTERN_ORDER_TABLE_LENGTH);
-		mod->length = PATTERN_ORDER_TABLE_LENGTH;
-	}
 
 	uint16_t flags = READ_U16(offset + 14);
 
@@ -1382,11 +1402,20 @@ static void xm_load_mod(xm_context_t* ctx,
 	}
 
 	ctx->module.length = READ_U8(offset);
+	if(ctx->module.length > 128) {
+		NOTICE("clamping module pot length %d to %d\n",
+		       ctx->module.length, 128);
+		ctx->module.length = 128;
+	}
+
+	#if XM_LOOPING_TYPE != 1
 	/* Fasttracker reads byte 951 as the restart point */
 	ctx->module.restart_position = READ_U8(offset + 1);
 	if(ctx->module.restart_position >= ctx->module.length) {
 		ctx->module.restart_position = 0;
 	}
+	#endif
+
 	static_assert(128 <= PATTERN_ORDER_TABLE_LENGTH);
 	READ_MEMCPY(ctx->module.pattern_table, offset + 2, 128);
 	offset += 134;

@@ -74,6 +74,10 @@ set(XM_PANNING_TYPE "8" CACHE STRING
 	"Panning type (0=Mono, 1..7=Hard Amiga panning, 8=Full stereo panning)")
 target_compile_definitions(xm PRIVATE XM_PANNING_TYPE=${XM_PANNING_TYPE})
 
+set(XM_LOOPING_TYPE "2" CACHE STRING
+	"Looping type (0=Loop forever, 1=Loop once, 2=Runtime based via xm_set_max_loop_count())")
+target_compile_definitions(xm PRIVATE XM_LOOPING_TYPE=${XM_LOOPING_TYPE})
+
 set(XM_DISABLED_EFFECTS "0" CACHE STRING
 	"Bit mask of effects to disable, see xm_internal.h for EFFECT_ constants")
 target_compile_definitions(xm PRIVATE "XM_DISABLED_EFFECTS=${XM_DISABLED_EFFECTS}ULL")

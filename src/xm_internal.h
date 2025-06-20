@@ -53,6 +53,9 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
 static_assert(XM_PANNING_TYPE >= 0 && XM_PANNING_TYPE <= 8);
 #define HAS_PANNING (XM_PANNING_TYPE == 8)
 
+static_assert(XM_LOOPING_TYPE != 1 || !HAS_EFFECT(0xB),
+              "XM_LOOPING_TYPE=1 requires disabling Bxx (jump to order) effect");
+
 /* ----- Libxm constants ----- */
 
 #define WAVEFORM_SINE 0
@@ -376,8 +379,26 @@ struct xm_module_s {
 	#endif
 
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
+
+	#if XM_LOOPING_TYPE != 1
+	#define MAYBE_RESTART_POT(ctx) do { \
+			if((ctx)->current_table_index >= (ctx)->module.length) \
+				(ctx)->current_table_index = \
+					(ctx)->module.restart_position; \
+			} while(0)
 	uint8_t restart_position;
+	#else
+	#define MAYBE_RESTART_POT(ctx) do {} while(0)
+	#endif
+
+	#if XM_LOOPING_TYPE == 2
+	#define MAX_LOOP_COUNT(mod) ((mod)->max_loop_count)
 	uint8_t max_loop_count;
+	#elif XM_LOOPING_TYPE == 1
+	#define MAX_LOOP_COUNT(mod) 1
+	#else
+	#define MAX_LOOP_COUNT(mod) 0
+	#endif
 
 	/* These are the values stored in the loaded file, not changed by any
 	   Fxx effect. Without these, it's impossible to properly implement
@@ -405,9 +426,11 @@ struct xm_module_s {
 	#define MODULE_PADDING (1 \
 		+ !(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
 		    && HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)) \
-		+ !HAS_INSTRUMENTS)
-	#if MODULE_PADDING % 4
-	char __pad[MODULE_PADDING % 4];
+		+ !HAS_INSTRUMENTS \
+		+ (XM_LOOPING_TYPE != 2) \
+		+ (XM_LOOPING_TYPE == 1))
+	#if MODULE_PADDING % POINTER_SIZE
+	char __pad[MODULE_PADDING % POINTER_SIZE];
 	#endif
 };
 typedef struct xm_module_s xm_module_t;
@@ -728,7 +751,10 @@ struct xm_context_s {
 	xm_sample_t* samples;
 	xm_sample_point_t* samples_data;
 	xm_channel_context_t* channels;
+
+	#if XM_LOOPING_TYPE == 2
 	uint8_t* row_loop_count;
+	#endif
 
 	xm_module_t module;
 
@@ -741,6 +767,7 @@ struct xm_context_s {
 	uint32_t generated_samples;
 	#endif
 
+	uint16_t current_table_index; /* 0..(module.length) */
 	uint8_t current_tick; /* Typically 0..(ctx->tempo) */
 	uint8_t current_row;
 
@@ -751,8 +778,6 @@ struct xm_context_s {
 	#else
 	#define EXTRA_ROWS_DONE(ctx) 0
 	#endif
-
-	uint8_t current_table_index; /* 0..(module.length) */
 
 	#define HAS_GLOBAL_VOLUME (HAS_EFFECT(EFFECT_SET_GLOBAL_VOLUME) \
 	                           || HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE))
@@ -800,9 +825,17 @@ struct xm_context_s {
 	uint8_t jump_row;
 	#endif
 
+	#if XM_LOOPING_TYPE == 2
+	#define LOOP_COUNT(ctx) ((ctx)->loop_count)
 	uint8_t loop_count;
+	#elif XM_LOOPING_TYPE == 1
+	#define LOOP_COUNT(ctx) (CURRENT_TEMPO(ctx) == 0 \
+	           || ((ctx)->current_table_index >= (ctx)->module.length))
+	#else
+	#define LOOP_COUNT(ctx) 0
+	#endif
 
-	#define CONTEXT_PADDING (3 \
+	#define CONTEXT_PADDING (2 \
 		+ 4*!XM_TIMING_FUNCTIONS \
 		+ !HAS_GLOBAL_VOLUME \
 		+ 2*!HAS_POSITION_JUMP \
@@ -810,7 +843,8 @@ struct xm_context_s {
 		+ !HAS_JUMP_ROW \
 		+ 2*!HAS_EFFECT(EFFECT_DELAY_PATTERN) \
 		+ !HAS_EFFECT(EFFECT_SET_TEMPO) \
-		+ !HAS_EFFECT(EFFECT_SET_BPM))
+		+ !HAS_EFFECT(EFFECT_SET_BPM) \
+		+ (XM_LOOPING_TYPE != 2))
 	#if CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CONTEXT_PADDING % POINTER_SIZE];
 	#endif
