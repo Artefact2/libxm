@@ -978,7 +978,7 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 
 	/* Read sample headers */
 	uint16_t samples_index = ctx->module.num_samples;
-	uint32_t extra_samples_size = 0;
+	[[maybe_unused]] uint32_t extra_samples_size = 0;
 	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	instr->samples_index = samples_index;
 	instr->num_samples = num_samples;
@@ -1352,8 +1352,11 @@ static void xm_load_mod(xm_context_t* ctx,
 
 	/* Read instruments */
 	for(uint8_t i = 0; i < ctx->module.num_samples; ++i) {
-		#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+		#if HAS_INSTRUMENTS
 		xm_instrument_t* ins = ctx->instruments + i;
+		#endif
+
+		#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 		ins->num_samples = 1;
 		ins->samples_index = i;
 		#endif

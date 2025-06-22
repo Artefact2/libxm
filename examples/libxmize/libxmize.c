@@ -13,7 +13,6 @@
 
 /* XXX: implement per-waveform zapping */
 static void zero_waveforms(xm_context_t* ctx) {
-	uint32_t total_zeroed_bytes = 0;
 	xm_sample_point_t* sample_data;
 	uint32_t sample_length;
 	for(uint8_t i = 1; i <= xm_get_number_of_instruments(ctx); ++i) {
@@ -23,8 +22,6 @@ static void zero_waveforms(xm_context_t* ctx) {
 			if(sample_data == NULL) continue;
 			memset(sample_data, 0, sample_length
 			       * sizeof(xm_sample_point_t));
-			total_zeroed_bytes += sample_length
-				* (uint32_t)sizeof(xm_sample_point_t);
 		}
 
 	}

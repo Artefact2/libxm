@@ -53,8 +53,8 @@ static uint16_t xm_linear_period(int16_t) __attribute__((warn_unused_result)) __
 static uint16_t xm_amiga_period(int16_t) __attribute__((warn_unused_result)) __attribute__((const));
 static uint16_t xm_period(const xm_context_t*, int16_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 
-static uint32_t xm_linear_frequency(uint16_t, uint8_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
-static uint32_t xm_amiga_frequency(uint16_t, uint8_t) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
+static uint32_t xm_linear_frequency(uint16_t, uint8_t) __attribute__((warn_unused_result)) __attribute__((const));
+static uint32_t xm_amiga_frequency(uint16_t, uint8_t) __attribute__((warn_unused_result)) __attribute__((const));
 static uint32_t xm_frequency(const xm_context_t*, const xm_channel_context_t*) __attribute__((warn_unused_result)) __attribute__((nonnull))  __attribute__((const));
 
 #if HAS_GLISSANDO_CONTROL
@@ -135,9 +135,16 @@ static void UPDATE_EFFECT_MEMORY_XY(uint8_t* memory, uint8_t value) {
 
 /* ----- Function definitions ----- */
 
-static int8_t xm_waveform(uint8_t waveform, uint8_t step) {
-	step %= 0x40;
+static int8_t xm_waveform([[maybe_unused]] uint8_t waveform,
+                          [[maybe_unused]] uint8_t step) {
+	#if !HAS_FEATURE(FEATURE_WAVEFORM_SINE) \
+		&& !HAS_FEATURE(FEATURE_WAVEFORM_SQUARE) \
+		&& !HAS_FEATURE(FEATURE_WAVEFORM_RAMP_DOWN) \
+		&& !HAS_FEATURE(FEATURE_WAVEFORM_RAMP_UP)
+	return 0;
+	#endif
 
+	step %= 0x40;
 	switch(waveform & 3) {
 
 	#if HAS_FEATURE(FEATURE_WAVEFORM_SINE)
@@ -557,7 +564,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	}
 	#if HAS_PANNING && HAS_VOLUME_EFFECT(VOLUME_EFFECT_SET_PANNING)
 	if(VOLUME_COLUMN(s) >> 4 == VOLUME_EFFECT_SET_PANNING) {
-		ch->panning = VOLUME_COLUMN(s) << 4;
+		ch->panning = (uint8_t)(VOLUME_COLUMN(s) << 4);
 	}
 	#endif
 
@@ -567,7 +574,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	   && VOLUME_COLUMN(s) >> 4 == VOLUME_EFFECT_TONE_PORTAMENTO) {
 		/* Mx *always* has precedence, even M0 */
 		if(VOLUME_COLUMN(s) & 0x0F) {
-			ch->tone_portamento_param = VOLUME_COLUMN(s) << 4;
+			ch->tone_portamento_param =
+				(uint8_t)(VOLUME_COLUMN(s) << 4);
 		}
 	} else if(HAS_EFFECT(EFFECT_TONE_PORTAMENTO)
 	          && s->effect_type == EFFECT_TONE_PORTAMENTO) {
@@ -582,6 +590,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		   effect (EDy), where y>0, uses this effect in its volume
 		   column, it will be ignored. */
 
+		#if HAS_VOLUME_COLUMN
 		switch(VOLUME_COLUMN(s) >> 4) {
 
 		#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_FINE_SLIDE_DOWN)
@@ -595,7 +604,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_FINE_SLIDE_UP)
 		case VOLUME_EFFECT_FINE_SLIDE_UP:
 			RESET_VOLUME_OFFSET(ch);
-			xm_param_slide(&ch->volume, VOLUME_COLUMN(s) << 4,
+			xm_param_slide(&ch->volume,
+			               (uint8_t)(VOLUME_COLUMN(s) << 4),
 			               MAX_VOLUME);
 			break;
 		#endif
@@ -606,11 +616,12 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 			   4xy/40y) */
 			/* S0 does nothing, but is deleted in load.c */
 			UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
-			                        VOLUME_COLUMN(s) << 4);
+			                        (uint8_t)(VOLUME_COLUMN(s) << 4));
 			break;
 		#endif
 
 		}
+		#endif
 	}
 
 	switch(s->effect_type) {
@@ -626,7 +637,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	#if HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_UP)
 	case EFFECT_FINE_VOLUME_SLIDE_UP:
 		if(s->effect_param) {
-			ch->fine_volume_slide_up_param = s->effect_param << 4;
+			ch->fine_volume_slide_up_param =
+				(uint8_t)(s->effect_param << 4);
 		}
 		RESET_VOLUME_OFFSET(ch);
 		xm_param_slide(&ch->volume,
@@ -934,7 +946,6 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		ch->finetune = ch->sample->finetune;
 	}
 
-	/* Update period */
 	ch->period = xm_period(ctx, (int16_t)(16 * (note - 1) + ch->finetune));
 
 	/* Handle 9xx: Sample offset here, since it does nothing outside of a
@@ -1317,6 +1328,7 @@ void xm_tick(xm_context_t* ctx) {
    xm_handle_pattern_slot(). */
 static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
                             xm_channel_context_t* ch) {
+	#if HAS_VOLUME_COLUMN
 	switch(VOLUME_COLUMN(ch->current) >> 4) {
 
 	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_SLIDE_DOWN)
@@ -1330,7 +1342,8 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 	#if HAS_VOLUME_EFFECT(VOLUME_EFFECT_SLIDE_UP)
 	case VOLUME_EFFECT_SLIDE_UP:
 		RESET_VOLUME_OFFSET(ch);
-		xm_param_slide(&ch->volume, VOLUME_COLUMN(ch->current) << 4,
+		xm_param_slide(&ch->volume,
+		               (uint8_t)(VOLUME_COLUMN(ch->current) << 4),
 		               MAX_VOLUME);
 		break;
 	#endif
@@ -1357,7 +1370,8 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 
 	#if HAS_PANNING && HAS_VOLUME_EFFECT(VOLUME_EFFECT_PANNING_SLIDE_RIGHT)
 	case VOLUME_EFFECT_PANNING_SLIDE_RIGHT:
-		xm_param_slide(&ch->panning, VOLUME_COLUMN(ch->current) << 4,
+		xm_param_slide(&ch->panning,
+		               (uint8_t)(VOLUME_COLUMN(ch->current) << 4),
 		               MAX_PANNING-1);
 		break;
 	#endif
@@ -1369,6 +1383,7 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 	#endif
 
 	}
+	#endif
 
 	switch(ch->current->effect_type) {
 
