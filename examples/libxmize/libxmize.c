@@ -11,11 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NOTICE(fmt, ...) do {                                           \
-		fprintf(stderr, "libxmize: %s(): " fmt "\n", __func__ __VA_OPT__(,) __VA_ARGS__); \
-		fflush(stderr); \
-	} while(0)
-
 /* XXX: implement per-waveform zapping */
 static void zero_waveforms(xm_context_t* ctx) {
 	uint32_t total_zeroed_bytes = 0;
@@ -33,13 +28,14 @@ static void zero_waveforms(xm_context_t* ctx) {
 		}
 
 	}
-
-	NOTICE("%u bytes zeroed", total_zeroed_bytes);
 }
 
+__attribute__((noreturn))
 int main(int argc, char** argv) {
 	if(argc < 2) {
-		NOTICE("Usage: %s [--zero-all-waveforms] [--analyze] <in.xm>", argv[0]);
+		fprintf(stderr,
+		        "Usage: %s [--zero-all-waveforms] [--analyze] <in.xm>\n",
+		        argv[0]);
 		exit(1);
 	}
 
@@ -60,7 +56,7 @@ int main(int argc, char** argv) {
 		exit(1);
 	}
 	if(in_length > UINT32_MAX) {
-		NOTICE("input file too large");
+		fprintf(stderr, "input file too large\n");
 		exit(1);
 	}
 	char* xmdata = malloc((size_t)in_length);
@@ -77,7 +73,7 @@ int main(int argc, char** argv) {
 
 	xm_prescan_data_t* p = alloca(XM_PRESCAN_DATA_SIZE);
 	if(!xm_prescan_module(xmdata, (uint32_t)in_length, p)) {
-		NOTICE("xm_prescan_module() failed");
+		fprintf(stderr, "xm_prescan_module() failed\n");
 		exit(1);
 	}
 
@@ -99,11 +95,12 @@ int main(int argc, char** argv) {
 				exit(1);
 			}
 			xm_analyze(ctx, analyze_out);
-			NOTICE("xm_analyze() : %s", analyze_out);
+			fprintf(stdout, "%s\n", analyze_out);
 			free(analyze_out);
 			xm_reset_context(ctx);
+			exit(0);
 		} else {
-			NOTICE("unknown command-line argument: %s", argv[i]);
+			fprintf(stderr, "unknown command-line argument: %s", argv[i]);
 			exit(1);
 		}
 	}
@@ -115,6 +112,5 @@ int main(int argc, char** argv) {
 		exit(1);
 	}
 
-	NOTICE("done writing %u bytes", ctx_size);
-	return 0;
+	exit(0);
 }
