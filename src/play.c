@@ -245,9 +245,11 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 		if(ticks >= 0x20) {
 			ticks = 0x20 - ticks;
 		}
+		#if HAS_VIBRATO
 		if(ch->vibrato_ticks % 0x40 >= 0x20) {
 			ticks = 0x20 - ticks;
 		}
+		#endif
 	}
 	ch->volume_offset = (int8_t)
 		((int16_t)xm_waveform(TREMOLO_CONTROL_PARAM(ch), ticks)
@@ -796,7 +798,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 }
 
 static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
-                                  xm_channel_context_t* ch) {
+                                  [[maybe_unused]] xm_channel_context_t* ch) {
 	#if HAS_SUSTAIN
 	ch->sustained = true;
 	#endif
