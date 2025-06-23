@@ -56,7 +56,12 @@ static void append_u64(char* dest, uint16_t* dest_offset, uint64_t x) {
 
 static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
                                  uint64_t* used_features) {
-	if(ch->current->note == 0 || ch->current->note == NOTE_KEY_OFF) {
+	if(ch->current->note == 0) {
+		return;
+	}
+
+	if(ch->current->note == NOTE_KEY_OFF) {
+		*used_features |= (uint64_t)1 << FEATURE_NOTE_KEY_OFF;
 		return;
 	}
 
@@ -186,10 +191,7 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 					<< FEATURE_CLAMP_PERIODS;
 			}
 
-			if(ch->current->note == NOTE_KEY_OFF) {
-				used_features |= (uint64_t)1
-					<< FEATURE_NOTE_KEY_OFF;
-			} else if(ch->current->note == NOTE_SWITCH) {
+			if(ch->current->note == NOTE_SWITCH) {
 				used_features |= (uint64_t)1
 					<< FEATURE_NOTE_SWITCH;
 			}
