@@ -1,0 +1,75 @@
+#!/usr/bin/env php
+<?php
+/* Author: Romain "Artefact2" Dalmaso <artefact2@gmail.com> */
+
+/* This program is free software. It comes without any warranty, to the
+ * extent permitted by applicable law. You can redistribute it and/or
+ * modify it under the terms of the Do What The Fuck You Want To Public
+ * License, Version 2, as published by Sam Hocevar. See
+ * http://sam.zoy.org/wtfpl/COPYING for more details. */
+
+if($argc === 1) {
+	fprintf(STDERR, "Usage: %s <modfiles...>\n", $argv[0]);
+	die(1);
+}
+
+$tmp = '/tmp/libxmize-'.getmypid();
+register_shutdown_function(function() use($tmp) {
+	shell_exec('rm -Rf '.escapeshellarg($tmp));
+});
+
+const COMMON_FLAGS = '-DCMAKE_RULE_MESSAGES=OFF -DCMAKE_TARGET_MESSAGES=OFF'
+	.' -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_VERBOSE=OFF'
+	.' -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF'
+	.' -DXM_RAMPING=OFF -DXM_STRINGS=OFF -DXM_TIMING_FUNCTIONS=OFF'
+	.' -DXM_MUTING_FUNCTIONS=OFF -DXM_SAMPLE_TYPE=float';
+
+passthru('cmake '.COMMON_FLAGS
+         .' -S '.escapeshellarg(__DIR__.'/../examples/libxmize')
+         .' -B '.escapeshellarg($tmp.'/full')
+         .'>/dev/null', $ret);
+if($ret !== 0) die($ret);
+
+passthru('make -sC '.escapeshellarg($tmp.'/full').' libxmize libxmtoau', $ret);
+if($ret !== 0) die($ret);
+
+/* XXX: can be parallelized */
+for($i = 1; $i < $argc; ++$i) {
+	$cmflags = shell_exec(escapeshellcmd($tmp.'/full/libxmize')
+	                      .' --analyze '.escapeshellarg($argv[$i]));
+	passthru('cmake '.COMMON_FLAGS.' '.trim($cmflags)
+	         .' -S '.escapeshellarg(__DIR__.'/../examples/libxmize')
+	         .' -B '.escapeshellarg($tmp.'/'.$i)
+	         .'>/dev/null', $ret);
+	if($ret !== 0) die($ret);
+
+	passthru('make -sC '.escapeshellarg($tmp.'/'.$i).
+	         ' libxmize libxmtoau ', $ret);
+	if($ret !== 0) die($ret);
+
+	$mod = escapeshellarg($argv[$i]);
+	$peak = trim(shell_exec(
+		'ffmpeg'
+			." -i <(".escapeshellcmd($tmp.'/full/libxmize')
+				." ".$mod." | "
+				.escapeshellcmd($tmp.'/full/libxmtoau').")"
+			." -i <(".escapeshellcmd($tmp.'/'.$i.'/libxmize')
+				." ".$mod." | "
+				.escapeshellcmd($tmp.'/'.$i.'/libxmtoau').")"
+			." -filter_complex '[0]aeval=-val(0)|-val(1)[0inv];"
+				."[0inv][1]amix=inputs=2:duration=longest[out];"
+				."[out]astats'"
+			." -f null -"
+			." 2>&1 | grep astats | grep 'Peak level dB'"
+			." | tail -n1 | cut -d: -f2"
+	));
+
+	echo "\e[1m";
+	if($peak === '-inf' || floatval($peak) <= -60) {
+		echo "\e[32mPASS";
+	} else {
+		echo "\e[31mFAIL";
+	}
+	echo "\e[0m ", $argv[$i], ' ', $peak, PHP_EOL;
+	shell_exec('rm -Rf '.escapeshellarg($tmp.'/'.$i));
+}
