@@ -1413,7 +1413,7 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 	#endif
 
 	/* XXX: is there a better way to do this? */
-	#if HAS_EFFECT(TONE_PORTAMENTO) \
+	#if HAS_EFFECT(EFFECT_TONE_PORTAMENTO) \
 		&& HAS_EFFECT(EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE)
 	case EFFECT_TONE_PORTAMENTO:
 		[[fallthrough]];

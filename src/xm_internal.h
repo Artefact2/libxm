@@ -30,7 +30,7 @@
 
 #define assume(x) do { if(!(x)) { __builtin_unreachable(); } } while(0)
 
-#if NDEBUG
+#ifdef NDEBUG
 #define assert(x) assume(x)
 #else
 #include <assert.h>
