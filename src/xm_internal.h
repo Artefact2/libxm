@@ -50,11 +50,17 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
                "XM_LIBXM_DELTA_SAMPLES cannot be used "
                "with XM_SAMPLE_TYPE=float");
 
-static_assert(XM_PANNING_TYPE >= 0 && XM_PANNING_TYPE <= 8);
+static_assert(XM_PANNING_TYPE >= 0 && XM_PANNING_TYPE <= 8,
+              "Invalid value of XM_PANNING_TYPE");
 #define HAS_PANNING (XM_PANNING_TYPE == 8)
 
+static_assert(XM_LOOPING_TYPE >= 0 && XM_LOOPING_TYPE <= 2,
+              "Invalid value of XM_LOOPING_TYPE");
 static_assert(XM_LOOPING_TYPE != 1 || !HAS_EFFECT(0xB),
               "XM_LOOPING_TYPE=1 requires disabling Bxx (jump to order) effect");
+
+static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
+              "Unsupported value of XM_SAMPLE_RATE");
 
 /* ----- Libxm constants ----- */
 
@@ -368,7 +374,14 @@ struct xm_module_s {
 	uint16_t length;
 	uint16_t num_patterns;
 	uint16_t num_samples;
+
+	#if XM_SAMPLE_RATE == 0
+	#define SAMPLE_RATE(mod) ((mod)->rate)
 	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
+	#else
+	#define SAMPLE_RATE(mod) ((uint16_t)XM_SAMPLE_RATE)
+	#endif
+
 	uint8_t num_channels;
 
 	#if HAS_INSTRUMENTS
@@ -428,7 +441,8 @@ struct xm_module_s {
 		    && HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)) \
 		+ !HAS_INSTRUMENTS \
 		+ (XM_LOOPING_TYPE != 2) \
-		+ (XM_LOOPING_TYPE == 1))
+		+ (XM_LOOPING_TYPE == 1) \
+		+ 2*(XM_SAMPLE_RATE != 0))
 	#if MODULE_PADDING % POINTER_SIZE
 	char __pad[MODULE_PADDING % POINTER_SIZE];
 	#endif

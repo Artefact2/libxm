@@ -21,7 +21,7 @@ static alignas(max_align_t) unsigned char libxm_data[] = {
 };
 
 static void gen_waveforms(void) {
-	size_t i;
+	ssize_t i;
 	xm_sample_point_t* buf;
 	uint32_t len;
 
@@ -47,8 +47,10 @@ static void gen_waveforms(void) {
 	buf = xm_get_sample_waveform(ctx, 2, 0, &len);
 	for(i = 0; i < len; ++i)
 		buf[i] = _Generic((xm_sample_point_t){},
-		                  int8_t: (INT8_MIN + (2*INT8_MAX*i) / len),
-		                  int16_t: (INT16_MIN + (2*INT16_MAX*i) / len),
+		                  int8_t: (int8_t)
+			                  (INT8_MIN + (2*INT8_MAX*i) / len),
+		                  int16_t: (int16_t)
+			                  (INT16_MIN + (2*INT16_MAX*i) / len),
 		                  float: -1.f + 2.f*(float)i / (float)len);
 
 	/* XXX: Kick */
@@ -61,8 +63,8 @@ static void gen_waveforms(void) {
 	for(i = 0; i < len; ++i) {
 		next = next * 214013 + 2531011;
 		buf[i] = _Generic((xm_sample_point_t){},
-		                  int8_t: next >> 16,
-		                  int16_t: next >> 16,
+		                  int8_t: (int8_t)(next >> 16),
+		                  int16_t: (int16_t)(next >> 16),
 		                  float: -1.f + (float)(next >> 16) / (float)INT16_MAX);
 	}
 }
@@ -74,7 +76,7 @@ int main() {
 
 	if(fork()) {
 		/* parent */
-		ctx = xm_create_context_from_libxm((char*)libxm_data, 48000);
+		ctx = xm_create_context_from_libxm((char*)libxm_data);
 		gen_waveforms();
 
 		xm_set_max_loop_count(ctx, 1);

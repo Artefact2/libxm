@@ -73,7 +73,7 @@ __attribute__((nonnull));
  * if(xm_prescan_module(moddata, moddata_length, p)) {
  *     xm_context_t* ctx = xm_create_context(
  *         malloc(xm_size_for_context(p)),
- *         p, moddata, moddata_length, rate
+ *         p, moddata, moddata_length
  *     );
  *     // use context...
  *     free(ctx);
@@ -86,14 +86,13 @@ __attribute__((nonnull));
  *
  * @param moddata[.moddata_length] the contents of the module
  * @param moddata_length the length of the contents of the module, in bytes
- * @param rate sample rate in Hz (44100, 48000, etc)
  *
  * @returns pool as xm_context_t* (it is your responsibility to free this)
  */
 xm_context_t* xm_create_context(char* restrict pool,
                                 const xm_prescan_data_t* restrict p,
                                 const char* restrict moddata,
-                                uint32_t moddata_length, uint16_t rate)
+                                uint32_t moddata_length)
 __attribute__((assume_aligned(8)))
 __attribute__((warn_unused_result))
 __attribute__((returns_nonnull))
@@ -133,11 +132,27 @@ __attribute__((nonnull));
  * the pointer must be aligned to max_align_t (this is always true for pointers
  * returned by malloc())
  */
-xm_context_t* xm_create_context_from_libxm(char* data, uint16_t rate)
+xm_context_t* xm_create_context_from_libxm(char* data)
 __attribute__((assume_aligned(8)))
 __attribute__((returns_nonnull))
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
+
+
+
+/** Set the output sample rate (in Hz). You would typically call this
+ * immediately after xm_create_context(), with a value that matches the system's
+ * audio output, or a standard value like 44100 or 48000 if outputting to a
+ * file. Has no effect if libxm was compiled with a hardcoded value
+ * (XM_SAMPLE_RATE).
+ */
+void xm_set_sample_rate(xm_context_t*, uint16_t)
+__attribute__((nonnull));
+
+/** Returns the sample rate currently used. */
+uint16_t xm_get_sample_rate(const xm_context_t*)
+__attribute__((nonnull))
+__attribute__((warn_unused_result));
 
 
 
@@ -177,10 +192,11 @@ __attribute__((nonnull(1)));
 
 
 
-/** Set the maximum number of times a module can loop. After the
- * specified number of loops, calls to xm_generate_samples will only
- * generate silence. You can control the current number of loops with
- * xm_get_loop_count().
+/** Set the maximum number of times a module can loop. After the specified
+ * number of loops, calls to xm_generate_samples will only generate silence. You
+ * can get the current number of loops with xm_get_loop_count().
+ *
+ * Has no effect if the loop count is hardcoded with XM_LOOPING_TYPE.
  *
  * @param loopcnt maximum number of loops. Use 0 to loop
  * indefinitely. */

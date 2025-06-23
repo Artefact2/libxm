@@ -215,8 +215,7 @@ bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
 xm_context_t* xm_create_context(char* restrict mempool,
                                 const xm_prescan_data_t* restrict p,
                                 const char* restrict moddata,
-                                uint32_t moddata_length,
-                                uint16_t rate) {
+                                uint32_t moddata_length) {
 	/* Make sure we are not misaligning data by accident */
 	ASSERT_ALIGNED(mempool, xm_context_t);
 	uint32_t ctx_size = xm_size_for_context(p);
@@ -257,8 +256,6 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	#endif
 
 	assert(mempool - (char*)ctx == ctx_size);
-
-	ctx->module.rate = rate;
 
 	switch(p->format) {
 	case XM_FORMAT_XM0104:
@@ -338,6 +335,10 @@ static void xm_fixup_context(xm_context_t* ctx) {
 
 	#if HAS_EFFECT(EFFECT_SET_BPM)
 	ctx->current_bpm = ctx->module.bpm;
+	#endif
+
+	#if XM_SAMPLE_RATE == 0
+	ctx->module.rate = 48000;
 	#endif
 
 	xm_pattern_slot_t* slot = ctx->pattern_slots;
@@ -497,14 +498,12 @@ void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
 	/* Force next generated samples to call xm_row() and refill
 	  ch->current */
 	ctx->current_tick = 0;
+	ctx->remaining_samples_in_tick = 0;
 
 	/* (*) Everything done after this should be deterministically
 	   reversible */
 	uint32_t ctx_size = xm_context_size(ctx);
 	[[maybe_unused]] uint64_t old_hash = xm_fnv1a((void*)ctx, ctx_size);
-
-	uint16_t old_rate = ctx->module.rate;
-	ctx->module.rate = 0;
 
 	#if XM_LIBXM_DELTA_SAMPLES
 	for(uint32_t i = ctx->module.samples_data_length - 1; i > 0; --i) {
@@ -530,15 +529,14 @@ void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
 	__builtin_memcpy(out, ctx, ctx_size);
 
 	/* Restore the context back to the state marked (*) */
-	ctx = xm_create_context_from_libxm((void*)ctx, old_rate);
+	ctx = xm_create_context_from_libxm((void*)ctx);
 
 	assert(xm_fnv1a((void*)ctx, ctx_size) == old_hash);
 }
 
-xm_context_t* xm_create_context_from_libxm(char* data, uint16_t rate) {
+xm_context_t* xm_create_context_from_libxm(char* data) {
 	ASSERT_ALIGNED(data, xm_context_t);
 	xm_context_t* ctx = (void*)data;
-	ctx->module.rate = rate;
 
 	/* Reverse steps of xm_context_to_libxm() */
 	APPLY_OFFSET(ctx->patterns, ctx);
@@ -1353,7 +1351,7 @@ static void xm_load_mod(xm_context_t* ctx,
 	/* Read instruments */
 	for(uint8_t i = 0; i < ctx->module.num_samples; ++i) {
 		#if HAS_INSTRUMENTS
-		xm_instrument_t* ins = ctx->instruments + i;
+		[[maybe_unused]] xm_instrument_t* ins = ctx->instruments + i;
 		#endif
 
 		#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)

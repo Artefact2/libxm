@@ -1230,8 +1230,8 @@ void xm_tick(xm_context_t* ctx) {
 		   formula, see SAMPLE_MICROSTEPS comment) */
 		ch->step = (uint32_t)
 			(((uint64_t)xm_frequency(ctx, ch) * SAMPLE_MICROSTEPS
-			  + ctx->module.rate / 2)
-			 / ctx->module.rate);
+			  + SAMPLE_RATE(&ctx->module) / 2)
+			 / SAMPLE_RATE(&ctx->module));
 
 		assert(ch->volume <= MAX_VOLUME);
 		assert(VOLUME_OFFSET(ch) >= -MAX_VOLUME
@@ -1313,11 +1313,11 @@ void xm_tick(xm_context_t* ctx) {
 	/* FT2 manual says number of ticks / second = BPM * 0.4 */
 	static_assert(_Generic(ctx->remaining_samples_in_tick,
 	                       uint32_t: true, default: false));
-	static_assert(_Generic(ctx->module.rate,
+	static_assert(_Generic(SAMPLE_RATE(&ctx->module),
 	                       uint16_t: true, default: false));
 	static_assert(TICK_SUBSAMPLES % 4 == 0);
 	static_assert(10 * (TICK_SUBSAMPLES / 4) * UINT16_MAX <= UINT32_MAX);
-	uint32_t samples_in_tick = ctx->module.rate;
+	uint32_t samples_in_tick = SAMPLE_RATE(&ctx->module);
 	samples_in_tick *= 10 * TICK_SUBSAMPLES / 4;
 	samples_in_tick /= CURRENT_BPM(ctx);
 	ctx->remaining_samples_in_tick += samples_in_tick;

@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
 	char* libxmized = buf + ctx_size;
 
 	xm_context_t* ctx = xm_create_context(buf, p, xmdata,
-	                                      (uint32_t)in_length, 48000);
+	                                      (uint32_t)in_length);
 
 	for(int i = 1; i < argc - 1; ++i) {
 		if(!strcmp("--zero-all-waveforms", argv[i])) {

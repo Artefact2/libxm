@@ -267,7 +267,7 @@ static void charfun(GLFWwindow* window, unsigned int codepoint) {
 	}
 }
 
-static xm_context_t* create_context_from_file(uint16_t rate, const char* filename) {
+static xm_context_t* create_context_from_file(const char* filename) {
 	xm_context_t* ctx = NULL;
 	char* xm_data = NULL;
 	FILE* xmfile = NULL;
@@ -314,7 +314,7 @@ static xm_context_t* create_context_from_file(uint16_t rate, const char* filenam
 	uint32_t ctx_size = xm_size_for_context(p);
 	char* ctx_data = malloc(ctx_size);
 	if(ctx_data == NULL) goto end;
-	ctx = xm_create_context(ctx_data, p, xm_data, (uint32_t)size, rate);
+	ctx = xm_create_context(ctx_data, p, xm_data, (uint32_t)size);
 
  end:
 	if(xm_data) free(xm_data);
@@ -471,8 +471,9 @@ static void setup(int argc, char** argv) {
 	left = jack_port_register(client, "Left", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput | JackPortIsTerminal, 0);
 	right = jack_port_register(client, "Right", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput | JackPortIsTerminal, 0);
 
-	xmctx = create_context_from_file((uint16_t)rate, argv[filenameidx]);
+	xmctx = create_context_from_file(argv[filenameidx]);
 	if(xmctx == NULL) exit(1);
+	xm_set_sample_rate(xmctx, (uint16_t)rate);
 	channels = xm_get_number_of_channels(xmctx);
 	if(channels > MAX_CHANNELS) {
 		fprintf(stderr, "too many channels (%u > %u)\n",

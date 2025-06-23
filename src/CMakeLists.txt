@@ -23,7 +23,7 @@ set_target_properties(xm PROPERTIES
 	PUBLIC_HEADER ${CMAKE_CURRENT_BINARY_DIR}/xm.h)
 
 # Bump this when breaking public ABI
-set_target_properties(xm PROPERTIES SOVERSION 8)
+set_target_properties(xm PROPERTIES SOVERSION 9)
 
 find_library(MATH_LIBRARY m REQUIRED)
 target_include_directories(xm SYSTEM PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
@@ -65,6 +65,10 @@ option_and_define(XM_MUTING_FUNCTIONS
 
 set(XM_SAMPLE_TYPE "int16_t" CACHE STRING
 	"Sample type of internal samples (int8_t,int16_t,float)")
+
+set(XM_SAMPLE_RATE "0" CACHE STRING
+	"Output sample rate (0=Configurable via xm_set_sample_rate(), other values=hardcoded, eg 44100 or 48000)")
+target_compile_definitions(xm PRIVATE XM_SAMPLE_RATE=${XM_SAMPLE_RATE})
 
 set(XM_MICROSTEP_BITS "12" CACHE STRING
 	"Precision of sample stepping (8..12, higher = better pitch accuracy, lower = can load larger samples)")

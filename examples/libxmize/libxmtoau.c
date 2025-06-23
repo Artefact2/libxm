@@ -55,7 +55,9 @@ int ENTRY(void) {
 		                                   sizeof(buffer)));
 	} while(r_ret > 0);
 
-	ctx = xm_create_context_from_libxm(buf, 44100);
+	ctx = xm_create_context_from_libxm(buf);
+	xm_set_sample_rate(ctx, 44100);
+
 	maybe_assert_eq(write(STDOUT_FILENO, header, sizeof(header)),
 	                (ssize_t)sizeof(header));
 
