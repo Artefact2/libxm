@@ -907,8 +907,7 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 
 	uint8_t type = READ_U8(offset + 26);
 	if(type != 0) {
-		NOTICE("ignoring non-zero type %d on instrument %ld",
-		       type, (instr - ctx->instruments) + 1);
+		NOTICE("ignoring non-zero instrument type %d", type);
 	}
 
 	/* Prescan already checked MAX_SAMPLES_PER_INSTRUMENT */
@@ -1015,7 +1014,7 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 			if(_Generic((xm_sample_point_t){},
 			            int8_t: true,
 			            default: false)) {
-				NOTICE("instrument %ld, sample %u will be dithered from 16 to 8 bits", instr - ctx->instruments + 1, i);
+				NOTICE("16 bit sample will be dithered to 8 bits");
 			}
 			xm_load_xm0104_16b_sample_data(s->length, sample_data,
 			                               moddata, moddata_length,
