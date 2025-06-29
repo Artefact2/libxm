@@ -1277,17 +1277,17 @@ void xm_tick(xm_context_t* ctx) {
 			#if XM_PANNING_TYPE == 1
 			0.66015625f,  0.75f
 			#elif XM_PANNING_TYPE == 2
-			0.609375f, 0.7890625f
+			0.61328125f, 0.7890625f
 			#elif XM_PANNING_TYPE == 3
 			0.55859375f, 0.828125f
 			#elif XM_PANNING_TYPE == 4
-			0.5f, 0.86328125f
+			0.5f, 0.8671875f
 			#elif XM_PANNING_TYPE == 5
-			0.431640625f, 0.8984375f
+			0.43359375f, 0.90234375f
 			#elif XM_PANNING_TYPE == 6
 			0.353515625f, 0.93359375f
 			#else
-			0.25f, 0.96484375f
+			0.25f, 0.96875f
 			#endif
 		};
 		if(((i >> 1) ^ i) & 1) {

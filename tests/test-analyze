@@ -65,7 +65,12 @@ for($i = 1; $i < $argc; ++$i) {
 	));
 
 	echo "\e[1m";
-	if($peak === '-inf' || floatval($peak) <= -60) {
+	if($peak === '-inf' || floatval($peak) <= -66) {
+		/* 20 log10 (0.002 (worst rounding error for panning mult) *
+		 * 0.25 (global amplification) ) = -66 dB */
+		/* XXX: this is only the error for a single channel! Error may
+		 * accumulate over multiple channels, perhaps test unmixed
+		 * audio? */
 		echo "\e[32mPASS";
 	} else {
 		echo "\e[31mFAIL";
