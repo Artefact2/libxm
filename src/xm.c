@@ -163,7 +163,7 @@ xm_sample_point_t* xm_get_sample_waveform(xm_context_t* ctx,
 
 
 
-void xm_get_playing_speed(const xm_context_t* ctx,
+void xm_get_playing_speed([[maybe_unused]] const xm_context_t* ctx,
                           uint8_t* bpm, uint8_t* tempo) {
 	if(bpm) *bpm = CURRENT_BPM(ctx);
 	if(tempo) *tempo = CURRENT_TEMPO(ctx);

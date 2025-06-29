@@ -114,9 +114,25 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	uint16_t off = 0;
 	int16_t pannings[4] = { -1, -1, -1, -1 };
 	uint8_t panning_type = 0;
+	bool constant_tempo = true;
+	bool constant_bpm = true;
+	int16_t tempo = -1;
+	int16_t bpm = -1;
 
 	while(XM_LOOPING_TYPE != 0 && LOOP_COUNT(ctx) == 0) {
 		xm_tick(ctx);
+
+		if(tempo == - 1) {
+			tempo = CURRENT_TEMPO(ctx);
+		} else if(tempo != CURRENT_TEMPO(ctx)) {
+			constant_tempo = false;
+		}
+
+		if(bpm == -1) {
+			bpm = CURRENT_BPM(ctx);
+		} else if(bpm != CURRENT_BPM(ctx)) {
+			constant_bpm = false;
+		}
 
 		xm_channel_context_t* ch = ctx->channels;
 		for(uint8_t i = 0; i < ctx->module.num_channels; ++i, ++ch) {
@@ -252,6 +268,26 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 		} else {
 			panning_type = 8;
 		}
+	}
+
+	if(constant_tempo) {
+		assert(tempo >= 1 && tempo < MIN_BPM);
+		used_features |= (uint64_t)((~tempo) & 31)
+			<< FEATURE_VARIABLE_TEMPO;
+		used_effects &= ~((uint64_t)1 << EFFECT_SET_TEMPO);
+	} else {
+		static_assert(MIN_BPM == 32);
+		used_features |= (uint64_t)31 << FEATURE_VARIABLE_TEMPO;
+	}
+
+	if(constant_bpm) {
+		assert(bpm >= MIN_BPM && bpm <= MAX_BPM);
+		used_features |= (uint64_t)((~bpm) & 255)
+			<< FEATURE_VARIABLE_BPM;
+		used_effects &= ~((uint64_t)1 << EFFECT_SET_BPM);
+	} else {
+		static_assert(MAX_BPM == 255);
+		used_features |= (uint64_t)255 << FEATURE_VARIABLE_BPM;
 	}
 
 	append_str(out, &off, " -DXM_DISABLED_EFFECTS=0x");

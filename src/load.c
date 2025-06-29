@@ -330,11 +330,11 @@ static void xm_fixup_context(xm_context_t* ctx) {
 	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_TEMPO)
-	ctx->current_tempo = ctx->module.tempo;
+	ctx->current_tempo = MODULE_TEMPO(&ctx->module);
 	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_BPM)
-	ctx->current_bpm = ctx->module.bpm;
+	ctx->current_bpm = MODULE_BPM(&ctx->module);
 	#endif
 
 	#if XM_SAMPLE_RATE == 0
@@ -773,18 +773,23 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 		NOTICE("unknown flags set in module header (%d)", flags);
 	}
 
+	#if !HAS_HARDCODED_TEMPO
 	uint16_t tempo = READ_U16(offset + 16);
-	uint16_t bpm = READ_U16(offset + 18);
 	if(tempo >= MIN_BPM) {
 		NOTICE("clamping tempo (%u -> %u)", tempo, MIN_BPM-1);
 		tempo = MIN_BPM-1;
 	}
+	ctx->module.tempo = (uint8_t)tempo;
+	#endif
+
+	#if !HAS_HARDCODED_BPM
+	uint16_t bpm = READ_U16(offset + 18);
 	if(bpm > MAX_BPM) {
 		NOTICE("clamping bpm (%u -> %u)", bpm, MAX_BPM);
 		bpm = MAX_BPM;
 	}
-	ctx->module.tempo = (uint8_t)tempo;
 	ctx->module.bpm = (uint8_t)bpm;
+	#endif
 
 	READ_MEMCPY(mod->pattern_table, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
 
@@ -1332,8 +1337,13 @@ static void xm_load_mod(xm_context_t* ctx,
 	ctx->module.amiga_frequencies = true;
 	#endif
 
-	ctx->module.bpm = 125;
+	#if !HAS_HARDCODED_TEMPO
 	ctx->module.tempo = 6;
+	#endif
+
+	#if !HAS_HARDCODED_BPM
+	ctx->module.bpm = 125;
+	#endif
 
 	ctx->module.num_channels = p->num_channels;
 	ctx->module.num_patterns = p->num_patterns;

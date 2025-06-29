@@ -91,6 +91,11 @@ static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
 #define FEATURE_INVALID_NOTES 21
 #define FEATURE_CLAMP_PERIODS 22
 
+#define FEATURE_VARIABLE_TEMPO 27 /* 27..32 (5 bits) */
+#define FEATURE_VARIABLE_BPM 32 /* 32..40 (8 bits) */
+#define HAS_HARDCODED_TEMPO ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_TEMPO) & 31)
+#define HAS_HARDCODED_BPM ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_BPM) & 255)
+
 static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
               || HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES),
                "Must enable at least one frequency type (linear or Amiga)");
@@ -390,6 +395,7 @@ struct xm_module_s {
 	#define NUM_INSTRUMENTS(mod) ((uint8_t)(mod)->num_samples)
 	#endif
 
+	static_assert(PATTERN_ORDER_TABLE_LENGTH % 8 == 0);
 	uint8_t pattern_table[PATTERN_ORDER_TABLE_LENGTH];
 
 	#if XM_LOOPING_TYPE != 1
@@ -412,11 +418,22 @@ struct xm_module_s {
 	#define MAX_LOOP_COUNT(mod) 0
 	#endif
 
+	#if HAS_HARDCODED_TEMPO
+	#define MODULE_TEMPO(mod) ((uint8_t)HAS_HARDCODED_TEMPO)
+	#else
 	/* These are the values stored in the loaded file, not changed by any
 	   Fxx effect. Without these, it's impossible to properly implement
 	   xm_reset_context(). */
+	#define MODULE_TEMPO(mod) ((mod)->tempo)
 	uint8_t tempo; /* 0..MIN_BPM */
+	#endif
+
+	#if HAS_HARDCODED_BPM
+	#define MODULE_BPM(mod) ((uint8_t)HAS_HARDCODED_BPM)
+	#else
+	#define MODULE_BPM(mod) ((mod)->bpm)
 	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
+	#endif
 
 	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
 		&& HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)
@@ -441,7 +458,9 @@ struct xm_module_s {
 		+ !HAS_INSTRUMENTS \
 		+ (XM_LOOPING_TYPE != 2) \
 		+ (XM_LOOPING_TYPE == 1) \
-		+ 2*(XM_SAMPLE_RATE != 0))
+		+ 2*(XM_SAMPLE_RATE != 0) \
+		+ (HAS_HARDCODED_TEMPO > 0) \
+		+ (HAS_HARDCODED_BPM > 0))
 	#if MODULE_PADDING % POINTER_SIZE
 	char __pad[MODULE_PADDING % POINTER_SIZE];
 	#endif
@@ -801,18 +820,20 @@ struct xm_context_s {
 	#define GLOBAL_VOLUME(ctx) MAX_VOLUME
 	#endif
 
-	#if HAS_EFFECT(EFFECT_SET_TEMPO)
+	#if HAS_HARDCODED_TEMPO
+	#define CURRENT_TEMPO(ctx) HAS_HARDCODED_TEMPO
+	#elif HAS_EFFECT(EFFECT_SET_TEMPO)
 	#define CURRENT_TEMPO(ctx) ((ctx)->current_tempo)
 	uint8_t current_tempo; /* 0..MIN_BPM */
 	#else
-	#define CURRENT_TEMPO(ctx) ((ctx)->module.tempo)
+	#define CURRENT_TEMPO(ctx) MODULE_TEMPO(&ctx->module)
 	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_BPM)
 	#define CURRENT_BPM(ctx) ((ctx)->current_bpm)
 	uint8_t current_bpm; /* MIN_BPM..=MAX_BPM */
 	#else
-	#define CURRENT_BPM(ctx) ((ctx)->module.bpm)
+	#define CURRENT_BPM(ctx) MODULE_BPM(&ctx->module)
 	#endif
 
 	#if HAS_EFFECT(EFFECT_PATTERN_BREAK)

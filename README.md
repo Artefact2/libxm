@@ -72,7 +72,7 @@ xzcrush build-libxmize/libxmtoau
 If you are using libxm to play a single module (like in a demo/intro), disable
 features as suggested by `libxmize --analyze` to save a few more bytes.
 
-For example, `libxmize --analyze mindrmr.xm` suggests `-DXM_DISABLED_EFFECTS=0xFFFFD9FBFFDE68E1 -DXM_DISABLED_VOLUME_EFFECTS=0x0CC0 -DXM_DISABLED_FEATURES=0xFFFFFFFFFFF7EE04 -DXM_PANNING_TYPE=8`. We only want to play the module once and quit, so we can use `-DXM_LOOPING_TYPE=1`. Compiling with these new flags, the resulting binary is crushed to **2705 bytes**.
+For example, `libxmize --analyze mindrmr.xm` suggests `-DXM_DISABLED_EFFECTS=0xFFFFD9FBFFDE68E1 -DXM_DISABLED_VOLUME_EFFECTS=0x0CC0 -DXM_DISABLED_FEATURES=0xFFFFFF0037F7EE04 -DXM_PANNING_TYPE=8`. We only want to play the module once and quit, so we can use `-DXM_LOOPING_TYPE=1`. Compiling with these new flags, the resulting binary is crushed to **2694 bytes**.
 
 Examples
 ========
