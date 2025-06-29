@@ -65,8 +65,9 @@ int main(int argc, char** argv) {
 	char* ctx_buffer = malloc(xm_size_for_context(p));
 	if(ctx_buffer == NULL) return 1;
 	xm_context_t* ctx = xm_create_context(ctx_buffer, p, xm_file_data,
-	                                      (uint32_t)xm_file_length, 48000);
+	                                      (uint32_t)xm_file_length);
 	free(xm_file_data);
+	xm_set_sample_rate(ctx, 48000);
 
 	/* Perform the test */
 	if(strcmp(argv[1], "channelpairs_eq") == 0) {
@@ -157,7 +158,7 @@ static int pat0_pat1_eq(xm_context_t* ctx0) {
 	char* buf = malloc(xm_context_size(ctx0));
 	if(buf == NULL) return 1;
 	xm_context_to_libxm(ctx0, buf);
-	xm_context_t* ctx1 = xm_create_context_from_libxm(buf, 48000);
+	xm_context_t* ctx1 = xm_create_context_from_libxm(buf);
 	xm_seek(ctx1, 1, 0, 0);
 
 	float frames0[128], frames1[128];

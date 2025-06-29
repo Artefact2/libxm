@@ -904,17 +904,11 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		&& HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	if(ch->instrument->sample_of_notes[ch->orig_note - 1]
 	   >= ch->instrument->num_samples) {
-		/* XXX: requires hex editing to test since FT2 will not allow
-		   this to happen */
-		/* static xm_sample_t default_sample = { */
-		/* 	.panning = 0x80, */
-		/* 	.volume = MAX_VOLUME, */
-		/* 	.finetune = 0, */
-		/* 	.relative_note = 0, */
-		/* 	.length = 0, */
-		/* 	.loop_length = 0, */
-		/* }; */
-		/* ch->sample = &default_sample; */
+		#if HAS_INSTRUMENTS
+		ch->instrument = NULL;
+		#endif
+		ch->sample = NULL;
+		xm_cut_note(ch);
 		return;
 	}
 	#endif
