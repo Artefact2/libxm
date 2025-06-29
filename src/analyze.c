@@ -95,7 +95,19 @@ static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
 
 	if(note <= 0 || note >= 120) {
 		*used_features |= (uint64_t)1 << FEATURE_INVALID_NOTES;
+		return;
 	}
+
+	#if HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET)
+	if(ch->current->effect_type == EFFECT_SET_SAMPLE_OFFSET) {
+		/* Effect memory already set by xm_tick()/xm_row() */
+		uint16_t pos = ch->sample_offset_param * 256;
+		if(pos >= smp->length) {
+			*used_features |= (uint64_t)1
+				<< FEATURE_ACCURATE_SAMPLE_OFFSET_EFFECT;
+		}
+	}
+	#endif
 }
 
 void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
