@@ -703,7 +703,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 	#if HAS_EFFECT(EFFECT_SET_ENVELOPE_POSITION) \
 		&& (HAS_FEATURE(FEATURE_VOLUME_ENVELOPES) \
-		    || HAS_FEATURE(FEATURE_PANNING_ENVELOPES))
+		    || (HAS_PANNING && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)))
 	case EFFECT_SET_ENVELOPE_POSITION:
 		#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
 		ch->volume_envelope_frame_count = s->effect_param;

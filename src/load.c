@@ -943,7 +943,7 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	xm_check_and_fix_envelope(&(instr->volume_envelope), vol_env_flags);
 	#endif
 
-	#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 	xm_load_xm0104_envelope_points(&instr->panning_envelope,
 	                               moddata + offset + 177);
 	instr->panning_envelope.num_points = READ_U8(offset + 226);

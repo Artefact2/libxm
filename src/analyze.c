@@ -240,7 +240,7 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 					<< FEATURE_NOTE_SWITCH;
 			}
 
-			#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
+			#if HAS_PANNING && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 			if(ch->instrument->panning_envelope.num_points) {
 				used_features |= (uint64_t)1
 					<< FEATURE_PANNING_ENVELOPES;
