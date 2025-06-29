@@ -13,7 +13,7 @@ if($argc === 1) {
 	die(1);
 }
 
-$tmp = '/tmp/libxmize-'.getmypid();
+$tmp = '/tmp/libxm-test-analyze-'.getmypid();
 register_shutdown_function(function() use($tmp) {
 	shell_exec('rm -Rf '.escapeshellarg($tmp));
 });
@@ -25,56 +25,44 @@ const COMMON_FLAGS = '-DCMAKE_RULE_MESSAGES=OFF -DCMAKE_TARGET_MESSAGES=OFF'
 	.' -DXM_MUTING_FUNCTIONS=OFF -DXM_SAMPLE_TYPE=float';
 
 passthru('cmake '.COMMON_FLAGS
-         .' -S '.escapeshellarg(__DIR__.'/../examples/libxmize')
+         .' -S '.escapeshellarg(__DIR__.'/../tests')
          .' -B '.escapeshellarg($tmp.'/full')
          .'>/dev/null', $ret);
 if($ret !== 0) die($ret);
 
-passthru('make -sC '.escapeshellarg($tmp.'/full').' libxmize libxmtoau', $ret);
+passthru('make -sC '.escapeshellarg($tmp.'/full')
+         .' test-analyze-helper', $ret);
 if($ret !== 0) die($ret);
 
 /* XXX: can be parallelized */
 for($i = 1; $i < $argc; ++$i) {
-	$cmflags = shell_exec(escapeshellcmd($tmp.'/full/libxmize')
+	$cmflags = shell_exec(escapeshellcmd($tmp.'/full/test-analyze-helper')
 	                      .' --analyze '.escapeshellarg($argv[$i]));
+
 	passthru('cmake '.COMMON_FLAGS.' '.trim($cmflags)
-	         .' -S '.escapeshellarg(__DIR__.'/../examples/libxmize')
+	         .' -S '.escapeshellarg(__DIR__.'/../tests')
 	         .' -B '.escapeshellarg($tmp.'/'.$i)
 	         .'>/dev/null', $ret);
 	if($ret !== 0) die($ret);
 
 	passthru('make -sC '.escapeshellarg($tmp.'/'.$i).
-	         ' libxmize libxmtoau ', $ret);
+	         ' test-analyze-helper', $ret);
 	if($ret !== 0) die($ret);
 
-	$mod = escapeshellarg($argv[$i]);
-	$peak = trim(shell_exec(
-		'ffmpeg'
-			." -i <(".escapeshellcmd($tmp.'/full/libxmize')
-				." ".$mod." | "
-				.escapeshellcmd($tmp.'/full/libxmtoau').")"
-			." -i <(".escapeshellcmd($tmp.'/'.$i.'/libxmize')
-				." ".$mod." | "
-				.escapeshellcmd($tmp.'/'.$i.'/libxmtoau').")"
-			." -filter_complex '[0]aeval=-val(0)|-val(1)[0inv];"
-				."[0inv][1]amix=inputs=2:duration=longest[out];"
-				."[out]astats'"
-			." -f null -"
-			." 2>&1 | grep astats | grep 'Peak level dB'"
-			." | tail -n1 | cut -d: -f2"
-	));
+	passthru(escapeshellcmd($tmp.'/full/test-analyze-helper')
+	         .' <('.escapeshellcmd($tmp.'/full/test-analyze-helper')
+	               .' '.escapeshellarg($argv[$i]).')'
+	         .' <('.escapeshellcmd($tmp.'/'.$i.'/test-analyze-helper')
+	               .' '.escapeshellarg($argv[$i]).')',
+	         $ret);
 
 	echo "\e[1m";
-	if($peak === '-inf' || floatval($peak) <= -66) {
-		/* 20 log10 (0.002 (worst rounding error for panning mult) *
-		 * 0.25 (global amplification) ) = -66 dB */
-		/* XXX: this is only the error for a single channel! Error may
-		 * accumulate over multiple channels, perhaps test unmixed
-		 * audio? */
+	if($ret === 0) {
 		echo "\e[32mPASS";
 	} else {
 		echo "\e[31mFAIL";
 	}
-	echo "\e[0m ", $argv[$i], ' ', $peak, PHP_EOL;
+	echo "\e[0m ", $argv[$i], PHP_EOL;
+
 	shell_exec('rm -Rf '.escapeshellarg($tmp.'/'.$i));
 }

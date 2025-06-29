@@ -6,9 +6,7 @@
  * License, Version 2, as published by Sam Hocevar. See
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
 
-#include <xm.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include "common.h"
 #include <string.h>
 
 static void print_position(const xm_context_t*);
@@ -33,40 +31,10 @@ static int channelpairs_pitcheq(xm_context_t*);
 int main(int argc, char** argv) {
 	if(argc != 3) {
 		fprintf(stderr, "Usage: %s <method> <file.xm>\n", argv[0]);
+		return 1;
 	}
 
-	/* Read xm file contents to a buffer */
-	FILE* xm_file = fopen(argv[2], "rb");
-	if(xm_file == NULL) {
-		perror("fopen");
-		return 1;
-	}
-	if(fseek(xm_file, 0, SEEK_END)) {
-		perror("fseek");
-		return 1;
-	}
-	long xm_file_length = ftell(xm_file);
-	static_assert(UINT32_MAX <= SIZE_MAX);
-	if(xm_file_length < 0 || xm_file_length > UINT32_MAX) return 1;
-	rewind(xm_file);
-	char* xm_file_data = malloc((size_t)xm_file_length);
-	if(xm_file_data == NULL) return 1;
-	if(fread(xm_file_data, (size_t)xm_file_length, 1, xm_file) != 1) {
-		perror("fread");
-		return 1;
-	}
-	fclose(xm_file);
-
-	/* Allocate xm context and free xm file data */
-	xm_prescan_data_t* p = alloca(XM_PRESCAN_DATA_SIZE);
-	if(!xm_prescan_module(xm_file_data, (uint32_t)xm_file_length, p)) {
-		return 1;
-	}
-	char* ctx_buffer = malloc(xm_size_for_context(p));
-	if(ctx_buffer == NULL) return 1;
-	xm_context_t* ctx = xm_create_context(ctx_buffer, p, xm_file_data,
-	                                      (uint32_t)xm_file_length);
-	free(xm_file_data);
+	xm_context_t* ctx = load_module(argv[2]);
 	xm_set_sample_rate(ctx, 48000);
 
 	/* Perform the test */

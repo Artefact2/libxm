@@ -6,8 +6,11 @@ set(XM_RAMPING OFF CACHE BOOL "" FORCE)
 include(CTest)
 add_subdirectory(../src xm_build)
 
-add_executable(test-libxm test-libxm.c)
+add_executable(test-libxm test-libxm.c common.c)
 target_link_libraries(test-libxm PRIVATE xm xm_common)
+
+add_executable(test-analyze-helper test-analyze-helper.c common.c)
+target_link_libraries(test-analyze-helper PRIVATE xm xm_common)
 
 add_test(NAME test_arpeggio COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/arpeggio.xm)

@@ -93,8 +93,6 @@ int main(int argc, char** argv) {
 			}
 			xm_analyze(ctx, analyze_out);
 			fprintf(stdout, "%s\n", analyze_out);
-			free(analyze_out);
-			xm_reset_context(ctx);
 			exit(0);
 		} else {
 			fprintf(stderr, "unknown command-line argument: %s", argv[i]);
