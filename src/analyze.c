@@ -156,6 +156,8 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 					used_effects |= 1;
 				}
 			} else {
+				/* XXX: some effects can be checked after the
+				   volume==0 check */
 				used_effects |=
 					(uint64_t)1 << ch->current->effect_type;
 			}
@@ -164,12 +166,26 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 
 			analyze_note_trigger(ctx, ch, &used_features);
 
-			if(ch->actual_volume[0] == 0.f
-			   && ch->actual_volume[1] == 0.f) {
+			if(ch->sample == NULL || ch->period == 0) {
 				continue;
 			}
 
-			if(ch->sample == NULL || ch->period == 0) {
+			#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
+			if(ch->instrument->volume_envelope.num_points) {
+				used_features |= (uint64_t)1
+					<< FEATURE_VOLUME_ENVELOPES;
+			}
+			#endif
+
+			#if HAS_FADEOUT_VOLUME
+			if(ch->instrument->volume_fadeout && !SUSTAINED(ch)) {
+				used_features |= (uint64_t)1
+					<< FEATURE_FADEOUT_VOLUME;
+			}
+			#endif
+
+			if(ch->actual_volume[0] == 0.f
+			   && ch->actual_volume[1] == 0.f) {
 				continue;
 			}
 
@@ -224,24 +240,10 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 					<< FEATURE_NOTE_SWITCH;
 			}
 
-			#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
-			if(ch->instrument->volume_envelope.num_points) {
-				used_features |= (uint64_t)1
-					<< FEATURE_VOLUME_ENVELOPES;
-			}
-			#endif
-
 			#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
 			if(ch->instrument->panning_envelope.num_points) {
 				used_features |= (uint64_t)1
 					<< FEATURE_PANNING_ENVELOPES;
-			}
-			#endif
-
-			#if HAS_FADEOUT_VOLUME
-			if(ch->instrument->volume_fadeout && !SUSTAINED(ch)) {
-				used_features |= (uint64_t)1
-					<< FEATURE_FADEOUT_VOLUME;
 			}
 			#endif
 
