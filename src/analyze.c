@@ -126,8 +126,6 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	uint16_t off = 0;
 	int16_t pannings[4] = { -1, -1, -1, -1 };
 	uint8_t panning_type = 0;
-	bool constant_tempo = true;
-	bool constant_bpm = true;
 	int16_t tempo = -1;
 	int16_t bpm = -1;
 
@@ -137,13 +135,13 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 		if(tempo == - 1) {
 			tempo = CURRENT_TEMPO(ctx);
 		} else if(tempo != CURRENT_TEMPO(ctx)) {
-			constant_tempo = false;
+			tempo = -2;
 		}
 
 		if(bpm == -1) {
 			bpm = CURRENT_BPM(ctx);
 		} else if(bpm != CURRENT_BPM(ctx)) {
-			constant_bpm = false;
+			bpm = -2;
 		}
 
 		xm_channel_context_t* ch = ctx->channels;
@@ -263,7 +261,7 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 
 			int16_t panning = (int16_t)
 				(xm_get_panning_of_channel(ctx, i+1)
-				 * UINT8_MAX);
+				 * (float)MAX_PANNING + 0.5f);
 			if(pannings[i % 4] == -1) {
 				pannings[i % 4] = panning;
 			} else if(pannings[i % 4] != panning) {
@@ -272,20 +270,26 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 		}
 	}
 
-	if(panning_type == 0
-	   && pannings[0] == pannings[3]
-	   && pannings[1] == pannings[2]) {
-		if(pannings[0] <= pannings[1]) {
+	if(panning_type == 0) {
+		if(ctx->module.num_channels == 1) {
+			pannings[1] = MAX_PANNING - pannings[0];
+		}
+		if((ctx->module.num_channels < 4
+		    || pannings[0] == pannings[3])
+		   && (ctx->module.num_channels < 3
+		       || pannings[1] == pannings[2])
+		   && pannings[0] <= pannings[1]
+		   && pannings[0] + pannings[1] == MAX_PANNING) {
 			panning_type = (uint8_t)
 				(8 * (pannings[1] - pannings[0]) / 256);
-			assert(panning_type < 8);
+			assert(panning_type <= 8);
 		} else {
 			panning_type = 8;
 		}
 	}
 
-	if(constant_tempo) {
-		assert(tempo >= 1 && tempo < MIN_BPM);
+	if(tempo > 0) {
+		assert(tempo < MIN_BPM);
 		used_features |= (uint64_t)((~tempo) & 31)
 			<< FEATURE_VARIABLE_TEMPO;
 		used_effects &= ~((uint64_t)1 << EFFECT_SET_TEMPO);
@@ -294,7 +298,7 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 		used_features |= (uint64_t)31 << FEATURE_VARIABLE_TEMPO;
 	}
 
-	if(constant_bpm) {
+	if(bpm > 0) {
 		assert(bpm >= MIN_BPM && bpm <= MAX_BPM);
 		used_features |= (uint64_t)((~bpm) & 255)
 			<< FEATURE_VARIABLE_BPM;
