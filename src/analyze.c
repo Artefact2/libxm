@@ -91,8 +91,9 @@ static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
 	smp = ctx->samples + ch->next_instrument - 1;
 	#endif
 
-	int16_t note = (int16_t)(ch->orig_note + smp->relative_note);
-
+	/* Use current->note, NOT orig_note, this matters for tone
+	   portamentos */
+	int16_t note = (int16_t)(ch->current->note + smp->relative_note);
 	if(note <= 0 || note >= 120) {
 		*used_features |= (uint64_t)1 << FEATURE_INVALID_NOTES;
 		return;
