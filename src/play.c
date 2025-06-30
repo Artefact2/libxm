@@ -147,6 +147,10 @@ static int8_t xm_waveform([[maybe_unused]] uint8_t waveform,
 	step %= 0x40;
 	switch(waveform & 3) {
 
+	/* In case some waveforms were compiled out, default to the first
+	   enabled waveform */
+	default:
+
 	#if HAS_FEATURE(FEATURE_WAVEFORM_SINE)
 	case WAVEFORM_SINE:
 		static constexpr int8_t sin_lut[] = {
@@ -177,8 +181,6 @@ static int8_t xm_waveform([[maybe_unused]] uint8_t waveform,
 	#endif
 
 	}
-
-	assert(0);
 }
 
 #if HAS_FEATURE(FEATURE_AUTOVIBRATO)
