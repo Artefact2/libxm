@@ -90,6 +90,8 @@ static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
 #define FEATURE_INVALID_SAMPLES 20
 #define FEATURE_INVALID_NOTES 21
 #define FEATURE_CLAMP_PERIODS 22
+#define FEATURE_SAMPLE_RELATIVE_NOTES 23
+#define FEATURE_SAMPLE_FINETUNES 24
 
 #define FEATURE_VARIABLE_TEMPO 27 /* 27..32 (5 bits) */
 #define FEATURE_VARIABLE_BPM 32 /* 32..40 (8 bits) */
@@ -260,12 +262,31 @@ struct xm_sample_s {
 	#endif
 
 	uint8_t panning; /* 0..MAX_PANNING */
+
+	#if HAS_FEATURE(FEATURE_SAMPLE_FINETUNES)
+	#define FINETUNE(smp) ((smp)->finetune)
 	int8_t finetune; /* -16..15 (-1 semitone..+15/16 semitone) */
+	#else
+	#define FINETUNE(smp) 0
+	#endif
+
+	#if HAS_FEATURE(FEATURE_SAMPLE_RELATIVE_NOTES)
+	#define RELATIVE_NOTE(smp) ((smp)->relative_note)
 	int8_t relative_note;
+	#else
+	#define RELATIVE_NOTE(smp) 0
+	#endif
 
 	#if XM_STRINGS
 	static_assert(SAMPLE_NAME_LENGTH % 8 == 0);
 	char name[SAMPLE_NAME_LENGTH];
+	#endif
+
+	#define SAMPLE_PADDING ( \
+		!HAS_FEATURE(FEATURE_SAMPLE_FINETUNES) \
+		+ !HAS_FEATURE(FEATURE_SAMPLE_RELATIVE_NOTES))
+	#if SAMPLE_PADDING % 4
+	char __pad[SAMPLE_PADDING % 4];
 	#endif
 };
 typedef struct xm_sample_s xm_sample_t;
@@ -558,7 +579,13 @@ struct xm_channel_context_s {
 	#endif
 
 	uint8_t orig_note; /* Last valid note seen in a slot. Could be 0. */
+
+	#define HAS_FINETUNES (HAS_FEATURE(FEATURE_SAMPLE_FINETUNES)	\
+		|| HAS_EFFECT(EFFECT_SET_FINETUNE))
+	#if HAS_FINETUNES
 	int8_t finetune;
+	#endif
+
 	uint8_t next_instrument; /* Last instrument seen in the
 	                            instrument column. Could be 0. */
 
@@ -764,7 +791,8 @@ struct xm_channel_context_s {
 		+ 3*!(HAS_PANNING && HAS_FEATURE(FEATURE_PANNING_ENVELOPES)) \
 		+ !HAS_SUSTAIN \
 		+ !XM_MUTING_FUNCTIONS \
-		+ !HAS_PANNING)
+		+ !HAS_PANNING \
+		+ !HAS_FINETUNES)
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
 	#endif

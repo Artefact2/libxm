@@ -1156,10 +1156,12 @@ static uint32_t xm_load_xm0104_sample_header(xm_sample_t* sample, bool* is_16bit
 	static_assert(MAX_VOLUME <= 0x7F);
 	sample->volume = (unsigned)volume & 0x7F;
 
+	#if HAS_FEATURE(FEATURE_SAMPLE_FINETUNES)
 	/* Finetune is stored as a signed int8, but always rounds down instead
 	   of the usual truncation */
 	sample->finetune = (int8_t)READ_U8(offset + 13);
 	sample->finetune = (int8_t)((sample->finetune - INT8_MIN) / 8 - 16);
+	#endif
 
 	#if HAS_FEATURE(FEATURE_PINGPONG_LOOPS)
 	/* The XM spec doesn't quite say what to do when bits 0 and 1
@@ -1182,7 +1184,9 @@ static uint32_t xm_load_xm0104_sample_header(xm_sample_t* sample, bool* is_16bit
 	sample->panning = READ_U8(offset + 15);
 	#endif
 
+	#if HAS_FEATURE(FEATURE_SAMPLE_RELATIVE_NOTES)
 	sample->relative_note = (int8_t)READ_U8(offset + 16);
+	#endif
 
 	#if XM_STRINGS
 	static_assert(SAMPLE_NAME_LENGTH >= 23); /* +1 for NUL */
@@ -1375,6 +1379,7 @@ static void xm_load_mod(xm_context_t* ctx,
 		READ_MEMCPY(ins->name, offset, 22);
 		#endif
 
+		#if HAS_FEATURE(FEATURE_SAMPLE_FINETUNES)
 		uint8_t finetune = READ_U8(offset + 24);
 		if(finetune >= 16) {
 			NOTICE("ignoring invalid finetune of sample %u (%u)",
@@ -1383,6 +1388,7 @@ static void xm_load_mod(xm_context_t* ctx,
 		}
 		smp->finetune = (int8_t)((finetune < 8 ? finetune
 		                         : finetune - 16) * 2);
+		#endif
 
 		uint8_t volume = READ_U8(offset + 25);
 		if(volume > MAX_VOLUME) {

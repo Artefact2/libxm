@@ -71,7 +71,7 @@ static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
 		return;
 	}
 
-	xm_sample_t* smp;
+	[[maybe_unused]] xm_sample_t* smp;
 
 	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	xm_instrument_t* inst = ctx->instruments + ch->next_instrument - 1;
@@ -93,7 +93,7 @@ static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
 
 	/* Use current->note, NOT orig_note, this matters for tone
 	   portamentos */
-	int16_t note = (int16_t)(ch->current->note + smp->relative_note);
+	int16_t note = (int16_t)(ch->current->note + RELATIVE_NOTE(smp));
 	if(note <= 0 || note >= 120) {
 		*used_features |= (uint64_t)1 << FEATURE_INVALID_NOTES;
 		return;
@@ -186,6 +186,17 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			if(ch->actual_volume[0] == 0.f
 			   && ch->actual_volume[1] == 0.f) {
 				continue;
+			}
+
+			if(ch->sample) {
+				if(RELATIVE_NOTE(ch->sample)) {
+					used_features |= (uint64_t)1
+						<< FEATURE_SAMPLE_RELATIVE_NOTES;
+				}
+				if(FINETUNE(ch->sample)) {
+					used_features |= (uint64_t)1
+						<< FEATURE_SAMPLE_FINETUNES;
+				}
 			}
 
 			if(ch->current->effect_type == EFFECT_ARPEGGIO

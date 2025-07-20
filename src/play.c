@@ -377,7 +377,7 @@ static void xm_tone_portamento_target(const xm_context_t* ctx,
 	/* Tone porta uses the relative note of whatever sample we have, even if
 	   the target note belongs to another sample with another relative
 	   note. */
-	int16_t note = (int16_t)(ch->current->note + ch->sample->relative_note);
+	int16_t note = (int16_t)(ch->current->note + RELATIVE_NOTE(ch->sample));
 
 	#if HAS_FEATURE(FEATURE_INVALID_NOTES)
 	/* Invalid notes keep whatever target period was there before. */
@@ -388,7 +388,7 @@ static void xm_tone_portamento_target(const xm_context_t* ctx,
 	   initially triggering the note */
 	/* XXX: refactor note+finetune logic with xm_trigger_note() */
 	ch->tone_portamento_target_period =
-		xm_period(ctx, (int16_t)(16 * (note - 1) + ch->finetune));
+		xm_period(ctx, (int16_t)(16 * (note - 1) + FINETUNE(ch)));
 }
 #endif
 
@@ -487,8 +487,8 @@ static void xm_round_linear_period_to_semitone(xm_channel_context_t* ch) {
 	/* With linear frequencies, 1 semitone is 64 period units and 16
 	   finetune units. */
 	uint16_t new_period = (uint16_t)
-		(((ch->period + ch->finetune * 4 + 32) & 0xFFC0)
-		 - ch->finetune * 4);
+		(((ch->period + FINETUNE(ch) * 4 + 32) & 0xFFC0)
+		 - FINETUNE(ch) * 4);
 	ch->glissando_control_error = (int8_t)(ch->period - new_period);
 	ch->period = new_period;
 }
@@ -915,7 +915,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 	#endif
 
-	int16_t note = (int16_t)(ch->orig_note + new_sample->relative_note);
+	int16_t note = (int16_t)(ch->orig_note + RELATIVE_NOTE(new_sample));
 	#if HAS_FEATURE(FEATURE_INVALID_NOTES)
 	if(note <= 0 || note >= 120) {
 		/* Invalid notes seem to be completely ignored in FT2 */
@@ -931,6 +931,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	}
 	#endif
 
+	#if HAS_FINETUNES
 	/* Handle E5y: Set note fine-tune here; this effect only works in tandem
 	   with a note and overrides the finetune value stored in the sample. If
 	   we have Mx in the volume column, it does nothing. */
@@ -939,10 +940,11 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 		ch->finetune = (int8_t)
 			(ch->current->effect_param * 2 - 16);
 	} else {
-		ch->finetune = ch->sample->finetune;
+		ch->finetune = FINETUNE(ch->sample);
 	}
+	#endif
 
-	ch->period = xm_period(ctx, (int16_t)(16 * (note - 1) + ch->finetune));
+	ch->period = xm_period(ctx, (int16_t)(16 * (note - 1) + FINETUNE(ch)));
 
 	/* Handle 9xx: Sample offset here, since it does nothing outside of a
 	   note trigger (ie, called on its own without a note). If we have Mx in
