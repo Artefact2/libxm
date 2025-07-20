@@ -92,6 +92,7 @@ static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
 #define FEATURE_CLAMP_PERIODS 22
 #define FEATURE_SAMPLE_RELATIVE_NOTES 23
 #define FEATURE_SAMPLE_FINETUNES 24
+#define FEATURE_SAMPLE_PANNINGS 25
 
 #define FEATURE_VARIABLE_TEMPO 27 /* 27..32 (5 bits) */
 #define FEATURE_VARIABLE_BPM 32 /* 32..40 (8 bits) */
@@ -261,7 +262,14 @@ struct xm_sample_s {
 	uint8_t volume;
 	#endif
 
+	#define HAS_SAMPLE_PANNINGS (XM_PANNING_TYPE == 8 \
+	                             && HAS_FEATURE(FEATURE_SAMPLE_PANNINGS))
+	#if HAS_SAMPLE_PANNINGS
+	#define PANNING(smp) ((smp)->panning)
 	uint8_t panning; /* 0..MAX_PANNING */
+	#else
+	#define PANNING(smp) (MAX_PANNING/2)
+	#endif
 
 	#if HAS_FEATURE(FEATURE_SAMPLE_FINETUNES)
 	#define FINETUNE(smp) ((smp)->finetune)
@@ -284,7 +292,8 @@ struct xm_sample_s {
 
 	#define SAMPLE_PADDING ( \
 		!HAS_FEATURE(FEATURE_SAMPLE_FINETUNES) \
-		+ !HAS_FEATURE(FEATURE_SAMPLE_RELATIVE_NOTES))
+		+ !HAS_FEATURE(FEATURE_SAMPLE_RELATIVE_NOTES)	\
+		+ !HAS_SAMPLE_PANNINGS)
 	#if SAMPLE_PADDING % 4
 	char __pad[SAMPLE_PADDING % 4];
 	#endif

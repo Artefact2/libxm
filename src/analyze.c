@@ -197,6 +197,10 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 					used_features |= (uint64_t)1
 						<< FEATURE_SAMPLE_FINETUNES;
 				}
+				if(PANNING(ch->sample) != (MAX_PANNING / 2)) {
+					used_features |= (uint64_t)1
+						<< FEATURE_SAMPLE_PANNINGS;
+				}
 			}
 
 			if(ch->current->effect_type == EFFECT_ARPEGGIO

@@ -546,7 +546,7 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		if(ch->sample) {
 			ch->volume = ch->sample->volume;
 			#if HAS_PANNING
-			ch->panning = ch->sample->panning;
+			ch->panning = PANNING(ch->sample);
 			#endif
 		}
 		if(!NOTE_IS_KEY_OFF(s->note)) {

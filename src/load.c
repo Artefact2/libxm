@@ -1180,7 +1180,7 @@ static uint32_t xm_load_xm0104_sample_header(xm_sample_t* sample, bool* is_16bit
 		NOTICE("ignoring unknown flags (%d) in sample", flags);
 	}
 
-	#if HAS_PANNING
+	#if HAS_SAMPLE_PANNINGS
 	sample->panning = READ_U8(offset + 15);
 	#endif
 
@@ -1398,7 +1398,7 @@ static void xm_load_mod(xm_context_t* ctx,
 		}
 		smp->volume = (unsigned)volume & 0x7F;
 
-		#if HAS_PANNING
+		#if HAS_SAMPLE_PANNINGS
 		smp->panning = MAX_PANNING/2;
 		#endif
 
