@@ -77,6 +77,8 @@ struct xm_prescan_data_s {
 	enum:uint8_t {
 		XM_FORMAT_XM0104,
 		XM_FORMAT_MOD,
+		XM_FORMAT_MOD_FLT8, /* FLT8 requires special logic for its
+		                       pattern data */
 	} format;
 	uint32_t num_rows:24;
 	uint32_t samples_data_length;
@@ -107,6 +109,7 @@ static void xm_load_xm0104_16b_sample_data(uint32_t, xm_sample_point_t*, const c
 
 static bool xm_prescan_mod(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_mod(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
+static void xm_fixup_mod_flt8(xm_context_t*);
 
 /* ----- Function definitions ----- */
 
@@ -129,7 +132,7 @@ bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
 	if(moddata_length >= 154+31*30) {
 		out->num_instruments = 31;
 		out->format = XM_FORMAT_MOD;
-		bool load = false;
+		bool load = true;
 
 		const char chn = moddata[150+31*30];
 		const char chn2 = moddata[151+31*30];
@@ -139,27 +142,28 @@ bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
 		   || memcmp("M!K!", moddata + 150+31*30, 4) == 0
 		   || memcmp("FLT4", moddata + 150+31*30, 4) == 0) {
 			out->num_channels = 4;
-			load = true;
 		} else if(memcmp("CD81", moddata + 150+31*30, 4) == 0
 		          || memcmp("OCTA", moddata + 150+31*30, 4) == 0
-		          || memcmp("OKTA", moddata + 150+31*30, 4) == 0
-		          || memcmp("FLT8", moddata + 150+31*30, 4) == 0) {
+		          || memcmp("OKTA", moddata + 150+31*30, 4) == 0) {
 			out->num_channels = 8;
-			load = true;
+		} else if(memcmp("FLT8", moddata + 150+31*30, 4) == 0) {
+			/* Load FLT8 patterns as 8 channels, 32 rows. Merge them
+			   later in xm_fixup_mod_flt8(). */
+			out->num_channels = 8;
+			out->format = XM_FORMAT_MOD_FLT8;
 		} else if(chn >= '1' && chn <= '9'
 		   && memcmp("CHN", moddata + 151+31*30, 3) == 0) {
 			out->num_channels = (uint8_t)(chn - '0');
-			load = true;
 		} else if(chn >= '1' && chn <= '9' && chn2 >= '0' && chn2 <= '9'
 		   && (memcmp("CH", moddata + 152+31*30, 2) == 0
 		       || memcmp("CN", moddata + 152+31*30, 2) == 0)) {
 			out->num_channels = (uint8_t)
 				(10 * (chn - '0') + chn2 - '0');
-			load = true;
 		} else if(chn3 >= '1' && chn3 <= '9'
 		   && memcmp("TDZ", moddata + 150+31*30, 3) == 0) {
 			out->num_channels = (uint8_t)(chn3 - '0');
-			load = true;
+		} else {
+			load = false;
 		}
 
 		if(load) {
@@ -264,6 +268,11 @@ xm_context_t* xm_create_context(char* restrict mempool,
 
 	case XM_FORMAT_MOD:
 		xm_load_mod(ctx, moddata, moddata_length, p);
+		break;
+
+	case XM_FORMAT_MOD_FLT8:
+		xm_load_mod(ctx, moddata, moddata_length, p);
+		xm_fixup_mod_flt8(ctx);
 		break;
 
 	default:
@@ -1315,6 +1324,10 @@ static bool xm_prescan_mod(const char* moddata, uint32_t moddata_length,
 			p->num_patterns = pval + 1;
 		}
 	}
+	if(p->format == XM_FORMAT_MOD_FLT8) {
+		p->num_patterns += 1;
+		p->num_patterns /= 2;
+	}
 	p->num_rows = (uint32_t)(64u * p->num_patterns);
 
 	/* Pattern data may be truncated */
@@ -1552,5 +1565,32 @@ static void xm_load_mod(xm_context_t* ctx,
 
 			slot++;
 		}
+	}
+}
+
+static void xm_fixup_mod_flt8(xm_context_t* ctx) {
+	for(uint8_t i = 0; i < ctx->module.num_patterns; ++i) {
+		xm_pattern_t* pat = ctx->patterns + i;
+		xm_pattern_slot_t* slots = ctx->pattern_slots
+			+ pat->rows_index * ctx->module.num_channels;
+		assert(pat->num_rows == 64);
+
+		/* ch1 ch2 ch3 ch4 ch1 ch2 ch3 ch4
+		   ch1 ch2 ch3 ch4 ch1 ch2 ch3 ch4
+		   (... 30 more rows)
+		   ch5 ch6 ch7 ch8 ch5 ch6 ch7 ch8
+		   ch5 ch6 ch7 ch8 ch5 ch6 ch7 ch8
+		   (... 30 more rows) */
+
+		xm_pattern_slot_t scratch[8 * 64];
+		for(uint8_t row = 0; row < 64; ++row) {
+			__builtin_memcpy(scratch + 8 * row,
+			                 slots + row * 4,
+			                 4 * sizeof(xm_pattern_slot_t));
+			__builtin_memcpy(scratch + 8 * row + 4,
+			                 slots + row * 4 + 32 * 8,
+			                 4 * sizeof(xm_pattern_slot_t));
+		}
+		__builtin_memcpy(slots, scratch, sizeof(scratch));
 	}
 }
