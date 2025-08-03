@@ -58,7 +58,7 @@
 	READ_MEMCPY_BOUND(dest, offset, length, moddata_length)
 
 #define TRIM_SAMPLE_LENGTH(length, loop_start, loop_length, flags) \
-	(flags & (SAMPLE_FLAG_PING_PONG | SAMPLE_FLAG_FORWARD) ?	\
+	((flags) & (SAMPLE_FLAG_PING_PONG | SAMPLE_FLAG_FORWARD) ? \
 	 ((loop_start > length ? length :				\
 	  (loop_start + (loop_start + loop_length > length ? 0 : loop_length)) \
 	   )) : length)
@@ -113,6 +113,8 @@ static void xm_load_mod(xm_context_t*, const char*, uint32_t, const xm_prescan_d
 static void xm_fixup_mod_flt8(xm_context_t*);
 
 static bool xm_prescan_s3m(const char*, uint32_t, xm_prescan_data_t*);
+static void xm_load_s3m(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
+static void xm_load_s3m_instrument(xm_context_t*, uint8_t, bool, const char*, uint32_t, uint32_t);
 
 /* ----- Function definitions ----- */
 
@@ -1439,6 +1441,9 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 			                                 loop_length,
 			                                 SAMPLE_FLAG_FORWARD);
 			smp->loop_length = loop_length;
+			if(smp->loop_length > smp->length) {
+				smp->loop_length = smp->length;
+			}
 		}
 
 		offset += 30;
@@ -1620,11 +1625,17 @@ static void xm_fixup_mod_flt8(xm_context_t* ctx) {
 static bool xm_prescan_s3m(const char* restrict moddata,
                            uint32_t moddata_length,
                            xm_prescan_data_t* restrict out) {
-	out->pot_length = READ_U16(32);
-	if(out->pot_length > PATTERN_ORDER_TABLE_LENGTH) {
-		NOTICE("order table too big (%u > %u)",
-		       out->pot_length, PATTERN_ORDER_TABLE_LENGTH);
-		return false;
+	uint16_t pot_length = READ_U16(32);
+	out->pot_length = 0;
+	for(uint8_t i = 0; i < pot_length; ++i) {
+		uint8_t x = READ_U8(96 + i);
+		if(x == 255) break;
+		if(x == 254) continue;
+		if(out->pot_length == PATTERN_ORDER_TABLE_LENGTH) {
+			NOTICE("order table too big");
+			return false;
+		}
+		++out->pot_length;
 	}
 
 	out->num_samples = READ_U16(34);
@@ -1644,19 +1655,20 @@ static bool xm_prescan_s3m(const char* restrict moddata,
 	out->num_instruments = (uint8_t)out->num_samples;
 	out->num_rows = out->num_patterns * 64;
 
-	out->num_channels = 0;
+	uint16_t used_channels = 0; /* bit field */
 	for(uint8_t ch = 0; ch < 32; ++ ch) {
+		uint8_t x = READ_U8(64 + ch);
 		/* 16..=29: Adlib stuff (XXX) */
 		/* 30..=255: unused/disabled channel */
-		if(READ_U8(64 + ch) < 16) {
-			++out->num_channels;
-		}
+		if(x >= 16) continue;
+		used_channels |= (uint16_t)1 << x;
 	}
+	out->num_channels = (uint8_t)stdc_count_ones(used_channels);
 
 	out->samples_data_length = 0;
 	for(uint8_t i = 0; i < out->num_instruments; ++i) {
 		uint32_t ins_offset =
-			READ_U16(96 + out->pot_length + i * 2) * 16;
+			READ_U16(96 + pot_length + i * 2) * 16;
 		uint8_t ins_type = READ_U8(ins_offset);
 		/* Only care about PCM data */
 		if(ins_type != 1) continue;
@@ -1674,8 +1686,194 @@ static bool xm_prescan_s3m(const char* restrict moddata,
 			return false;
 		}
 		out->samples_data_length += length;
-
 	}
 
 	return true;
+}
+
+static void xm_load_s3m(xm_context_t* restrict ctx,
+                        const char* restrict moddata,
+                        uint32_t moddata_length,
+                        const xm_prescan_data_t* restrict p) {
+	#if XM_STRINGS
+	/* Module name is already NUL-terminated in S3M */
+	static_assert(MODULE_NAME_LENGTH >= 28);
+	READ_MEMCPY(ctx->module.name, 0, 27);
+
+	uint16_t tracker_version = READ_U16(40);
+	char* tn = ctx->module.trackername;
+	switch(tracker_version >> 24) {
+	case 1:
+		__builtin_memcpy("Scream Tracker ", tn, 15);
+		tn += 15;
+		goto version;
+
+	case 2:
+		__builtin_memcpy("Imago Orpheus ", tn, 14);
+		tn += 14;
+		goto version;
+
+	case 3:
+		__builtin_memcpy("Impulse Tracker ", tn, 16);
+		tn += 16;
+		goto version;
+
+	case 4:
+		__builtin_memcpy("Schism Tracker", tn, 14);
+		break;
+
+	case 5:
+		__builtin_memcpy("OpenMPT", tn, 7);
+		break;
+
+	default:
+		break;
+
+	version:
+		*tn++ = '0' + ((tracker_version >> 16) & 0xF);
+		*tn++ = '.';
+		*tn++ = '0' + ((tracker_version >> 8) & 0xF);
+		*tn++ = '0' + (tracker_version & 0xF);
+		break;
+	}
+	#endif
+
+	#if HAS_INSTRUMENTS
+	ctx->module.num_instruments = p->num_instruments;
+	#endif
+	ctx->module.num_samples = p->num_samples;
+	ctx->module.num_patterns = p->num_patterns;
+	ctx->module.num_rows = p->num_rows;
+
+	//uint8_t mod_flags = READ_U8(38);
+
+	#if HAS_DEFAULT_GLOBAL_VOLUME
+	ctx->module.default_global_volume = READ_U8(48);
+	if(ctx->module.default_global_volume > MAX_VOLUME) {
+		NOTICE("clamping initial global volume (%u -> %u)",
+		       ctx->module.default_global_volume, MAX_VOLUME);
+		ctx->module.default_global_volume = MAX_VOLUME;
+	}
+	#endif
+
+	#if !HAS_HARDCODED_TEMPO
+	ctx->module.default_tempo = READ_U8(49);
+	if(ctx->module.default_tempo == 0 || ctx->module.default_tempo == 255) {
+		ctx->module.default_tempo = 6;
+	}
+	#endif
+
+	#if !HAS_HARDCODED_BPM
+	ctx->module.default_bpm = READ_U8(50);
+	if(ctx->module.default_bpm < 33) {
+		ctx->module.default_bpm = 125;
+	}
+	#endif
+
+	uint8_t channel_settings[32];
+	uint8_t channel_map[32] = {16, 16, 16, 16, 16, 16, 16, 16,
+	                           16, 16, 16, 16, 16, 16, 16, 16,
+	                           16, 16, 16, 16, 16, 16, 16, 16,
+	                           16, 16, 16, 16, 16, 16, 16, 16};
+	READ_MEMCPY(channel_settings, 64, 32);
+	for(uint8_t ch = 0; ch < 32; ++ch) {
+		if(channel_settings[ch] >= 16) continue;
+		if(channel_map[channel_settings[ch]] < 16) continue;
+		channel_map[channel_settings[ch]] = ctx->module.num_channels;
+		++ctx->module.num_channels;
+	}
+
+	ctx->module.length = p->pot_length;
+	uint16_t pot_length = READ_U16(32);
+	for(uint8_t i = 0, j = 0; i < pot_length; ++i) {
+		uint8_t x = READ_U8(96 + i);
+		if(x == 255) {
+			assert(j == p->pot_length);
+			break;
+		}
+		if(x == 254) continue;
+		ctx->module.pattern_table[j++] = x;
+	}
+
+	uint32_t offset = 96 + pot_length;
+	bool signed_samples = (READ_U16(42) == 1);
+	for(uint8_t smp = 0; smp < ctx->module.num_samples; ++smp) {
+		xm_load_s3m_instrument(ctx, smp, signed_samples,
+		                       moddata, moddata_length,
+		                       16 * READ_U16(offset));
+		offset += 2;
+	}
+
+	for(uint8_t pat = 0; pat < ctx->module.num_patterns; ++pat) {
+		//xm_load_s3m_pattern();
+		offset += 2;
+	}
+
+	/* XXX: todo */
+	/* bool default_pannings = (READ_U8(53) == 252); */
+}
+
+void xm_load_s3m_instrument(xm_context_t* restrict ctx,
+                            uint8_t idx, bool signed_smp_data,
+                            const char* restrict moddata,
+                            uint32_t moddata_length,
+                            uint32_t offset) {
+	#if XM_STRINGS
+	static_assert(INSTRUMENT_NAME_LENGTH >= 28);
+	READ_MEMCPY(ctx->instruments[idx].name, offset + 48, 27);
+	#endif
+
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+	xm_instrument_t* ins = ctx->instruments + idx;
+	ins->num_samples = 1;
+	ins->samples_index = idx;
+	#endif
+
+	if(READ_U8(offset) != 1) {
+		/* Non-PCM instument */
+		return;
+	}
+
+	uint32_t base_length = READ_U32(offset + 16);
+	uint32_t base_loop_start = READ_U32(offset + 20);
+	uint32_t base_loop_end = READ_U32(offset + 24);
+	uint8_t base_volume = READ_U8(offset + 28);
+	uint8_t base_flags = READ_U8(offset + 31); /* XXX: stereo/16bit */
+	//uint32_t base_c_frequency = READ_U32(offset + 32); /* XXX */
+
+	xm_sample_t* smp = ctx->samples + idx;
+	smp->length = TRIM_SAMPLE_LENGTH(base_length, base_loop_start,
+	                                 base_loop_end - base_loop_start,
+	                                 (base_flags & 1) ?
+	                                 SAMPLE_FLAG_FORWARD : 0);
+	if(base_flags & 1) {
+		smp->loop_length = base_loop_end - base_loop_start;
+		if(smp->loop_length > smp->length) {
+			smp->loop_length = smp->length;
+		}
+	}
+
+	if(base_volume > MAX_VOLUME) {
+		NOTICE("clamping volume of sample %u (%u -> %u)",
+		       idx, base_volume, MAX_VOLUME);
+		base_volume = MAX_VOLUME;
+	}
+	smp->volume = (unsigned)base_volume & 0x7F;
+
+	#if HAS_SAMPLE_PANNINGS
+	smp->panning = MAX_PANNING / 2;
+	#endif
+
+	/* Now read sample data */
+	smp->index = ctx->module.samples_data_length;
+	xm_sample_point_t* out = ctx->samples_data
+		+ ctx->module.samples_data_length;
+	ctx->module.samples_data_length += smp->length;
+	offset = 16 * ((((uint32_t)READ_U8(offset + 13)) << 16)
+	               + READ_U16(offset + 14));
+	for(uint32_t k = 0; k < smp->length; ++k) {
+		*out++ = SAMPLE_POINT_FROM_S8(signed_smp_data
+		                              ? ((int8_t)READ_U8(offset+k))
+		                              : (int8_t)(READ_U8(offset+k)-128));
+	}
 }

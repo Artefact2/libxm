@@ -11,6 +11,7 @@
 #include <string.h>
 #include <stdckdint.h>
 #include <stddef.h>
+#include <stdbit.h>
 
 #define POINTER_SIZE (UINTPTR_MAX == UINT64_MAX ? 8 : 4)
 
