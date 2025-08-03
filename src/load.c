@@ -95,7 +95,7 @@ const uint8_t XM_PRESCAN_DATA_SIZE = sizeof(xm_prescan_data_t);
 
 static int8_t xm_dither_16b_8b(int16_t);
 static uint64_t xm_fnv1a(const unsigned char*, uint32_t) __attribute__((const));
-static void xm_fixup_context(xm_context_t*);
+static void xm_fixup_common(xm_context_t*);
 
 static bool xm_prescan_xm0104(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_xm0104(xm_context_t*, const char*, uint32_t);
@@ -107,6 +107,7 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t*, xm_instrument_t*, const
 static uint32_t xm_load_xm0104_sample_header(xm_sample_t*, bool*, const char*, uint32_t, uint32_t);
 static void xm_load_xm0104_8b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 static void xm_load_xm0104_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
+static void xm_fixup_xm0104(xm_context_t*);
 
 static bool xm_prescan_mod(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_mod(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
@@ -115,6 +116,7 @@ static void xm_fixup_mod_flt8(xm_context_t*);
 static bool xm_prescan_s3m(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_s3m(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
 static void xm_load_s3m_instrument(xm_context_t*, uint8_t, bool, const char*, uint32_t, uint32_t);
+static void xm_load_s3m_pattern(xm_context_t*, uint8_t, const uint8_t*, const uint8_t*, const char*, uint32_t, uint32_t);
 
 /* ----- Function definitions ----- */
 
@@ -281,15 +283,22 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	switch(p->format) {
 	case XM_FORMAT_XM0104:
 		xm_load_xm0104(ctx, moddata, moddata_length);
+		xm_fixup_xm0104(ctx);
 		break;
 
 	case XM_FORMAT_MOD:
 		xm_load_mod(ctx, moddata, moddata_length, p);
+		xm_fixup_xm0104(ctx);
 		break;
 
 	case XM_FORMAT_MOD_FLT8:
 		xm_load_mod(ctx, moddata, moddata_length, p);
 		xm_fixup_mod_flt8(ctx);
+		xm_fixup_xm0104(ctx);
+		break;
+
+	case XM_FORMAT_S3M:
+		xm_load_s3m(ctx, moddata, moddata_length, p);
 		break;
 
 	default:
@@ -305,9 +314,88 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	assert(ctx->module.samples_data_length == p->samples_data_length);
 	assert(xm_context_size(ctx) == ctx_size);
 
-	xm_fixup_context(ctx);
+	xm_fixup_common(ctx);
 	xm_reset_context(ctx);
 	return ctx;
+}
+
+static void xm_fixup_common(xm_context_t* ctx) {
+	xm_pattern_slot_t* slot = ctx->pattern_slots;
+	for(uint32_t i = ctx->module.num_rows * ctx->module.num_channels;
+	    i; --i, ++slot) {
+		if(slot->effect_type == EFFECT_JUMP_TO_ORDER
+		   && slot->effect_param >= ctx->module.length) {
+			/* Convert invalid Bxx to B00 */
+			slot->effect_param = 0;
+		}
+
+		if((slot->effect_type == EFFECT_SET_VOLUME
+		    || slot->effect_type == EFFECT_SET_GLOBAL_VOLUME)
+		   && slot->effect_param > MAX_VOLUME) {
+			/* Clamp Cxx and Gxx */
+			slot->effect_param = MAX_VOLUME;
+		}
+
+		if(slot->effect_type == EFFECT_SET_VIBRATO_CONTROL
+		   || slot->effect_type == EFFECT_SET_TREMOLO_CONTROL) {
+			/* Convert random waveform to square waveform (FT2
+			   behaviour, lets us reuse waveform 3 for
+			   autovibrato ramp) */
+			/* Also clear useless bit 3 */
+			slot->effect_param &=
+				((slot->effect_param & 0b11) == 0b11) ?
+				0b11110110 : 0b11110111;
+		}
+
+		if(slot->effect_type == EFFECT_CUT_NOTE
+		   && slot->effect_param == 0) {
+			/* Convert EC0 to C00, this is exactly the same effect
+			   and saves us a switch case in play.c */
+			slot->effect_type = EFFECT_SET_VOLUME;
+		}
+
+		if(slot->effect_type == EFFECT_DELAY_NOTE
+		   && slot->effect_param == 0) {
+			/* Remove all ED0, these are completely useless and save
+			   us a check in play.c */
+			slot->effect_type = 0;
+		}
+
+		if(slot->effect_type == EFFECT_RETRIGGER_NOTE
+		   && slot->effect_param == 0) {
+			if(slot->note) {
+				/* E90 with a note is completely redundant */
+			} else {
+				/* Convert E90 without a note to a special
+				   retrigger note */
+				slot->note = NOTE_RETRIGGER;
+			}
+			slot->effect_type = 0;
+		}
+
+		if((slot->effect_type == EFFECT_SET_TEMPO
+		    || slot->effect_type == EFFECT_SET_BPM)
+		   && slot->effect_param == 0) {
+			#if XM_LOOPING_TYPE != 1
+			/* F00 is not great for a player, as it stops playback.
+			   Some modules use this to indicate the end of the
+			   song. Just loop back to the start of the module and
+			   let the user decide if they want to continue, based
+			   on max_loop_count. */
+			slot->effect_type = EFFECT_JUMP_TO_ORDER;
+			slot->effect_param = ctx->module.restart_position;
+			#endif
+		}
+
+		#if HAS_VOLUME_COLUMN
+		if((slot->volume_column >> 8) == VOLUME_EFFECT_VIBRATO_SPEED
+		   && (slot->volume_column & 0xF) == 0) {
+			/* Delete S0, it does nothing and saves a check in
+			   play.c. */
+			slot->volume_column = 0;
+		}
+		#endif
+	}
 }
 
 uint32_t xm_size_for_context(const xm_prescan_data_t* p) {
@@ -349,141 +437,6 @@ static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
 		h *= 1099511628211UL;
 	}
 	return h;
-}
-
-static void xm_fixup_context(xm_context_t* ctx) {
-	xm_pattern_slot_t* slot = ctx->pattern_slots;
-	static_assert(MAX_PATTERNS * MAX_ROWS_PER_PATTERN * MAX_CHANNELS
-	              <= UINT32_MAX);
-	for(uint32_t i = ctx->module.num_rows * ctx->module.num_channels;
-	    i; --i, ++slot) {
-		if(slot->note == 97) {
-			slot->note = NOTE_KEY_OFF;
-		}
-
-		if(slot->effect_type == 33) {
-			/* Split X1y/X2y effect */
-			switch(slot->effect_param >> 4) {
-			case 1:
-				slot->effect_type =
-					EFFECT_EXTRA_FINE_PORTAMENTO_UP;
-				slot->effect_param &= 0xF;
-				break;
-			case 2:
-				slot->effect_type =
-					EFFECT_EXTRA_FINE_PORTAMENTO_DOWN;
-				slot->effect_param &= 0xF;
-				break;
-			default:
-				/* Invalid X effect, clear it */
-				slot->effect_type = 0;
-				slot->effect_param = 0;
-				break;
-			}
-		}
-
-		if(slot->effect_type == 0xE) {
-			/* Now that effects 32..=47 are free, use these for Exy
-			   extended commands */
-			slot->effect_type = 32 | (slot->effect_param >> 4);
-			slot->effect_param &= 0xF;
-		}
-
-		if(slot->effect_type == EFFECT_SET_BPM
-		   && slot->effect_param < MIN_BPM) {
-			/* Now that effect E is free, use it for "set tempo" */
-			slot->effect_type = EFFECT_SET_TEMPO;
-		}
-
-		if(slot->effect_type == EFFECT_JUMP_TO_ORDER
-		   && slot->effect_param >= ctx->module.length) {
-			/* Convert invalid Bxx to B00 */
-			slot->effect_param = 0;
-		}
-
-		if((slot->effect_type == EFFECT_SET_VOLUME
-		    || slot->effect_type == EFFECT_SET_GLOBAL_VOLUME)
-		   && slot->effect_param > MAX_VOLUME) {
-			/* Clamp Cxx and Gxx */
-			slot->effect_param = MAX_VOLUME;
-		}
-
-		if(slot->effect_type == EFFECT_SET_VIBRATO_CONTROL
-		   || slot->effect_type == EFFECT_SET_TREMOLO_CONTROL) {
-			/* Convert random waveform to square waveform (FT2
-			   behaviour, lets us reuse waveform 3 for
-			   autovibrato ramp) */
-			/* Also clear useless bit 3 */
-			slot->effect_param &=
-				((slot->effect_param & 0b11) == 0b11) ?
-				0b11110110 : 0b11110111;
-
-		}
-
-		if(slot->effect_type == 40) {
-			/* Convert E8x to 8xx */
-			slot->effect_type = EFFECT_SET_PANNING;
-			slot->effect_param = slot->effect_param * 0x10;
-		}
-
-		if(slot->effect_type == EFFECT_CUT_NOTE
-		   && slot->effect_param == 0) {
-			/* Convert EC0 to C00, this is exactly the same effect
-			   and saves us a switch case in play.c */
-			slot->effect_type = EFFECT_SET_VOLUME;
-		}
-
-		if(slot->effect_type == EFFECT_DELAY_NOTE
-		   && slot->effect_param == 0) {
-			/* Remove all ED0, these are completely useless and save
-			   us a check in play.c */
-			slot->effect_type = 0;
-		}
-
-		if(slot->effect_type == EFFECT_RETRIGGER_NOTE
-		   && slot->effect_param == 0) {
-			if(slot->note) {
-				/* E90 with a note is completely redundant */
-			} else {
-				/* Convert E90 without a note to a special
-				   retrigger note */
-				slot->note = NOTE_RETRIGGER;
-			}
-			slot->effect_type = 0;
-		}
-
-		if(slot->effect_type == EFFECT_SET_TEMPO
-		   && slot->effect_param == 0) {
-			#if XM_LOOPING_TYPE != 1
-			/* F00 is not great for a player, as it stops playback.
-			   Some modules use this to indicate the end of the
-			   song. Just loop back to the start of the module and
-			   let the user decide if they want to continue, based
-			   on max_loop_count. */
-			slot->effect_type = EFFECT_JUMP_TO_ORDER;
-			slot->effect_param = ctx->module.restart_position;
-			#endif
-		}
-
-		if(slot->effect_type == EFFECT_KEY_OFF
-		   && slot->effect_param == 0) {
-			/* Convert K00 to key off note. This is vital, as Kxx
-			   effect logic would otherwise be applied much later,
-			   and this has all kinds of nasty side effects when K00
-			   is used with either a note, or an instrument in the
-			   same slot. */
-			slot->effect_type = 0;
-			slot->note = NOTE_KEY_OFF;
-		}
-
-		#if HAS_VOLUME_COLUMN
-		if(slot->volume_column == 0xA0) {
-			/* Delete S0, it does nothing and saves a check in
-			   play.c. */
-			slot->volume_column = 0;
-		}
-		#endif
-	}
 }
 
 #define CALC_OFFSET(dest, orig) do { \
@@ -1300,6 +1253,70 @@ static void xm_load_xm0104(xm_context_t* ctx,
 	}
 }
 
+/* Also shared with .MOD */
+static void xm_fixup_xm0104(xm_context_t* ctx) {
+	xm_pattern_slot_t* slot = ctx->pattern_slots;
+	static_assert(MAX_PATTERNS * MAX_ROWS_PER_PATTERN * MAX_CHANNELS
+	              <= UINT32_MAX);
+	for(uint32_t i = ctx->module.num_rows * ctx->module.num_channels;
+	    i; --i, ++slot) {
+		if(slot->note == 97) {
+			slot->note = NOTE_KEY_OFF;
+		}
+
+		if(slot->effect_type == 33) {
+			/* Split X1y/X2y effect */
+			switch(slot->effect_param >> 4) {
+			case 1:
+				slot->effect_type =
+					EFFECT_EXTRA_FINE_PORTAMENTO_UP;
+				slot->effect_param &= 0xF;
+				break;
+			case 2:
+				slot->effect_type =
+					EFFECT_EXTRA_FINE_PORTAMENTO_DOWN;
+				slot->effect_param &= 0xF;
+				break;
+			default:
+				/* Invalid X effect, clear it */
+				slot->effect_type = 0;
+				slot->effect_param = 0;
+				break;
+			}
+		}
+
+		if(slot->effect_type == 0xE) {
+			/* Now that effects 32..=47 are free, use these for Exy
+			   extended commands */
+			slot->effect_type = 32 | (slot->effect_param >> 4);
+			slot->effect_param &= 0xF;
+		}
+
+		if(slot->effect_type == EFFECT_SET_BPM
+		   && slot->effect_param < MIN_BPM) {
+			/* Now that effect E is free, use it for "set tempo" */
+			slot->effect_type = EFFECT_SET_TEMPO;
+		}
+
+		if(slot->effect_type == 40) {
+			/* Convert E8x to 8xx */
+			slot->effect_type = EFFECT_SET_PANNING;
+			slot->effect_param = slot->effect_param * 0x10;
+		}
+
+		if(slot->effect_type == EFFECT_KEY_OFF
+		   && slot->effect_param == 0) {
+			/* Convert K00 to key off note. This is vital, as Kxx
+			   effect logic would otherwise be applied much later,
+			   and this has all kinds of nasty side effects when K00
+			   is used with either a note, or an instrument in the
+			   same slot. */
+			slot->effect_type = 0;
+			slot->note = NOTE_KEY_OFF;
+		}
+	}
+}
+
 /* ----- Amiga .MOD (M.K., xCHN, etc.): big endian ------ */
 
 static bool xm_prescan_mod(const char* restrict moddata,
@@ -1801,7 +1818,9 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 	}
 
 	for(uint8_t pat = 0; pat < ctx->module.num_patterns; ++pat) {
-		//xm_load_s3m_pattern();
+		xm_load_s3m_pattern(ctx, pat, channel_settings, channel_map,
+		                    moddata, moddata_length,
+		                    16 * READ_U16(offset));
 		offset += 2;
 	}
 
@@ -1835,9 +1854,22 @@ void xm_load_s3m_instrument(xm_context_t* restrict ctx,
 	uint32_t base_loop_end = READ_U32(offset + 24);
 	uint8_t base_volume = READ_U8(offset + 28);
 	uint8_t base_flags = READ_U8(offset + 31); /* XXX: stereo/16bit */
-	//uint32_t base_c_frequency = READ_U32(offset + 32); /* XXX */
+
+	uint32_t base_c_frequency = READ_U32(offset + 32);
+	int16_t rel_finetune = (int16_t)
+		(log2f((float)base_c_frequency / 8363.f) * 192.f);
+	assert(rel_finetune <= 16 * INT8_MAX && rel_finetune >= 16 * INT8_MIN);
 
 	xm_sample_t* smp = ctx->samples + idx;
+
+	#if HAS_FEATURE(FEATURE_SAMPLE_RELATIVE_NOTES)
+	smp->relative_note = (int8_t)(rel_finetune >> 4);
+	#endif
+
+	#if HAS_FEATURE(FEATURE_SAMPLE_FINETUNES)
+	smp->finetune = (int8_t)(rel_finetune & 0xF);
+	#endif
+
 	smp->length = TRIM_SAMPLE_LENGTH(base_length, base_loop_start,
 	                                 base_loop_end - base_loop_start,
 	                                 (base_flags & 1) ?
@@ -1871,5 +1903,158 @@ void xm_load_s3m_instrument(xm_context_t* restrict ctx,
 		*out++ = SAMPLE_POINT_FROM_S8(signed_smp_data
 		                              ? ((int8_t)READ_U8(offset+k))
 		                              : (int8_t)(READ_U8(offset+k)-128));
+	}
+}
+
+static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
+                                uint8_t patidx,
+                                const uint8_t* restrict channel_settings,
+                                const uint8_t* restrict channel_map,
+                                const char* restrict moddata,
+                                uint32_t moddata_length,
+                                uint32_t offset) {
+	xm_pattern_t* pat = ctx->patterns + patidx;
+	pat->num_rows = 64;
+	pat->rows_index = 64 * patidx;
+
+	xm_pattern_slot_t* slots = ctx->pattern_slots
+		+ 64 * patidx * ctx->module.num_channels;
+
+	uint32_t stop = offset + READ_U16(offset);
+	offset += 2;
+
+	while(offset < stop) {
+		uint8_t x = READ_U8(offset);
+		offset += 1;
+
+		if(x == 0) {
+			/* End of row */
+			slots += ctx->module.num_channels;
+			continue;
+		}
+
+		if(channel_settings[x & 31] >= 16) {
+			/* Disabled channel, skip */
+			if(x & 32) offset += 2;
+			if(x & 64) offset += 1;
+			if(x & 128) offset += 2;
+			continue;
+		}
+
+		xm_pattern_slot_t* s = slots
+			+ channel_map[channel_settings[x & 31]];
+
+		if(x & 32) {
+			s->note = READ_U8(offset);
+			s->instrument = READ_U8(offset + 1);
+			offset += 2;
+
+			/* Fixup note semantics */
+			if(s->note == 254) {
+				s->note = NOTE_KEY_OFF;
+			} else if(s->note == 255) {
+				s->note = 0;
+			} else {
+				/* Unlike XM, octave is in the high nibble, note
+				   is in the low nibble */
+				s->note = (uint8_t)(1 + (s->note >> 4) * 12
+				                    + (s->note & 0xF));
+			}
+		}
+
+		if(x & 64) {
+			#if HAS_VOLUME_COLUMN
+			/* Fixup volume column semantics */
+			s->volume_column = READ_U8(offset) + 0x10;
+			#endif
+			offset += 1;
+		}
+
+		if(x & 128) {
+			s->effect_type = READ_U8(offset);
+			s->effect_param = READ_U8(offset + 1);
+			offset += 2;
+
+			/* Fixup effect semantics */
+			switch(s->effect_type) {
+			case 1:
+				s->effect_type = EFFECT_SET_TEMPO;
+				break;
+
+			case 2:
+				s->effect_type = EFFECT_JUMP_TO_ORDER;
+				break;
+
+			case 3:
+				s->effect_type = EFFECT_PATTERN_BREAK;
+				break;
+
+			case 4: /* XXX */
+				s->effect_type = EFFECT_VOLUME_SLIDE;
+				break;
+
+			case 5: /* XXX */
+				s->effect_type = EFFECT_PORTAMENTO_DOWN;
+				break;
+
+			case 6: /* XXX */
+				s->effect_type = EFFECT_PORTAMENTO_UP;
+				break;
+
+			case 7:
+				s->effect_type = EFFECT_TONE_PORTAMENTO;
+				break;
+
+			case 8:
+				s->effect_type = EFFECT_VIBRATO;
+				break;
+
+			case 9:
+				s->effect_type = EFFECT_TREMOR;
+				break;
+
+			case 10:
+				s->effect_type = EFFECT_ARPEGGIO;
+				break;
+
+			case 11:
+				s->effect_type = EFFECT_VIBRATO_VOLUME_SLIDE;
+				break;
+
+			case 12:
+				s->effect_type = EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE;
+				break;
+
+			case 15:
+				s->effect_type = EFFECT_SET_SAMPLE_OFFSET;
+				break;
+
+			case 17:
+				s->effect_type = EFFECT_MULTI_RETRIG_NOTE;
+				break;
+
+			case 18:
+				s->effect_type = EFFECT_TREMOLO;
+				break;
+
+			case 19:
+				s->effect_type = 32 | (s->effect_param >> 4);
+				s->effect_param &= 0xF;
+				break;
+
+			case 20:
+				s->effect_type = EFFECT_SET_BPM;
+				break;
+
+			case 21: /* XXX: fine vibrato */
+				s->effect_type = 0;
+				s->effect_param = 0;
+				break;
+
+			case 22:
+				s->effect_type = EFFECT_SET_GLOBAL_VOLUME;
+				break;
+			}
+		}
 	}
 }
