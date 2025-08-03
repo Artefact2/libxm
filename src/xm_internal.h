@@ -93,7 +93,7 @@ static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
 #define FEATURE_SAMPLE_RELATIVE_NOTES 23
 #define FEATURE_SAMPLE_FINETUNES 24
 #define FEATURE_SAMPLE_PANNINGS 25
-
+#define FEATURE_DEFAULT_GLOBAL_VOLUME 26
 #define FEATURE_VARIABLE_TEMPO 27 /* 27..32 (5 bits) */
 #define FEATURE_VARIABLE_BPM 32 /* 32..40 (8 bits) */
 #define HAS_HARDCODED_TEMPO ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_TEMPO) & 31)
@@ -158,8 +158,8 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 /* These are the lengths we store in the context, including the terminating
    NUL, not necessarily the lengths of strings in loaded formats. */
 #define SAMPLE_NAME_LENGTH 24
-#define INSTRUMENT_NAME_LENGTH 24
-#define MODULE_NAME_LENGTH 24
+#define INSTRUMENT_NAME_LENGTH 32
+#define MODULE_NAME_LENGTH 32
 #define TRACKER_NAME_LENGTH 24
 
 #define PATTERN_ORDER_TABLE_LENGTH 256
@@ -448,21 +448,33 @@ struct xm_module_s {
 	#define MAX_LOOP_COUNT(mod) 0
 	#endif
 
+	/* DEFAULT_...(): These are the values stored in the loaded file, not
+	   changed by any effects like Gxx, Fxx, etc. Without these, it's
+	   impossible to properly implement xm_reset_context(). */
+
 	#if HAS_HARDCODED_TEMPO
-	#define MODULE_TEMPO(mod) ((uint8_t)HAS_HARDCODED_TEMPO)
+	#define DEFAULT_TEMPO(mod) ((uint8_t)HAS_HARDCODED_TEMPO)
 	#else
-	/* These are the values stored in the loaded file, not changed by any
-	   Fxx effect. Without these, it's impossible to properly implement
-	   xm_reset_context(). */
-	#define MODULE_TEMPO(mod) ((mod)->tempo)
-	uint8_t tempo; /* 0..MIN_BPM */
+	#define DEFAULT_TEMPO(mod) ((mod)->default_tempo)
+	uint8_t default_tempo; /* 0..MIN_BPM */
 	#endif
 
 	#if HAS_HARDCODED_BPM
-	#define MODULE_BPM(mod) ((uint8_t)HAS_HARDCODED_BPM)
+	#define DEFAULT_BPM(mod) ((uint8_t)HAS_HARDCODED_BPM)
 	#else
-	#define MODULE_BPM(mod) ((mod)->bpm)
-	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
+	#define DEFAULT_BPM(mod) ((mod)->default_bpm)
+	uint8_t default_bpm; /* MIN_BPM..=MAX_BPM */
+	#endif
+
+	#define HAS_GLOBAL_VOLUME (HAS_EFFECT(EFFECT_SET_GLOBAL_VOLUME) \
+	                           || HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE))
+	#define HAS_DEFAULT_GLOBAL_VOLUME (HAS_GLOBAL_VOLUME \
+	                       && HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME))
+	#if HAS_DEFAULT_GLOBAL_VOLUME
+	#define DEFAULT_GLOBAL_VOLUME(mod) ((mod)->default_global_volume)
+	uint8_t default_global_volume; /* 0..=MAX_VOLUME */
+	#else
+	#define DEFAULT_GLOBAL_VOLUME(mod) MAX_VOLUME
 	#endif
 
 	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
@@ -482,7 +494,7 @@ struct xm_module_s {
 	char trackername[TRACKER_NAME_LENGTH];
 	#endif
 
-	#define MODULE_PADDING (1 \
+	#define MODULE_PADDING (0 \
 		+ !(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
 		    && HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)) \
 		+ !HAS_INSTRUMENTS \
@@ -490,7 +502,8 @@ struct xm_module_s {
 		+ (XM_LOOPING_TYPE == 1) \
 		+ 2*(XM_SAMPLE_RATE != 0) \
 		+ (HAS_HARDCODED_TEMPO > 0) \
-		+ (HAS_HARDCODED_BPM > 0))
+		+ (HAS_HARDCODED_BPM > 0) \
+		+ !HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME))
 	#if MODULE_PADDING % POINTER_SIZE
 	char __pad[MODULE_PADDING % POINTER_SIZE];
 	#endif
@@ -848,13 +861,11 @@ struct xm_context_s {
 	#define EXTRA_ROWS_DONE(ctx) 0
 	#endif
 
-	#define HAS_GLOBAL_VOLUME (HAS_EFFECT(EFFECT_SET_GLOBAL_VOLUME) \
-	                           || HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE))
 	#if HAS_GLOBAL_VOLUME
-	#define GLOBAL_VOLUME(ctx) ((ctx)->global_volume)
+	#define CURRENT_GLOBAL_VOLUME(ctx) ((ctx)->global_volume)
 	uint8_t global_volume; /* 0..=MAX_VOLUME */
 	#else
-	#define GLOBAL_VOLUME(ctx) MAX_VOLUME
+	#define CURRENT_GLOBAL_VOLUME(ctx) MAX_VOLUME
 	#endif
 
 	#if HAS_HARDCODED_TEMPO
@@ -863,14 +874,14 @@ struct xm_context_s {
 	#define CURRENT_TEMPO(ctx) ((ctx)->current_tempo)
 	uint8_t current_tempo; /* 0..MIN_BPM */
 	#else
-	#define CURRENT_TEMPO(ctx) MODULE_TEMPO(&ctx->module)
+	#define CURRENT_TEMPO(ctx) DEFAULT_TEMPO(&ctx->module)
 	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_BPM)
 	#define CURRENT_BPM(ctx) ((ctx)->current_bpm)
 	uint8_t current_bpm; /* MIN_BPM..=MAX_BPM */
 	#else
-	#define CURRENT_BPM(ctx) MODULE_BPM(&ctx->module)
+	#define CURRENT_BPM(ctx) DEFAULT_BPM(&ctx->module)
 	#endif
 
 	#if HAS_EFFECT(EFFECT_PATTERN_BREAK)

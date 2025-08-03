@@ -1249,7 +1249,7 @@ void xm_tick(xm_context_t* ctx) {
 		base *= VOLUME_ENVELOPE_VOLUME(ch);
 		base *= FADEOUT_VOLUME(ch);
 		base /= 4;
-		base *= GLOBAL_VOLUME(ctx);
+		base *= CURRENT_GLOBAL_VOLUME(ctx);
 		float volume =  (float)base / (float)(INT32_MAX);
 		assert(volume >= 0.f && volume <= 1.f);
 

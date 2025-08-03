@@ -288,15 +288,15 @@ void xm_reset_context(xm_context_t* ctx) {
 	                   - offsetof(xm_context_t, remaining_samples_in_tick));
 
 	#if HAS_GLOBAL_VOLUME
-	ctx->global_volume = MAX_VOLUME;
+	ctx->global_volume = DEFAULT_GLOBAL_VOLUME(&ctx->module);
 	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_TEMPO)
-	ctx->current_tempo = ctx->module.tempo;
+	ctx->current_tempo = DEFAULT_TEMPO(&ctx->module);
 	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_BPM)
-	ctx->current_bpm = ctx->module.bpm;
+	ctx->current_bpm = DEFAULT_BPM(&ctx->module);
 	#endif
 
 	#if XM_TIMING_FUNCTIONS

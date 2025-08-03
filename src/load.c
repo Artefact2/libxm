@@ -304,6 +304,7 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	assert(xm_context_size(ctx) == ctx_size);
 
 	xm_fixup_context(ctx);
+	xm_reset_context(ctx);
 	return ctx;
 }
 
@@ -349,18 +350,6 @@ static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
 }
 
 static void xm_fixup_context(xm_context_t* ctx) {
-	#if HAS_GLOBAL_VOLUME
-	ctx->global_volume = MAX_VOLUME;
-	#endif
-
-	#if HAS_EFFECT(EFFECT_SET_TEMPO)
-	ctx->current_tempo = MODULE_TEMPO(&ctx->module);
-	#endif
-
-	#if HAS_EFFECT(EFFECT_SET_BPM)
-	ctx->current_bpm = MODULE_BPM(&ctx->module);
-	#endif
-
 	#if XM_SAMPLE_RATE == 0
 	ctx->module.rate = 48000;
 	#endif
@@ -804,7 +793,7 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 		NOTICE("clamping tempo (%u -> %u)", tempo, MIN_BPM-1);
 		tempo = MIN_BPM-1;
 	}
-	ctx->module.tempo = (uint8_t)tempo;
+	ctx->module.default_tempo = (uint8_t)tempo;
 	#endif
 
 	#if !HAS_HARDCODED_BPM
@@ -813,7 +802,11 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 		NOTICE("clamping bpm (%u -> %u)", bpm, MAX_BPM);
 		bpm = MAX_BPM;
 	}
-	ctx->module.bpm = (uint8_t)bpm;
+	ctx->module.default_bpm = (uint8_t)bpm;
+	#endif
+
+	#if HAS_DEFAULT_GLOBAL_VOLUME
+	ctx->module.default_global_volume = MAX_VOLUME;
 	#endif
 
 	READ_MEMCPY(mod->pattern_table, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
@@ -1372,11 +1365,15 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 	#endif
 
 	#if !HAS_HARDCODED_TEMPO
-	ctx->module.tempo = 6;
+	ctx->module.default_tempo = 6;
 	#endif
 
 	#if !HAS_HARDCODED_BPM
-	ctx->module.bpm = 125;
+	ctx->module.default_bpm = 125;
+	#endif
+
+	#if HAS_DEFAULT_GLOBAL_VOLUME
+	ctx->module.default_global_volume = MAX_VOLUME;
 	#endif
 
 	ctx->module.num_channels = p->num_channels;
