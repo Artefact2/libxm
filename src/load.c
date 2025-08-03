@@ -79,6 +79,7 @@ struct xm_prescan_data_s {
 		XM_FORMAT_MOD,
 		XM_FORMAT_MOD_FLT8, /* FLT8 requires special logic for its
 		                       pattern data */
+		XM_FORMAT_S3M,
 	} format;
 	uint32_t num_rows:24;
 	uint32_t samples_data_length;
@@ -111,6 +112,8 @@ static bool xm_prescan_mod(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_mod(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
 static void xm_fixup_mod_flt8(xm_context_t*);
 
+static bool xm_prescan_s3m(const char*, uint32_t, xm_prescan_data_t*);
+
 /* ----- Function definitions ----- */
 
 bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
@@ -125,6 +128,18 @@ bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
 			goto end;
 		} else {
 			return false;
+		}
+	}
+
+	if(moddata_length >= 96) {
+		if(memcmp("\0\x1A\x10\0\0", moddata + 27, 5) == 0
+		   && memcmp("SCRM", moddata + 44, 4) == 0) {
+			out->format = XM_FORMAT_S3M;
+			if(xm_prescan_s3m(moddata, moddata_length, out)) {
+				goto end;
+			} else {
+				return false;
+			}
 		}
 	}
 
@@ -574,8 +589,9 @@ xm_context_t* xm_create_context_from_libxm(char* data) {
 
 /* ----- Fasttracker II .XM (XM 0104): little endian ----- */
 
-static bool xm_prescan_xm0104(const char* moddata, uint32_t moddata_length,
-                              xm_prescan_data_t* out) {
+static bool xm_prescan_xm0104(const char* restrict moddata,
+                              uint32_t moddata_length,
+                              xm_prescan_data_t* restrict out) {
 	uint32_t offset = 60; /* Skip the first header */
 
 	/* Read the module header */
@@ -1295,8 +1311,9 @@ static void xm_load_xm0104(xm_context_t* ctx,
 
 /* ----- Amiga .MOD (M.K., xCHN, etc.): big endian ------ */
 
-static bool xm_prescan_mod(const char* moddata, uint32_t moddata_length,
-                           xm_prescan_data_t* p) {
+static bool xm_prescan_mod(const char* restrict moddata,
+                           uint32_t moddata_length,
+                           xm_prescan_data_t* restrict p) {
 	assert(p->num_instruments > 0 && p->num_instruments <= MAX_INSTRUMENTS);
 	assert(p->num_channels > 0 && p->num_channels <= MAX_CHANNELS);
 
@@ -1341,9 +1358,9 @@ static bool xm_prescan_mod(const char* moddata, uint32_t moddata_length,
 	return true;
 }
 
-static void xm_load_mod(xm_context_t* ctx,
-                        const char* moddata, uint32_t moddata_length,
-                        const xm_prescan_data_t* p) {
+static void xm_load_mod(xm_context_t* restrict ctx,
+                        const char* restrict moddata, uint32_t moddata_length,
+                        const xm_prescan_data_t* restrict p) {
 	#if XM_STRINGS
 	static_assert(MODULE_NAME_LENGTH >= 21); /* +1 for NUL */
 	READ_MEMCPY(ctx->module.name, 0, 20);
@@ -1593,4 +1610,75 @@ static void xm_fixup_mod_flt8(xm_context_t* ctx) {
 		}
 		__builtin_memcpy(slots, scratch, sizeof(scratch));
 	}
+}
+
+/* ----- Scream Tracker 3 .S3M (SCRM): little endian ------ */
+
+/* Useful resources:
+   https://github.com/vlohacks/misc/blob/master/modplay/docs/FS3MDOC.TXT
+   https://wiki.multimedia.cx/index.php?title=Scream_Tracker_3_Module
+   https://moddingwiki.shikadi.net/wiki/S3M_Format
+ */
+
+static bool xm_prescan_s3m(const char* restrict moddata,
+                           uint32_t moddata_length,
+                           xm_prescan_data_t* restrict out) {
+	out->pot_length = READ_U16(32);
+	if(out->pot_length > PATTERN_ORDER_TABLE_LENGTH) {
+		NOTICE("order table too big (%u > %u)",
+		       out->pot_length, PATTERN_ORDER_TABLE_LENGTH);
+		return false;
+	}
+
+	out->num_samples = READ_U16(34);
+	if(out->num_samples > MAX_INSTRUMENTS) {
+		NOTICE("too many instruments (%u > %u)",
+		       out->num_instruments, MAX_INSTRUMENTS);
+		return false;
+	}
+
+	out->num_patterns = READ_U16(36);
+	if(out->num_patterns > MAX_PATTERNS) {
+		NOTICE("too many patterns (%u > %u)",
+		       out->num_patterns, MAX_PATTERNS);
+		return false;
+	}
+
+	out->num_instruments = (uint8_t)out->num_samples;
+	out->num_rows = out->num_patterns * 64;
+
+	out->num_channels = 0;
+	for(uint8_t ch = 0; ch < 32; ++ ch) {
+		/* 16..=29: Adlib stuff (XXX) */
+		/* 30..=255: unused/disabled channel */
+		if(READ_U8(64 + ch) < 16) {
+			++out->num_channels;
+		}
+	}
+
+	out->samples_data_length = 0;
+	for(uint8_t i = 0; i < out->num_instruments; ++i) {
+		uint32_t ins_offset =
+			READ_U16(96 + out->pot_length + i * 2) * 16;
+		uint8_t ins_type = READ_U8(ins_offset);
+		/* Only care about PCM data */
+		if(ins_type != 1) continue;
+		uint32_t length = READ_U32(ins_offset + 16);
+		uint32_t loop_start = READ_U32(ins_offset + 20);
+		uint32_t loop_end = READ_U32(ins_offset + 24);
+		uint8_t smp_flags = READ_U8(ins_offset + 31);
+		length = TRIM_SAMPLE_LENGTH(length, loop_start,
+		                            loop_end - loop_start,
+		                            (smp_flags & 1) ?
+		                            SAMPLE_FLAG_FORWARD : 0);
+		if(length > MAX_SAMPLE_LENGTH) {
+			NOTICE("sample %u too long (%u > %u)",
+			       i, length, MAX_SAMPLE_LENGTH);
+			return false;
+		}
+		out->samples_data_length += length;
+
+	}
+
+	return true;
 }
