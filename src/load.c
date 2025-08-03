@@ -352,10 +352,6 @@ static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
 }
 
 static void xm_fixup_context(xm_context_t* ctx) {
-	#if XM_SAMPLE_RATE == 0
-	ctx->module.rate = 48000;
-	#endif
-
 	xm_pattern_slot_t* slot = ctx->pattern_slots;
 	static_assert(MAX_PATTERNS * MAX_ROWS_PER_PATTERN * MAX_CHANNELS
 	              <= UINT32_MAX);

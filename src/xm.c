@@ -234,7 +234,7 @@ bool xm_is_channel_active(const xm_context_t* ctx, uint8_t chn) {
 float xm_get_frequency_of_channel(const xm_context_t* ctx, uint8_t chn) {
 	assert(chn >= 1 && chn <= ctx->module.num_channels);
 	return (float)ctx->channels[chn - 1].step
-		* (float)SAMPLE_RATE(&ctx->module) / (float)SAMPLE_MICROSTEPS;
+		* (float)CURRENT_SAMPLE_RATE(ctx) / (float)SAMPLE_MICROSTEPS;
 }
 
 float xm_get_volume_of_channel(const xm_context_t* ctx, uint8_t chn) {
@@ -317,10 +317,10 @@ void xm_reset_context(xm_context_t* ctx) {
 void xm_set_sample_rate([[maybe_unused]] xm_context_t* ctx,
                         [[maybe_unused]] uint16_t rate) {
 	#if XM_SAMPLE_RATE == 0
-	ctx->module.rate = rate;
+	ctx->current_sample_rate = rate;
 	#endif
 }
 
 uint16_t xm_get_sample_rate([[maybe_unused]] const xm_context_t* ctx) {
-	return SAMPLE_RATE(&ctx->module);
+	return CURRENT_SAMPLE_RATE(ctx);
 }

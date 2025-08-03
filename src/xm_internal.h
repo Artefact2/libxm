@@ -203,10 +203,10 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define AMPLIFICATION .25f
 
 /* Granularity of sample count for ctx->remaining_samples_in_tick, for precise
-   timings of ticks. Worst case rounding is 1 frame (1/ctx->rate second worth of
-   audio) error every TICK_SUBSAMPLES ticks. A tick is at least 0.01s long (255
-   BPM), so at 44100 Hz the error is 1/44100 second every 81.92 seconds, or
-   about 0.00003%. */
+   timings of ticks. Worst case rounding is 1 frame (1/ctx->current_sample_rate
+   second worth of audio) error every TICK_SUBSAMPLES ticks. A tick is at least
+   0.01s long (255 BPM), so at 44100 Hz the error is 1/44100 second every 81.92
+   seconds, or about 0.00003%. */
 #define TICK_SUBSAMPLES (1<<13)
 
 /* Granularity of ch->step and ch->sample_position, for precise pitching of
@@ -410,13 +410,6 @@ struct xm_module_s {
 	uint16_t num_patterns;
 	uint16_t num_samples;
 
-	#if XM_SAMPLE_RATE == 0
-	#define SAMPLE_RATE(mod) ((mod)->rate)
-	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
-	#else
-	#define SAMPLE_RATE(mod) ((uint16_t)XM_SAMPLE_RATE)
-	#endif
-
 	uint8_t num_channels;
 
 	#if HAS_INSTRUMENTS
@@ -495,13 +488,12 @@ struct xm_module_s {
 	char trackername[TRACKER_NAME_LENGTH];
 	#endif
 
-	#define MODULE_PADDING (0 \
+	#define MODULE_PADDING (2 \
 		+ !(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
 		    && HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)) \
 		+ !HAS_INSTRUMENTS \
 		+ (XM_LOOPING_TYPE != 2) \
 		+ (XM_LOOPING_TYPE == 1) \
-		+ 2*(XM_SAMPLE_RATE != 0) \
 		+ (HAS_HARDCODED_TEMPO > 0) \
 		+ (HAS_HARDCODED_BPM > 0) \
 		+ !HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME))
@@ -525,7 +517,8 @@ struct xm_channel_context_s {
 	xm_pattern_slot_t* current;
 
 	#if XM_TIMING_FUNCTIONS
-	uint32_t latest_trigger; /* In generated samples (1/ctx->rate secs) */
+	uint32_t latest_trigger; /* In generated samples
+	                            (1/ctx->current_sample_rate secs) */
 	#endif
 
 	uint32_t sample_position; /* In microsteps */
@@ -850,6 +843,14 @@ struct xm_context_s {
 	uint32_t generated_samples;
 	#endif
 
+	#if XM_SAMPLE_RATE == 0
+	#define CURRENT_SAMPLE_RATE(ctx) ((ctx)->current_sample_rate)
+	uint16_t current_sample_rate; /* Output sample rate, typically 44100 or
+	                                 48000 */
+	#else
+	#define CURRENT_SAMPLE_RATE(ctx) ((uint16_t)XM_SAMPLE_RATE)
+	#endif
+
 	uint16_t current_table_index; /* 0..(module.length) */
 	uint8_t current_tick; /* Typically 0..(ctx->tempo) */
 	uint8_t current_row;
@@ -918,7 +919,7 @@ struct xm_context_s {
 	#define LOOP_COUNT(ctx) 0
 	#endif
 
-	#define CONTEXT_PADDING (2 \
+	#define CONTEXT_PADDING (0 \
 		+ 4*!XM_TIMING_FUNCTIONS \
 		+ !HAS_GLOBAL_VOLUME \
 		+ 2*!HAS_POSITION_JUMP \
@@ -927,7 +928,8 @@ struct xm_context_s {
 		+ 2*!HAS_EFFECT(EFFECT_DELAY_PATTERN) \
 		+ !HAS_EFFECT(EFFECT_SET_TEMPO) \
 		+ !HAS_EFFECT(EFFECT_SET_BPM) \
-		+ (XM_LOOPING_TYPE != 2))
+		+ (XM_LOOPING_TYPE != 2) \
+		+ 2*(XM_SAMPLE_RATE != 0))
 	#if CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CONTEXT_PADDING % POINTER_SIZE];
 	#endif
