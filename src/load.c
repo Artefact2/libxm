@@ -64,12 +64,12 @@
 	   )) : length)
 
 #define SAMPLE_POINT_FROM_S8(v) \
-	_Generic((xm_sample_point_t){}, int8_t: v, int16_t: (v * 256), \
-	         float: (float)v / (float)INT8_MAX)
+	_Generic((xm_sample_point_t){}, int8_t: (v), int16_t: ((v) * 256), \
+	         float: (float)(v) / (float)INT8_MAX)
 
 #define SAMPLE_POINT_FROM_S16(v) \
 	_Generic((xm_sample_point_t){}, int8_t: xm_dither_16b_8b(v), \
-		int16_t: v, float: (float)v / (float)INT16_MAX)
+		int16_t: (v), float: (float)(v) / (float)INT16_MAX)
 
 struct xm_prescan_data_s {
 	uint32_t context_size;
@@ -2089,21 +2089,21 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				bool slide_on_nonzero_ticks =
 					(s->effect_param >> 4) == 0
 					|| (s->effect_param & 0xF) == 0;
-				bool slide_on_tick_zero =
+				[[maybe_unused]] bool slide_on_tick_zero =
 					(slide_on_nonzero_ticks && fast_slides)
 					|| (s->effect_param >> 4) == 0xF
 					|| (s->effect_param & 0xF) == 0xF;
 				bool slide_up = s->effect_param != 0xF
 					&& ((s->effect_param & 0xF) == 0
 					    || (s->effect_param & 0xF) == 0xF);
-				bool slide_amount = slide_up
+				uint8_t slide_amount = slide_up
 					? (s->effect_param >> 4)
 					: (s->effect_param & 0xF);
 
 				if(slide_on_nonzero_ticks) {
 					s->effect_type = EFFECT_VOLUME_SLIDE;
 					s->effect_param = slide_up
-						? (slide_amount << 4)
+						? (uint8_t)(slide_amount << 4)
 						: slide_amount;
 				} else {
 					s->effect_type = 0;
@@ -2113,7 +2113,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				#if HAS_VOLUME_COLUMN
 				if(slide_on_tick_zero) {
 					if(s->volume_column == 0) {
-						s->volume_column = ((slide_up ? VOLUME_EFFECT_FINE_SLIDE_UP : VOLUME_EFFECT_FINE_SLIDE_DOWN) << 4) | slide_amount;
+						s->volume_column = (uint8_t)((slide_up ? VOLUME_EFFECT_FINE_SLIDE_UP : VOLUME_EFFECT_FINE_SLIDE_DOWN) << 4) | slide_amount;
 					} else if(slide_up) {
 						s->volume_column += slide_amount;
 						if(s->volume_column > 0x50) {
@@ -2337,15 +2337,18 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			/* Emulate S3M panning, if possible */
 			/* XXX: find a proper solution */
 			uint8_t panning = channel_pannings[x & 31];
+			#if HAS_VOLUME_COLUMN
 			if(s->volume_column == 0) {
 				s->volume_column = (VOLUME_EFFECT_SET_PANNING << 4) | panning;
-			} else if(s->effect_type == 0 && s->effect_param == 0) {
+			} else
+			#endif
+			if(s->effect_type == 0 && s->effect_param == 0) {
 				s->effect_type = EFFECT_SET_PANNING;
-				s->effect_param = panning << 4;
+				s->effect_param = (uint8_t)(panning << 4);
 			} else {
 				NOTICE("cannot add panning %x in pat %x "
 				       "(vol %X, effect %X%02X)",
-				       panning, patidx, s->volume_column,
+				       panning, patidx, VOLUME_COLUMN(s),
 				       s->effect_type, s->effect_param);
 			}
 		}
