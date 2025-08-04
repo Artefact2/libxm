@@ -116,7 +116,7 @@ static void xm_fixup_mod_flt8(xm_context_t*);
 static bool xm_prescan_s3m(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_s3m(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
 static void xm_load_s3m_instrument(xm_context_t*, uint8_t, bool, const char*, uint32_t, uint32_t);
-static void xm_load_s3m_pattern(xm_context_t*, uint8_t, const uint8_t*, const uint8_t*, const char*, uint32_t, uint32_t);
+static void xm_load_s3m_pattern(xm_context_t*, uint8_t, const uint8_t*, const uint8_t*, bool, const char*, uint32_t, uint32_t);
 
 /* ----- Function definitions ----- */
 
@@ -1715,37 +1715,37 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 
 	uint16_t tracker_version = READ_U16(40);
 	char* tn = ctx->module.trackername;
-	switch(tracker_version >> 24) {
+	switch(tracker_version >> 12) {
 	case 1:
-		__builtin_memcpy("Scream Tracker ", tn, 15);
+		__builtin_memcpy(tn, "Scream Tracker ", 15);
 		tn += 15;
 		goto version;
 
 	case 2:
-		__builtin_memcpy("Imago Orpheus ", tn, 14);
+		__builtin_memcpy(tn, "Imago Orpheus ", 14);
 		tn += 14;
 		goto version;
 
 	case 3:
-		__builtin_memcpy("Impulse Tracker ", tn, 16);
+		__builtin_memcpy(tn, "Impulse Tracker ", 16);
 		tn += 16;
 		goto version;
 
 	case 4:
-		__builtin_memcpy("Schism Tracker", tn, 14);
+		__builtin_memcpy(tn, "Schism Tracker", 14);
 		break;
 
 	case 5:
-		__builtin_memcpy("OpenMPT", tn, 7);
+		__builtin_memcpy(tn, "OpenMPT", 7);
 		break;
 
 	default:
 		break;
 
 	version:
-		*tn++ = '0' + ((tracker_version >> 16) & 0xF);
-		*tn++ = '.';
 		*tn++ = '0' + ((tracker_version >> 8) & 0xF);
+		*tn++ = '.';
+		*tn++ = '0' + ((tracker_version >> 4) & 0xF);
 		*tn++ = '0' + (tracker_version & 0xF);
 		break;
 	}
@@ -1758,7 +1758,19 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 	ctx->module.num_patterns = p->num_patterns;
 	ctx->module.num_rows = p->num_rows;
 
-	//uint8_t mod_flags = READ_U8(38);
+	uint8_t mod_flags = READ_U8(38);
+	if(tracker_version == 0x1300) {
+		/* Implied ST3.00 volume slides (aka "fast slides") */
+		mod_flags |= 0b01000000;
+	}
+	if(mod_flags) {
+		NOTICE("ignoring module flags %x", mod_flags);
+	}
+
+	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
+		&& HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)
+	ctx->module.amiga_frequencies = true;
+	#endif
 
 	#if HAS_DEFAULT_GLOBAL_VOLUME
 	ctx->module.default_global_volume = READ_U8(48);
@@ -1819,6 +1831,7 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 
 	for(uint8_t pat = 0; pat < ctx->module.num_patterns; ++pat) {
 		xm_load_s3m_pattern(ctx, pat, channel_settings, channel_map,
+		                    mod_flags & 0b01000000,
 		                    moddata, moddata_length,
 		                    16 * READ_U16(offset));
 		offset += 2;
@@ -1854,6 +1867,10 @@ void xm_load_s3m_instrument(xm_context_t* restrict ctx,
 	uint32_t base_loop_end = READ_U32(offset + 24);
 	uint8_t base_volume = READ_U8(offset + 28);
 	uint8_t base_flags = READ_U8(offset + 31); /* XXX: stereo/16bit */
+
+	if(base_flags & 0b11111110) {
+		NOTICE("ignoring sample %x flags (%x)", idx, base_flags);
+	}
 
 	uint32_t base_c_frequency = READ_U32(offset + 32);
 	int16_t rel_finetune = (int16_t)
@@ -1910,6 +1927,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
                                 uint8_t patidx,
                                 const uint8_t* restrict channel_settings,
                                 const uint8_t* restrict channel_map,
+                                bool fast_slides,
                                 const char* restrict moddata,
                                 uint32_t moddata_length,
                                 uint32_t offset) {
@@ -1953,7 +1971,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			if(s->note == 254) {
 				s->note = NOTE_KEY_OFF;
 			} else if(s->note == 255) {
-				s->note = 0;
+				s->note = s->instrument ? NOTE_SWITCH : 0;
 			} else {
 				/* Unlike XM, octave is in the high nibble, note
 				   is in the low nibble */
@@ -1976,6 +1994,8 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			offset += 2;
 
 			/* Fixup effect semantics */
+			/* XXX: incorrect memory logic for Dxy, Exx, Fxx, Ixy,
+			   Jxy, Kxy, Lxy, Qxy, Rxy, Sxy */
 			switch(s->effect_type) {
 			case 1:
 				s->effect_type = EFFECT_SET_TEMPO;
@@ -1989,16 +2009,108 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				s->effect_type = EFFECT_PATTERN_BREAK;
 				break;
 
-			case 4: /* XXX */
-				s->effect_type = EFFECT_VOLUME_SLIDE;
+			case 4:
+				if(s->effect_param == 0) {
+					/* XXX */
+					NOTICE("inaccurate D00 in pat %x", patidx);
+					s->effect_type = EFFECT_VOLUME_SLIDE;
+					break;
+				}
+
+				if((s->effect_param >> 4)
+				   && (s->effect_param >> 4) < 0xF
+				   && (s->effect_param & 0xF)
+				   && (s->effect_param & 0xF) < 0xF) {
+					/* Dxy with no 0 or F for either x or y,
+					   convert to D0y */
+					s->effect_param &= 0xF;
+				}
+
+				bool slide_on_nonzero_ticks =
+					(s->effect_param >> 4) == 0
+					|| (s->effect_param & 0xF) == 0;
+				bool slide_on_tick_zero =
+					(slide_on_nonzero_ticks && fast_slides)
+					|| (s->effect_param >> 4) == 0xF
+					|| (s->effect_param & 0xF) == 0xF;
+				bool slide_up = s->effect_param != 0xF
+					&& ((s->effect_param & 0xF) == 0
+					    || (s->effect_param & 0xF) == 0xF);
+				bool slide_amount = slide_up
+					? (s->effect_param >> 4)
+					: (s->effect_param & 0xF);
+
+				if(slide_on_nonzero_ticks) {
+					s->effect_type = EFFECT_VOLUME_SLIDE;
+					s->effect_param = slide_up
+						? (slide_amount << 4)
+						: slide_amount;
+				} else {
+					s->effect_type = 0;
+					s->effect_param = 0;
+				}
+
+				#if HAS_VOLUME_COLUMN
+				if(slide_on_tick_zero) {
+					if(s->volume_column == 0) {
+						s->volume_column = ((slide_up ? VOLUME_EFFECT_FINE_SLIDE_UP : VOLUME_EFFECT_FINE_SLIDE_DOWN) << 4) | slide_amount;
+					} else if(slide_up) {
+						s->volume_column += slide_amount;
+						if(s->volume_column > 0x50) {
+							s->volume_column = 0x50;
+						}
+					} else {
+						if(ckd_sub(&s->volume_column,
+						           s->volume_column,
+						           slide_amount)
+						   || s->volume_column < 0x10) {
+							s->volume_column = 0x10;
+						}
+					}
+				}
+				#endif
 				break;
 
-			case 5: /* XXX */
-				s->effect_type = EFFECT_PORTAMENTO_DOWN;
+			case 5:
+				switch(s->effect_param >> 4) {
+				case 0xE:
+					/* Extra fine slide */
+					s->effect_type = EFFECT_EXTRA_FINE_PORTAMENTO_DOWN;
+					s->effect_param &= 0xF;
+					break;
+
+				case 0xF:
+					/* Fine slide */
+					s->effect_type = EFFECT_FINE_PORTAMENTO_DOWN;
+					s->effect_param &= 0xF;
+					break;
+
+				default:
+					/* Regular slide */
+					s->effect_type = EFFECT_PORTAMENTO_DOWN;
+					break;
+				}
 				break;
 
-			case 6: /* XXX */
-				s->effect_type = EFFECT_PORTAMENTO_UP;
+			case 6:
+				switch(s->effect_param >> 4) {
+				case 0xE:
+					/* Extra fine slide */
+					s->effect_type = EFFECT_EXTRA_FINE_PORTAMENTO_UP;
+					s->effect_param &= 0xF;
+					break;
+
+				case 0xF:
+					/* Fine slide */
+					s->effect_type = EFFECT_FINE_PORTAMENTO_UP;
+					s->effect_param &= 0xF;
+					break;
+
+				default:
+					/* Regular slide */
+					s->effect_type = EFFECT_PORTAMENTO_UP;
+					break;
+				}
 				break;
 
 			case 7:
@@ -2019,10 +2131,35 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 
 			case 11:
 				s->effect_type = EFFECT_VIBRATO_VOLUME_SLIDE;
-				break;
+				goto fixup_combo_volume_slide;
 
 			case 12:
 				s->effect_type = EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE;
+			fixup_combo_volume_slide:
+				/* Same as Dxy (regular volume slide), but tick
+				   0 is always a no-op */
+
+				if(s->effect_param == 0) {
+					/* XXX */
+					NOTICE("inaccurate K00/L00 in pat %x",
+					       patidx);
+					break;
+				}
+
+				if((s->effect_param >> 4)
+				   && (s->effect_param >> 4) < 0xF
+				   && (s->effect_param & 0xF)
+				   && (s->effect_param & 0xF) < 0xF) {
+					/* Kxy/Lxy with no 0 or F for either x
+					   or y, convert to K0y/L0y */
+					s->effect_param &= 0xF;
+				}
+
+				if((s->effect_param & 0xF)
+				   && (s->effect_param >> 4)) {
+					/* Only a fine slide, no-op */
+					goto blank_effect;
+				}
 				break;
 
 			case 15:
@@ -2038,21 +2175,100 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				break;
 
 			case 19:
-				s->effect_type = 32 | (s->effect_param >> 4);
-				s->effect_param &= 0xF;
+				switch(s->effect_param >> 4) {
+				case 1:
+					s->effect_type = EFFECT_SET_GLISSANDO_CONTROL;
+					goto erase_high_nibble;
+
+				case 2:
+					s->effect_type = EFFECT_SET_FINETUNE;
+					goto erase_high_nibble;
+
+				case 3:
+					s->effect_type = EFFECT_SET_VIBRATO_CONTROL;
+					goto erase_high_nibble;
+
+				case 4:
+					s->effect_type = EFFECT_SET_TREMOLO_CONTROL;
+					goto erase_high_nibble;
+
+				case 8:
+					s->effect_type = EFFECT_SET_PANNING;
+					s->effect_param *= 0x10;
+					break;
+
+				case 0xA: /* XXX: contradicting info on SAy
+				             (stereo control) */
+					s->effect_type = EFFECT_SET_PANNING;
+					bool left_ch =
+						channel_settings[x & 31] < 8;
+					switch(s->effect_param & 0xF) {
+					case 0:
+					case 2:
+						/* Normal panning */
+						s->effect_param =
+							left_ch ? 0 : 0xF0;
+						break;
+
+					case 1:
+					case 3:
+						/* Reversed panning */
+						s->effect_param =
+							left_ch ? 0xF0 : 0;
+						break;
+
+					case 4:
+					case 5:
+					case 6:
+					case 7:
+						/* Center panning */
+						s->effect_param = 0x80;
+						break;
+
+					default:
+						/* No effect */
+						goto blank_effect;
+					}
+					break;
+
+				case 0xB: /* XXX: effect memory is global (NOT
+				             per channel) */
+					s->effect_type = EFFECT_PATTERN_LOOP;
+					goto erase_high_nibble;
+
+				static_assert(EFFECT_CUT_NOTE == (32|0xC));
+				static_assert(EFFECT_DELAY_NOTE == (32|0xD));
+				static_assert(EFFECT_DELAY_PATTERN == (32|0xE));
+				case 0xC:
+				case 0xD:
+				case 0xE:
+					s->effect_type = 32
+						| (s->effect_param >> 4);
+					goto erase_high_nibble;
+
+				erase_high_nibble:
+					s->effect_param &= 0xF;
+					break;
+				}
 				break;
 
 			case 20:
 				s->effect_type = EFFECT_SET_BPM;
 				break;
 
+			case 22:
+				if(s->effect_param <= MAX_VOLUME) {
+					s->effect_type = EFFECT_SET_GLOBAL_VOLUME;
+					break;
+				} else {
+					goto blank_effect;
+				}
+
 			case 21: /* XXX: fine vibrato */
+			default: /* Trim unsupported effect */
+			blank_effect:
 				s->effect_type = 0;
 				s->effect_param = 0;
-				break;
-
-			case 22:
-				s->effect_type = EFFECT_SET_GLOBAL_VOLUME;
 				break;
 			}
 		}
