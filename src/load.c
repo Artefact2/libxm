@@ -116,7 +116,7 @@ static void xm_fixup_mod_flt8(xm_context_t*);
 static bool xm_prescan_s3m(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_s3m(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
 static void xm_load_s3m_instrument(xm_context_t*, uint8_t, bool, const char*, uint32_t, uint32_t);
-static void xm_load_s3m_pattern(xm_context_t*, uint8_t, const uint8_t*, const uint8_t*, bool, const char*, uint32_t, uint32_t);
+static void xm_load_s3m_pattern(xm_context_t*, uint8_t, const uint8_t*, const uint8_t*, const uint8_t*, bool, const char*, uint32_t, uint32_t);
 
 /* ----- Function definitions ----- */
 
@@ -1818,6 +1818,37 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 
 	ctx->module.length = p->pot_length;
 	uint16_t pot_length = READ_U16(32);
+
+	uint8_t channel_pannings[32];
+
+	if((READ_U8(51) & 128) == 0) {
+		/* All channels are mono */
+		__builtin_memset(channel_pannings, 8, 32);
+	} else if(READ_U8(53) != 252) {
+		/* Use default pannings 0x3(L) / 0xC(R) */
+		for(uint8_t ch = 0; ch < 32; ++ch) {
+			channel_pannings[ch] =
+				(channel_settings[ch] < 8) ? 0x3 : 0xC;
+		}
+	} else {
+		/* Use custom pannings */
+		READ_MEMCPY(channel_pannings,
+		            96u + pot_length
+		            + 2u * (ctx->module.num_samples
+		                   + ctx->module.num_patterns),
+		            32);
+		for(uint8_t ch = 0; ch < 32; ++ch) {
+			if(channel_pannings[ch] & 16) {
+				/* Ignore custom value, use default */
+				channel_pannings[ch] =
+					(channel_settings[ch] < 8) ? 0x3 : 0xC;
+			} else {
+				/* Use custom value */
+				channel_pannings[ch] &= 0xF;
+			}
+		}
+	}
+
 	for(uint8_t i = 0, j = 0; i < pot_length; ++i) {
 		uint8_t x = READ_U8(96 + i);
 		if(x == 255) {
@@ -1839,14 +1870,12 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 
 	for(uint8_t pat = 0; pat < ctx->module.num_patterns; ++pat) {
 		xm_load_s3m_pattern(ctx, pat, channel_settings, channel_map,
+		                    channel_pannings,
 		                    mod_flags & 0b01000000,
 		                    moddata, moddata_length,
 		                    16 * READ_U16(offset));
 		offset += 2;
 	}
-
-	/* XXX: todo */
-	/* bool default_pannings = (READ_U8(53) == 252); */
 }
 
 void xm_load_s3m_instrument(xm_context_t* restrict ctx,
@@ -1935,6 +1964,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
                                 uint8_t patidx,
                                 const uint8_t* restrict channel_settings,
                                 const uint8_t* restrict channel_map,
+                                const uint8_t* restrict channel_pannings,
                                 bool fast_slides,
                                 const char* restrict moddata,
                                 uint32_t moddata_length,
@@ -2277,6 +2307,9 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 
 			case 20:
 				s->effect_type = EFFECT_SET_BPM;
+				if(s->effect_param <= 32) {
+					goto blank_effect;
+				}
 				break;
 
 			case 22:
@@ -2295,6 +2328,25 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				s->effect_type = 0;
 				s->effect_param = 0;
 				break;
+			}
+		}
+
+		if(s->instrument
+		   && channel_pannings[x & 31] != 0x8
+		   && s->effect_type != EFFECT_SET_PANNING) {
+			/* Emulate S3M panning, if possible */
+			/* XXX: find a proper solution */
+			uint8_t panning = channel_pannings[x & 31];
+			if(s->volume_column == 0) {
+				s->volume_column = (VOLUME_EFFECT_SET_PANNING << 4) | panning;
+			} else if(s->effect_type == 0 && s->effect_param == 0) {
+				s->effect_type = EFFECT_SET_PANNING;
+				s->effect_param = panning << 4;
+			} else {
+				NOTICE("cannot add panning %x in pat %x "
+				       "(vol %X, effect %X%02X)",
+				       panning, patidx, s->volume_column,
+				       s->effect_type, s->effect_param);
 			}
 		}
 	}

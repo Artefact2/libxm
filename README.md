@@ -15,7 +15,7 @@ features:
   that aren't obviously bugs in FT2, are also libxm bugs. If you have a module
   that plays incorrectly, please test it in FT2/FT2clone and open an issue!
 
-* Can load most XM/MOD files, however playback accuracy of non-XM is
+* Can load most XM/MOD/S3M files, however playback accuracy of non-XM is
   best-effort.
 
 * Timing functions for synchronising against specific instruments,
@@ -123,6 +123,10 @@ Known inaccuracies
 * Arpeggio (0xy) does not reset vibrato offset (Vy) when Spd=1
 * (MOD only) Sample offset (9xx) beyond sample loop end will cut the note
   * Can be manually toggled with `FEATURE_ACCURATE_SAMPLE_OFFSET_EFFECT`
+* (S3M only) Channel pannings are not always applied
+* (S3M only) Most effect memories are wrong across pattern boundaries
+* (S3M only) Fine vibrato effect (Uxy) is not supported
+* (S3M only) Pattern loops are incorrect across channels and reset incorrectly
 
 To report more, please [open an issue](../../issues?q=is%3Aissue%20state%3Aopen%20label%3Abug).
 
