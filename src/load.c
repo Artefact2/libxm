@@ -1708,12 +1708,12 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
                         const char* restrict moddata,
                         uint32_t moddata_length,
                         const xm_prescan_data_t* restrict p) {
+	uint16_t tracker_version = READ_U16(40);
+
 	#if XM_STRINGS
 	/* Module name is already NUL-terminated in S3M */
 	static_assert(MODULE_NAME_LENGTH >= 28);
 	READ_MEMCPY(ctx->module.name, 0, 27);
-
-	uint16_t tracker_version = READ_U16(40);
 	char* tn = ctx->module.trackername;
 	switch(tracker_version >> 12) {
 	case 1:
