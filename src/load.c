@@ -136,7 +136,7 @@ bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
 	}
 
 	if(moddata_length >= 96) {
-		if(memcmp("\0\x1A\x10\0\0", moddata + 27, 5) == 0
+		if(memcmp("\x10\0\0", moddata + 29, 3) == 0
 		   && memcmp("SCRM", moddata + 44, 4) == 0) {
 			out->format = XM_FORMAT_S3M;
 			if(xm_prescan_s3m(moddata, moddata_length, out)) {
