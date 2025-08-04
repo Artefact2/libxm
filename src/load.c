@@ -336,6 +336,14 @@ static void xm_fixup_common(xm_context_t* ctx) {
 			slot->effect_param = MAX_VOLUME;
 		}
 
+		if(slot->effect_type == EFFECT_PATTERN_BREAK) {
+			/* Convert Dxx to base 16, saves doing the math in
+			   play.c */
+			slot->effect_param = (uint8_t)
+				(slot->effect_param
+				 - 6 * (slot->effect_param >> 4));
+		}
+
 		if(slot->effect_type == EFFECT_SET_VIBRATO_CONTROL
 		   || slot->effect_type == EFFECT_SET_TREMOLO_CONTROL) {
 			/* Convert random waveform to square waveform (FT2
