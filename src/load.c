@@ -1763,8 +1763,8 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 		/* Implied ST3.00 volume slides (aka "fast slides") */
 		mod_flags |= 0b01000000;
 	}
-	if(mod_flags) {
-		NOTICE("ignoring module flags %x", mod_flags);
+	if(mod_flags & 0b10111111) {
+		NOTICE("ignoring module flags %x", mod_flags & 0b10111111);
 	}
 
 	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
@@ -1941,6 +1941,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 	uint32_t stop = offset + READ_U16(offset);
 	offset += 2;
 
+	uint8_t last_effect_parameters[32] = {};
 	while(offset < stop) {
 		uint8_t x = READ_U8(offset);
 		offset += 1;
@@ -1993,9 +1994,37 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			s->effect_param = READ_U8(offset + 1);
 			offset += 2;
 
+			if(s->effect_param) {
+				last_effect_parameters[x & 31] = s->effect_param;
+			}
+
+			/* Some S3M effects have "indiscriminate memory" and
+			   will reuse whatever last value was seen, regardless
+			   of effect type. Work around this as best as possible
+			   (still inaccurate across pattern boundaries) */
+			switch(s->effect_type) {
+			case 4: /* Dxy */
+			case 5: /* Exx */
+			case 6: /* Fxx */
+			case 9: /* Ixy */
+			case 10: /* Jxy */
+			case 11: /* Kxy */
+			case 12: /* Lxy */
+			case 17: /* Qxy */
+			case 18: /* Rxy */
+			case 19: /* Sxy */
+				/* XXX: is effect memory per channel (0..32) or
+				   per mapped channel (eg PCM0, PCM1 etc)? */
+				if(s->effect_param == 0) {
+					s->effect_param =
+						last_effect_parameters[x & 31];
+					if(s->effect_param == 0) {
+						NOTICE("inaccurate memory for effect %c00 in pattern %x", 'A' + s->effect_type - 1, patidx);
+					}
+				}
+			}
+
 			/* Fixup effect semantics */
-			/* XXX: incorrect memory logic for Dxy, Exx, Fxx, Ixy,
-			   Jxy, Kxy, Lxy, Qxy, Rxy, Sxy */
 			switch(s->effect_type) {
 			case 1:
 				s->effect_type = EFFECT_SET_TEMPO;
@@ -2010,13 +2039,6 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				break;
 
 			case 4:
-				if(s->effect_param == 0) {
-					/* XXX */
-					NOTICE("inaccurate D00 in pat %x", patidx);
-					s->effect_type = EFFECT_VOLUME_SLIDE;
-					break;
-				}
-
 				if((s->effect_param >> 4)
 				   && (s->effect_param >> 4) < 0xF
 				   && (s->effect_param & 0xF)
@@ -2139,13 +2161,6 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				/* Same as Dxy (regular volume slide), but tick
 				   0 is always a no-op */
 
-				if(s->effect_param == 0) {
-					/* XXX */
-					NOTICE("inaccurate K00/L00 in pat %x",
-					       patidx);
-					break;
-				}
-
 				if((s->effect_param >> 4)
 				   && (s->effect_param >> 4) < 0xF
 				   && (s->effect_param & 0xF)
@@ -2265,6 +2280,8 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				}
 
 			case 21: /* XXX: fine vibrato */
+				NOTICE("unsupported fine vibrato effect in pattern %x", patidx);
+				[[fallthrough]];
 			default: /* Trim unsupported effect */
 			blank_effect:
 				s->effect_type = 0;
