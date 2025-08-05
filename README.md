@@ -125,7 +125,7 @@ Known inaccuracies
   * Can be manually toggled with `FEATURE_ACCURATE_SAMPLE_OFFSET_EFFECT`
 * (S3M only) Most effect memories are wrong across pattern boundaries
 * (S3M only) Fine vibrato effect (Uxy) is not supported
-* (S3M only) Pattern loops are incorrect across channels and reset incorrectly
+* (S3M only) Degenerate pattern loops (1 row) will not retrigger notes
 * (S3M only) Note cut (SCy) and finetune (S2y) are implemented incorrectly
 * (S3M only) Tone portamento (Gxx) is implemented incorrectly
 

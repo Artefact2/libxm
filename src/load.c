@@ -1792,14 +1792,15 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 	#if !HAS_HARDCODED_TEMPO
 	ctx->module.default_tempo = READ_U8(49);
 	if(ctx->module.default_tempo == 0 || ctx->module.default_tempo == 255) {
-		ctx->module.default_tempo = 6;
+		ctx->module.default_tempo = 6; /* ST3 default at bootup */
 	}
 	#endif
 
 	#if !HAS_HARDCODED_BPM
 	ctx->module.default_bpm = READ_U8(50);
-	if(ctx->module.default_bpm < 33) {
-		ctx->module.default_bpm = 125;
+	/* ST3 help says BPM is 0x20..0xFF, but 0x20 does not work */
+	if(ctx->module.default_bpm <= 32) {
+		ctx->module.default_bpm = 125; /* ST3 default at bootup */
 	}
 	#endif
 
@@ -1974,7 +1975,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 	pat->rows_index = 64 * patidx;
 
 	xm_pattern_slot_t* slots = ctx->pattern_slots
-		+ 64 * patidx * ctx->module.num_channels;
+		+ pat->rows_index * ctx->module.num_channels;
 
 	uint32_t stop = offset + READ_U16(offset);
 	offset += 2;
@@ -2340,6 +2341,85 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				s->effect_param = 0;
 				break;
 			}
+		}
+	}
+
+	/* Now that the entire pattern is loaded, fixup pattern loops if
+	   possible (S3M pattern loops use *global* memory, not per channel; end
+	   of a pattern loop also sets loop origin to the next row) */
+	/* XXX: figure out multiple SBx on same row (ST3 infinitely loops?) */
+	slots = ctx->pattern_slots + pat->rows_index * ctx->module.num_channels;
+	xm_pattern_slot_t* s = slots;
+	uint8_t loops[65][3] = {}; /* start row, end row, loop iterations */
+	uint8_t n = 0;
+	for(uint8_t row = 0; row < 64; ++row) {
+		uint8_t loop_param = 0;
+		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+			if(s->effect_type == EFFECT_PATTERN_LOOP) {
+				loop_param = 128 | s->effect_param;
+				s->effect_type = 0;
+				s->effect_param = 0;
+			}
+			++s;
+		}
+		if(loop_param == 128) {
+			/* SB0: just mark start of current loop */
+			loops[n][0] = row;
+		} else if(loop_param & 128) {
+			/* SBy, y>0: mark end of current loop and start of next
+			 loop */
+			loops[n][1] = row;
+			loops[n][2] = loop_param & 127;
+			loops[++n][0] = row + 1;
+		}
+	}
+	for(uint8_t i = 0; i < 64; ++i) {
+		if(loops[i][2] == 0) continue;
+		if(loops[i][0] == loops[i][1]) {
+			/* Repeat a single row, this is impossible with XM
+			   semantics. Swap with a EEy, but this will not
+			   retrigger notes correctly. */
+			NOTICE("inaccurate loop fixup in pattern %x"
+			       " (1-row loop)", patidx);
+			s = slots + loops[i][0] * ctx->module.num_channels;
+			uint8_t ch = 0;
+			while(ch < ctx->module.num_channels) {
+				if(s->effect_type == 0
+				   && s->effect_param == 0) {
+					s->effect_type = EFFECT_DELAY_PATTERN;
+					s->effect_param = loops[i][2];
+					break;
+				}
+				++s;
+				++ch;
+			}
+			assert(ch < ctx->module.num_channels);
+			continue;
+		}
+
+		assert(loops[i][0] < loops[i][1]);
+		assert(loops[i][1] < 64);
+
+		uint8_t ch = 0;
+		while(ch < ctx->module.num_channels) {
+			xm_pattern_slot_t* s_start = slots
+				+ loops[i][0] * ctx->module.num_channels + ch;
+			xm_pattern_slot_t* s_end = slots
+				+ loops[i][1] * ctx->module.num_channels + ch;
+			if(s_start->effect_type == 0
+			   && s_start->effect_param == 0
+			   && s_end->effect_type == 0
+			   && s_end->effect_param == 0) {
+				s_start->effect_type = EFFECT_PATTERN_LOOP;
+				s_end->effect_type = EFFECT_PATTERN_LOOP;
+				s_end->effect_param = loops[i][2];
+				break;
+			}
+			++ch;
+		}
+		if(ch == ctx->module.num_channels) {
+			NOTICE("inaccurate loop fixup in pattern %x"
+			       " (no space left)", patidx);
 		}
 	}
 }
