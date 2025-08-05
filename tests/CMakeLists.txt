@@ -44,7 +44,7 @@ add_test(NAME test_panning_law COMMAND test-libxm
 	channelpairs_leql ${CMAKE_SOURCE_DIR}/panning-law.xm)
 add_test(NAME test_pattern_delay COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/pattern-delay.xm)
-add_test(NAME XXX_test_pattern_loop_s3m COMMAND test-libxm
+add_test(NAME test_pattern_loop_s3m COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/pattern-loop.s3m)
 add_test(NAME test_period_clamp COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/period-clamp.xm)

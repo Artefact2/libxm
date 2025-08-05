@@ -130,6 +130,9 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define EFFECT_PANNING_SLIDE 25
 #define EFFECT_MULTI_RETRIG_NOTE 27
 #define EFFECT_TREMOR 29
+#define EFFECT_ROW_LOOP 30 /* Not vanilla XM. Behaves exactly like combined E60
+                              and E6y in the same slot. Used for S3M
+                              compatibility. */
 #define EFFECT_FINE_PORTAMENTO_UP (32|1) /* Not vanilla XM */
 #define EFFECT_FINE_PORTAMENTO_DOWN (32|2) /* Not vanilla XM */
 #define EFFECT_SET_GLISSANDO_CONTROL (32|3) /* Not vanilla XM */
@@ -680,7 +683,9 @@ struct xm_channel_context_s {
 	uint8_t multi_retrig_ticks;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_PATTERN_LOOP)
+	#define HAS_LOOPS (HAS_EFFECT(EFFECT_PATTERN_LOOP) \
+	                   || HAS_EFFECT(EFFECT_ROW_LOOP))
+	#if HAS_LOOPS
 	uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
 	uint8_t pattern_loop_count; /* How many loop passes have been done */
 	#endif
@@ -803,7 +808,7 @@ struct xm_channel_context_s {
 		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_UP) \
 		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_DOWN) \
 		+ !(HAS_PANNING && HAS_EFFECT(EFFECT_PANNING_SLIDE)) \
-		+ 2*!HAS_EFFECT(EFFECT_PATTERN_LOOP) \
+		+ 2*!HAS_LOOPS \
 		+ !HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET) \
 		+ !HAS_SAMPLE_OFFSET_INVALID \
 		+ !HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_UP) \
@@ -903,7 +908,7 @@ struct xm_context_s {
 	#endif
 
 	#define HAS_POSITION_JUMP (HAS_EFFECT(EFFECT_JUMP_TO_ORDER) \
-	                           || HAS_EFFECT(EFFECT_PATTERN_LOOP))
+	                           || HAS_LOOPS)
 	#if HAS_POSITION_JUMP
 	#define POSITION_JUMP(ctx) ((ctx)->position_jump)
 	bool position_jump;

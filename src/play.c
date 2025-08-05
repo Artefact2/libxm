@@ -781,27 +781,38 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 	#endif
 
+	#if HAS_EFFECT(EFFECT_ROW_LOOP)
+	case EFFECT_ROW_LOOP:
+		ch->pattern_loop_origin = ctx->current_row;
+		goto do_pattern_loop;
+	#endif
+
 	#if HAS_EFFECT(EFFECT_PATTERN_LOOP)
 	case EFFECT_PATTERN_LOOP:
 		if(s->effect_param) {
-			if(s->effect_param == ch->pattern_loop_count) {
-				/* Loop is over */
-				ch->pattern_loop_count = 0;
-				break;
-			}
-
-			/* Jump to the beginning of the loop */
-			ch->pattern_loop_count++;
-			ctx->position_jump = true;
-			ctx->jump_row = ch->pattern_loop_origin;
-			assert(ctx->current_table_index <= UINT8_MAX);
-			ctx->jump_dest = (uint8_t)ctx->current_table_index;
+			goto do_pattern_loop;
 		} else {
 			/* Set loop start point */
 			ch->pattern_loop_origin = ctx->current_row;
 			/* Replicate FT2 E60 bug */
 			ctx->jump_row = ch->pattern_loop_origin;
 		}
+		break;
+	#endif
+
+	#if HAS_LOOPS
+	do_pattern_loop:
+		if(s->effect_param == ch->pattern_loop_count) {
+			/* Loop is over */
+			ch->pattern_loop_count = 0;
+			break;
+		}
+		/* Arm the loop */
+		ch->pattern_loop_count++;
+		ctx->position_jump = true;
+		ctx->jump_row = ch->pattern_loop_origin;
+		assert(ctx->current_table_index <= UINT8_MAX);
+		ctx->jump_dest = (uint8_t)ctx->current_table_index;
 		break;
 	#endif
 

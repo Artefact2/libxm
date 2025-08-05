@@ -2376,17 +2376,13 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 	for(uint8_t i = 0; i < 64; ++i) {
 		if(loops[i][2] == 0) continue;
 		if(loops[i][0] == loops[i][1]) {
-			/* Repeat a single row, this is impossible with XM
-			   semantics. Swap with a EEy, but this will not
-			   retrigger notes correctly. */
-			NOTICE("inaccurate loop fixup in pattern %x"
-			       " (1-row loop)", patidx);
+			/* Repeat a single row */
 			s = slots + loops[i][0] * ctx->module.num_channels;
 			uint8_t ch = 0;
 			while(ch < ctx->module.num_channels) {
 				if(s->effect_type == 0
 				   && s->effect_param == 0) {
-					s->effect_type = EFFECT_DELAY_PATTERN;
+					s->effect_type = EFFECT_ROW_LOOP;
 					s->effect_param = loops[i][2];
 					break;
 				}
@@ -2397,6 +2393,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			continue;
 		}
 
+		/* Repeat multiple rows */
 		assert(loops[i][0] < loops[i][1]);
 		assert(loops[i][1] < 64);
 
