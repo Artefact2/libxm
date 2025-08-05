@@ -952,3 +952,4 @@ struct xm_context_s {
 /* ----- Internal functions ----- */
 
 void xm_tick(xm_context_t*) __attribute__((nonnull)) __attribute__((visibility("hidden")));
+void xm_print_pattern(xm_context_t*, uint8_t) __attribute((nonnull)) __attribute__((visibility("hidden")));

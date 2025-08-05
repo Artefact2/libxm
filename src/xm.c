@@ -324,3 +324,66 @@ void xm_set_sample_rate([[maybe_unused]] xm_context_t* ctx,
 uint16_t xm_get_sample_rate([[maybe_unused]] const xm_context_t* ctx) {
 	return CURRENT_SAMPLE_RATE(ctx);
 }
+
+/* For debugging */
+void xm_print_pattern([[maybe_unused]] xm_context_t* ctx,
+                      [[maybe_unused]] uint8_t pat) {
+	#if XM_VERBOSE
+	fprintf(stderr, "+-%02X-+", pat);
+	for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+		fprintf(stderr, "------ CH %02d ------+", ch + 1);
+	}
+	fprintf(stderr, "\n");
+	for(uint8_t row = 0; row < 64; ++row) {
+		fprintf(stderr, "| %02X | ", row);
+		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+			xm_pattern_slot_t* s = ctx->pattern_slots
+				+ (ctx->patterns[pat].rows_index + row)
+				  * ctx->module.num_channels
+				+ ch;
+
+			if(s->note == NOTE_KEY_OFF) {
+				fprintf(stderr, "OFF ");
+			} else if(s->note == NOTE_SWITCH) {
+				fprintf(stderr, "... ");
+			} else if(s->note) {
+				static const char* const notes[] = {
+					"C-", "C#", "D-", "D#", "E-", "F-",
+					"F#", "G-", "G#", "A-", "A#", "B-" };
+				fprintf(stderr, "%s%u ",
+				        notes[(s->note - 1) % 12],
+				        (s->note - 1) / 12);
+			} else {
+				fprintf(stderr, "... ");
+			}
+			if(s->instrument) {
+				fprintf(stderr, "%02X ", s->instrument);
+			} else {
+				fprintf(stderr, ".. ");
+			}
+			if(PANNING_COLUMN(s)) {
+				fprintf(stderr, "%02X ", PANNING_COLUMN(s));
+			} else {
+				fprintf(stderr, ".. ");
+			}
+			if(VOLUME_COLUMN(s)) {
+				fprintf(stderr, "%02X ", VOLUME_COLUMN(s));
+			} else {
+				fprintf(stderr, ".. ");
+			}
+			if(s->effect_type || s->effect_param) {
+				fprintf(stderr, "%02X%02X | ", s->effect_type,
+				       s->effect_param);
+			} else {
+				fprintf(stderr, ".... | ");
+			}
+		}
+		fprintf(stderr, "\n");
+	}
+	fprintf(stderr, "+----+");
+	for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+		fprintf(stderr, "-------------------+");
+	}
+	fprintf(stderr, "\n");
+	#endif
+}

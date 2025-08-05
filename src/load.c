@@ -1981,13 +1981,15 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 	offset += 2;
 
 	uint8_t last_effect_parameters[32] = {};
-	while(offset < stop) {
+	uint16_t read_rows = 0;
+	while(offset < stop && read_rows < 64) {
 		uint8_t x = READ_U8(offset);
 		offset += 1;
 
 		if(x == 0) {
 			/* End of row */
 			slots += ctx->module.num_channels;
+			++read_rows;
 			continue;
 		}
 
@@ -2342,6 +2344,9 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				break;
 			}
 		}
+	}
+	if(offset != stop || read_rows != 64) {
+		NOTICE("dodgey pattern %X has incorrect packed size", patidx);
 	}
 
 	/* Now that the entire pattern is loaded, fixup pattern loops if
