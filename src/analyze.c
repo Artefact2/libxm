@@ -119,6 +119,10 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	       " -DXM_LOOPING_TYPE=2 to suppress this warning");
 	#endif
 
+	#if XM_SAMPLE_RATE == 0
+	ctx->current_sample_rate = 1;
+	#endif
+
 	uint64_t used_features = AMIGA_FREQUENCIES(&ctx->module)
 		? ((uint64_t)1 << FEATURE_AMIGA_FREQUENCIES)
 		: ((uint64_t)1 << FEATURE_LINEAR_FREQUENCIES);
@@ -182,6 +186,12 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 					<< FEATURE_FADEOUT_VOLUME;
 			}
 			#endif
+
+			if(PANNING_COLUMN(ch->current) != PANNING(ch->sample)
+			   && PANNING_COLUMN(ch->current)) {
+				used_features |= (uint64_t)1
+					<< FEATURE_PANNING_COLUMN;
+			}
 
 			if(ch->actual_volume[0] == 0.f
 			   && ch->actual_volume[1] == 0.f) {

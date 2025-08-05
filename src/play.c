@@ -554,6 +554,12 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		}
 	}
 
+	#if HAS_PANNING
+	if(PANNING_COLUMN(s)) {
+		ch->panning = PANNING_COLUMN(s);
+	}
+	#endif
+
 	/* These volume effects always work, even when called with a delay by
 	   EDy. */
 	if((HAS_VOLUME_EFFECT(1) || HAS_VOLUME_EFFECT(2)

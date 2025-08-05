@@ -1554,11 +1554,11 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 	xm_pattern_slot_t* slot = ctx->pattern_slots;
 	for(uint32_t row = 0; row < ctx->module.num_rows; ++row) {
 		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
-			#if HAS_VOLUME_COLUMN
+			#if HAS_PANNING_COLUMN
 			/* Emulate hard panning (LRRL LRRL etc) */
 			if(!has_panning_effects && slot->instrument) {
-				slot->volume_column = (((ch >> 1) ^ ch) & 1)
-					? 0xCF : 0xC1;
+				slot->panning_column = (((ch >> 1) ^ ch) & 1)
+					? 0xF0 : 0x10;
 			}
 			#endif
 
@@ -1964,7 +1964,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
                                 uint8_t patidx,
                                 const uint8_t* restrict channel_settings,
                                 const uint8_t* restrict channel_map,
-                                const uint8_t* restrict channel_pannings,
+                                [[maybe_unused]] const uint8_t* restrict channel_pannings,
                                 bool fast_slides,
                                 const char* restrict moddata,
                                 uint32_t moddata_length,
@@ -2017,6 +2017,17 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				s->note = (uint8_t)(1 + (s->note >> 4) * 12
 				                    + (s->note & 0xF));
 			}
+
+			#if HAS_PANNING_COLUMN
+			uint8_t pan = channel_pannings[x & 31];
+			if(s->instrument && pan != 0x8) {
+				/* Emulate S3M channel panning */
+				s->panning_column = (uint8_t)(pan << 4);
+				if(s->panning_column == 0) {
+					s->panning_column = 1;
+				}
+			}
+			#endif
 		}
 
 		if(x & 64) {
@@ -2328,28 +2339,6 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				s->effect_type = 0;
 				s->effect_param = 0;
 				break;
-			}
-		}
-
-		if(s->instrument
-		   && channel_pannings[x & 31] != 0x8
-		   && s->effect_type != EFFECT_SET_PANNING) {
-			/* Emulate S3M panning, if possible */
-			/* XXX: find a proper solution */
-			uint8_t panning = channel_pannings[x & 31];
-			#if HAS_VOLUME_COLUMN
-			if(s->volume_column == 0) {
-				s->volume_column = (VOLUME_EFFECT_SET_PANNING << 4) | panning;
-			} else
-			#endif
-			if(s->effect_type == 0 && s->effect_param == 0) {
-				s->effect_type = EFFECT_SET_PANNING;
-				s->effect_param = (uint8_t)(panning << 4);
-			} else {
-				NOTICE("cannot add panning %x in pat %x "
-				       "(vol %X, effect %X%02X)",
-				       panning, patidx, VOLUME_COLUMN(s),
-				       s->effect_type, s->effect_param);
 			}
 		}
 	}

@@ -51,10 +51,6 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
                "XM_LIBXM_DELTA_SAMPLES cannot be used "
                "with XM_SAMPLE_TYPE=float");
 
-static_assert(XM_PANNING_TYPE >= 0 && XM_PANNING_TYPE <= 8,
-              "Invalid value of XM_PANNING_TYPE");
-#define HAS_PANNING (XM_PANNING_TYPE == 8)
-
 static_assert(XM_LOOPING_TYPE >= 0 && XM_LOOPING_TYPE <= 2,
               "Invalid value of XM_LOOPING_TYPE");
 static_assert(XM_LOOPING_TYPE != 1 || !HAS_EFFECT(0xB),
@@ -99,6 +95,9 @@ static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
 #define FEATURE_VARIABLE_BPM 32 /* 32..40 (8 bits) */
 #define HAS_HARDCODED_TEMPO ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_TEMPO) & 31)
 #define HAS_HARDCODED_BPM ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_BPM) & 255)
+#define FEATURE_PANNING_COLUMN 40 /* Not vanilla XM. Applied after
+                                     note/instrument, but before volume/effect
+                                     columns */
 
 static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
               || HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES),
@@ -263,7 +262,8 @@ struct xm_sample_s {
 	uint8_t volume;
 	#endif
 
-	#define HAS_SAMPLE_PANNINGS (XM_PANNING_TYPE == 8 \
+	#define HAS_PANNING (XM_PANNING_TYPE < 0 || XM_PANNING_TYPE > 7)
+	#define HAS_SAMPLE_PANNINGS (HAS_PANNING \
 	                             && HAS_FEATURE(FEATURE_SAMPLE_PANNINGS))
 	#if HAS_SAMPLE_PANNINGS
 	#define PANNING(smp) ((smp)->panning)
@@ -380,6 +380,15 @@ typedef struct xm_instrument_s xm_instrument_t;
 struct xm_pattern_slot_s {
 	uint8_t note; /* 0..=MAX_NOTE or NOTE_KEY_OFF or NOTE_RETRIGGER */
 	uint8_t instrument; /* 1..=128 */
+
+	#define HAS_PANNING_COLUMN (HAS_FEATURE(FEATURE_PANNING_COLUMN) \
+	                            && HAS_PANNING)
+	#if HAS_PANNING_COLUMN
+	#define PANNING_COLUMN(s) ((s)->panning_column)
+	uint8_t panning_column; /* 1..=255, 0 = no effect */
+	#else
+	#define PANNING_COLUMN(s) 0
+	#endif
 
 	#define HAS_VOLUME_COLUMN ((~(XM_DISABLED_VOLUME_EFFECTS)) & \
 	             (HAS_PANNING ? 0b1111111111111110 : 0b1000111111111110))
