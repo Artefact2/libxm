@@ -2339,9 +2339,10 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 					goto blank_effect;
 				}
 
-			case 21: /* XXX: fine vibrato */
-				NOTICE("unsupported fine vibrato effect in pattern %x", patidx);
-				[[fallthrough]];
+			case 21:
+				s->effect_type = EFFECT_FINE_VIBRATO;
+				break;
+
 			default: /* Trim unsupported effect */
 			blank_effect:
 				s->effect_type = 0;

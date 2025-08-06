@@ -60,7 +60,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **3870 bytes** (x86_64-linux-gnu).
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **3907 bytes** (x86_64-linux-gnu).
 
 ~~~
 cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_VERBOSE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF -DXM_TIMING_FUNCTIONS=OFF -DXM_MUTING_FUNCTIONS=OFF -DXM_SAMPLE_TYPE=float -DXM_SAMPLE_RATE=44100 -Bbuild-libxmize -Sexamples/libxmize
@@ -124,7 +124,6 @@ Known inaccuracies
 * (MOD only) Sample offset (9xx) beyond sample loop end will cut the note
   * Can be manually toggled with `FEATURE_ACCURATE_SAMPLE_OFFSET_EFFECT`
 * (S3M only) Most effect memories are wrong across pattern boundaries
-* (S3M only) Fine vibrato effect (Uxy) is not supported
 * (S3M only) Note cut (SCy) and finetune (S2y) are implemented incorrectly
 * (S3M only) Tone portamento (Gxx) is implemented incorrectly
 

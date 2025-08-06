@@ -119,33 +119,42 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define EFFECT_JUMP_TO_ORDER 0xB
 #define EFFECT_SET_VOLUME 0xC
 #define EFFECT_PATTERN_BREAK 0xD
-#define EFFECT_SET_TEMPO 0xE /* Not vanilla XM */
+#define EFFECT_SET_TEMPO 0xE /* Remapped from vanilla XM */
 #define EFFECT_SET_BPM 0xF
-#define EFFECT_SET_GLOBAL_VOLUME 16
-#define EFFECT_GLOBAL_VOLUME_SLIDE 17
-#define EFFECT_EXTRA_FINE_PORTAMENTO_UP 18 /* Not vanilla XM */
-#define EFFECT_EXTRA_FINE_PORTAMENTO_DOWN 19 /* Not vanilla XM */
-#define EFFECT_KEY_OFF 20
-#define EFFECT_SET_ENVELOPE_POSITION 21
-#define EFFECT_PANNING_SLIDE 25
-#define EFFECT_MULTI_RETRIG_NOTE 27
-#define EFFECT_TREMOR 29
-#define EFFECT_ROW_LOOP 30 /* Not vanilla XM. Behaves exactly like combined E60
-                              and E6y in the same slot. Used for S3M
+#define EFFECT_SET_GLOBAL_VOLUME 0x10
+#define EFFECT_GLOBAL_VOLUME_SLIDE 0x11
+#define EFFECT_EXTRA_FINE_PORTAMENTO_UP 0x12 /* Remapped vanilla XM */
+#define EFFECT_EXTRA_FINE_PORTAMENTO_DOWN 0x13 /* Remapped vanilla XM */
+#define EFFECT_KEY_OFF 0x14
+#define EFFECT_SET_ENVELOPE_POSITION 0x15
+#define EFFECT_FINE_VIBRATO 0x16 /* Not vanilla XM. Behaves like regular vibrato
+                                    at quarter depth, sharing its effect memory.
+                                    Used for S3M compatibility. */
+/* 0x17, 0x18 unused */
+#define EFFECT_PANNING_SLIDE 0x19
+/* 0x1A unused */
+#define EFFECT_MULTI_RETRIG_NOTE 0x1B
+/* 0x1C unused */
+#define EFFECT_TREMOR 0x1D
+#define EFFECT_ROW_LOOP 0x1E /* Not vanilla XM. Behaves exactly like combined
+                              E60 and E6y in the same slot. Used for S3M
                               compatibility. */
-#define EFFECT_FINE_PORTAMENTO_UP (32|1) /* Not vanilla XM */
-#define EFFECT_FINE_PORTAMENTO_DOWN (32|2) /* Not vanilla XM */
-#define EFFECT_SET_GLISSANDO_CONTROL (32|3) /* Not vanilla XM */
-#define EFFECT_SET_VIBRATO_CONTROL (32|4) /* Not vanilla XM */
-#define EFFECT_SET_FINETUNE (32|5) /* Not vanilla XM */
-#define EFFECT_PATTERN_LOOP (32|6) /* Not vanilla XM */
-#define EFFECT_SET_TREMOLO_CONTROL (32|7) /* Not vanilla XM */
-#define EFFECT_RETRIGGER_NOTE (32|9) /* Not vanilla XM */
-#define EFFECT_FINE_VOLUME_SLIDE_UP (32|0xA) /* Not vanilla XM */
-#define EFFECT_FINE_VOLUME_SLIDE_DOWN (32|0xB) /* Not vanilla XM */
-#define EFFECT_CUT_NOTE (32|0xC) /* Not vanilla XM */
-#define EFFECT_DELAY_NOTE (32|0xD) /* Not vanilla XM */
-#define EFFECT_DELAY_PATTERN (32|0xE) /* Not vanilla XM */
+/* 0x1F, 0x20 unused */
+#define EFFECT_FINE_PORTAMENTO_UP 0x21 /* Remapped from vanilla XM */
+#define EFFECT_FINE_PORTAMENTO_DOWN 0x22 /* Remapped from vanilla XM */
+#define EFFECT_SET_GLISSANDO_CONTROL 0x23 /* Remapped vanilla XM */
+#define EFFECT_SET_VIBRATO_CONTROL 0x24 /* Remapped from vanilla XM */
+#define EFFECT_SET_FINETUNE 0x25 /* Remapped from vanilla XM */
+#define EFFECT_PATTERN_LOOP 0x26 /* Remapped from vanilla XM */
+#define EFFECT_SET_TREMOLO_CONTROL 0x27 /* Remapped from vanilla XM */
+/* 0x28 unused */
+#define EFFECT_RETRIGGER_NOTE 0x29 /* Remapped from vanilla XM */
+#define EFFECT_FINE_VOLUME_SLIDE_UP 0x2A /* Remapped from vanilla XM */
+#define EFFECT_FINE_VOLUME_SLIDE_DOWN 0x2B /* Remapped from vanilla XM */
+#define EFFECT_CUT_NOTE 0x2C /* Remapped from vanilla XM */
+#define EFFECT_DELAY_NOTE 0x2D /* Remapped from vanilla XM */
+#define EFFECT_DELAY_PATTERN 0x2E /* Remapped from vanilla XM */
+/* 0x2F..=0xFF unused */
 
 #define VOLUME_EFFECT_SLIDE_DOWN 6
 #define VOLUME_EFFECT_SLIDE_UP 7
@@ -713,8 +722,10 @@ struct xm_channel_context_s {
 	#endif
 
 	#define HAS_VIBRATO (HAS_EFFECT(EFFECT_VIBRATO) \
+		|| HAS_EFFECT(EFFECT_FINE_VIBRATO) \
 		|| HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
 	#define HAS_VIBRATO_RESET ((HAS_EFFECT(EFFECT_VIBRATO) \
+	                            || HAS_EFFECT(EFFECT_FINE_VIBRATO) \
 	                            || HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)) \
 	                           && HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
 	#if HAS_VIBRATO

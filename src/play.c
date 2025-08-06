@@ -219,16 +219,24 @@ static void xm_vibrato(xm_channel_context_t* ch) {
 	/* Reset glissando control error */
 	xm_pitch_slide(ch, 0);
 
-	/* Depth 8 == 2 semitones amplitude (-1 then +1) */
+	/* Regular vibrato: depth 8 == 2 semitones amplitude (-1 then +1) */
+	/* Fine vibrato: depth 8 == 0.5 semitone amplitude */
+	uint8_t div = (HAS_EFFECT(EFFECT_VIBRATO)
+	               && HAS_EFFECT(EFFECT_FINE_VIBRATO))
+		? ((ch->current->effect_type == EFFECT_FINE_VIBRATO)
+		   ? 0x40 : 0x10)
+		: (HAS_EFFECT(EFFECT_VIBRATO) ? 0x10 : 0x40);
 	ch->vibrato_offset = (int8_t)
 		((int16_t)xm_waveform(VIBRATO_CONTROL_PARAM(ch),
 		                      ch->vibrato_ticks)
-		 * (ch->vibrato_param & 0x0F) / 0x10);
+		 * (ch->vibrato_param & 0x0F) / div);
 	ch->vibrato_ticks += (uint8_t)((ch->vibrato_param >> 4) << 2);
 }
 
 static bool xm_slot_has_vibrato(const xm_pattern_slot_t* s) {
 	return (HAS_EFFECT(EFFECT_VIBRATO) && s->effect_type == EFFECT_VIBRATO)
+		|| (HAS_EFFECT(EFFECT_FINE_VIBRATO)
+		    && s->effect_type == EFFECT_FINE_VIBRATO)
 		|| (HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)
 		    &&s->effect_type == EFFECT_VIBRATO_VOLUME_SLIDE)
 		|| (HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO)
@@ -1437,8 +1445,14 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 		break;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_VIBRATO) && HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)
+	#if (HAS_EFFECT(EFFECT_VIBRATO) || HAS_EFFECT(EFFECT_FINE_VIBRATO)) \
+		&& HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)
+	#if HAS_EFFECT(EFFECT_VIBRATO)
 	case EFFECT_VIBRATO:
+	#endif
+	#if HAS_EFFECT(EFFECT_FINE_VIBRATO)
+	case EFFECT_FINE_VIBRATO:
+	#endif
 		UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
 		                        ch->current->effect_param);
 		[[fallthrough]];
@@ -1461,8 +1475,13 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 		xm_vibrato(ch);
 		#endif
 		goto volume_slide;
-	#elif HAS_EFFECT(EFFECT_VIBRATO)
+	#elif HAS_EFFECT(EFFECT_VIBRATO) || HAS_EFFECT(EFFECT_FINE_VIBRATO)
+	#if HAS_EFFECT(EFFECT_VIBRATO)
 	case EFFECT_VIBRATO:
+	#endif
+	#if HAS_EFFECT(EFFECT_FINE_VIBRATO)
+	case EFFECT_FINE_VIBRATO:
+	#endif
 		UPDATE_EFFECT_MEMORY_XY(&ch->vibrato_param,
 		                        ch->current->effect_param);
 		#if HAS_VIBRATO_RESET

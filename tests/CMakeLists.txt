@@ -90,5 +90,7 @@ add_test(NAME XXX_test_vibrato_arp_reset COMMAND test-libxm
 	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/vibrato-arp-reset.xm)
 add_test(NAME test_vibrato_amiga COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/vibrato-amiga.xm)
+add_test(NAME test_vibrato_fine COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/vibrato-fine.s3m)
 add_test(NAME test_volume_envelope COMMAND test-libxm
 	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/volume-envelope.xm)
