@@ -472,11 +472,7 @@ struct xm_module_s {
 	uint8_t default_bpm; /* MIN_BPM..=MAX_BPM */
 	#endif
 
-	#define HAS_GLOBAL_VOLUME (HAS_EFFECT(EFFECT_SET_GLOBAL_VOLUME) \
-	                           || HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE))
-	#define HAS_DEFAULT_GLOBAL_VOLUME (HAS_GLOBAL_VOLUME \
-	                       && HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME))
-	#if HAS_DEFAULT_GLOBAL_VOLUME
+	#if HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME)
 	#define DEFAULT_GLOBAL_VOLUME(mod) ((mod)->default_global_volume)
 	uint8_t default_global_volume; /* 0..=MAX_VOLUME */
 	#else
@@ -877,11 +873,13 @@ struct xm_context_s {
 	#define EXTRA_ROWS_DONE(ctx) 0
 	#endif
 
+	#define HAS_GLOBAL_VOLUME (HAS_EFFECT(EFFECT_SET_GLOBAL_VOLUME) \
+	                           || HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE))
 	#if HAS_GLOBAL_VOLUME
 	#define CURRENT_GLOBAL_VOLUME(ctx) ((ctx)->global_volume)
 	uint8_t global_volume; /* 0..=MAX_VOLUME */
 	#else
-	#define CURRENT_GLOBAL_VOLUME(ctx) MAX_VOLUME
+	#define CURRENT_GLOBAL_VOLUME(ctx) DEFAULT_GLOBAL_VOLUME(&ctx->module)
 	#endif
 
 	#if HAS_HARDCODED_TEMPO

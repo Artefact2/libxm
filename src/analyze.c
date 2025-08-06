@@ -134,6 +134,11 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	int16_t tempo = -1;
 	int16_t bpm = -1;
 
+	if(DEFAULT_GLOBAL_VOLUME(&ctx->module) != MAX_VOLUME) {
+		used_features |= (uint64_t)1
+			<< FEATURE_DEFAULT_GLOBAL_VOLUME;
+	}
+
 	while(XM_LOOPING_TYPE != 0 && LOOP_COUNT(ctx) == 0) {
 		xm_tick(ctx);
 

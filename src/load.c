@@ -764,7 +764,7 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 	ctx->module.default_bpm = (uint8_t)bpm;
 	#endif
 
-	#if HAS_DEFAULT_GLOBAL_VOLUME
+	#if HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME)
 	ctx->module.default_global_volume = MAX_VOLUME;
 	#endif
 
@@ -1395,7 +1395,7 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 	ctx->module.default_bpm = 125;
 	#endif
 
-	#if HAS_DEFAULT_GLOBAL_VOLUME
+	#if HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME)
 	ctx->module.default_global_volume = MAX_VOLUME;
 	#endif
 
@@ -1780,7 +1780,7 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 	ctx->module.amiga_frequencies = true;
 	#endif
 
-	#if HAS_DEFAULT_GLOBAL_VOLUME
+	#if HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME)
 	ctx->module.default_global_volume = READ_U8(48);
 	if(ctx->module.default_global_volume > MAX_VOLUME) {
 		NOTICE("clamping initial global volume (%u -> %u)",
