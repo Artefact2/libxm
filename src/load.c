@@ -1679,7 +1679,8 @@ static bool xm_prescan_s3m(const char* restrict moddata,
 	uint16_t used_channels = 0; /* bit field */
 	for(uint8_t ch = 0; ch < 32; ++ ch) {
 		uint8_t x = READ_U8(64 + ch);
-		/* 16..=29: Adlib stuff (XXX) */
+		/* 16..=29: Adlib stuff (XXX: global effects might still be
+		   there, eg Axx, Txx or Vxx) */
 		/* 30..=255: unused/disabled channel */
 		if(x >= 16) continue;
 		used_channels |= (uint16_t)1 << x;
@@ -1805,6 +1806,8 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 	#endif
 
 	uint8_t channel_settings[32];
+	/* XXX: be smarter about mapping L channels to 0,2,4... and R channels to
+	   1,3,5,... */
 	uint8_t channel_map[32] = {16, 16, 16, 16, 16, 16, 16, 16,
 	                           16, 16, 16, 16, 16, 16, 16, 16,
 	                           16, 16, 16, 16, 16, 16, 16, 16,

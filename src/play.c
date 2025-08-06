@@ -144,7 +144,6 @@ static int8_t xm_waveform([[maybe_unused]] uint8_t waveform,
 	return 0;
 	#endif
 
-	step %= 0x40;
 	switch(waveform & 3) {
 
 	/* In case some waveforms were compiled out, default to the first
@@ -153,6 +152,7 @@ static int8_t xm_waveform([[maybe_unused]] uint8_t waveform,
 
 	#if HAS_FEATURE(FEATURE_WAVEFORM_SINE)
 	case WAVEFORM_SINE:
+		step >>= 2;
 		static constexpr int8_t sin_lut[] = {
 			/* 128*sinf(2πx/64) for x in 0..16 */
 			0, 12, 24, 37, 48, 60, 71, 81,
@@ -164,20 +164,20 @@ static int8_t xm_waveform([[maybe_unused]] uint8_t waveform,
 
 	#if HAS_FEATURE(FEATURE_WAVEFORM_SQUARE)
 	case WAVEFORM_SQUARE:
-		return (step < 0x20) ? INT8_MIN : INT8_MAX;
+		return (step < 0x80) ? INT8_MIN : INT8_MAX;
 	#endif
 
 	#if HAS_FEATURE(FEATURE_WAVEFORM_RAMP_DOWN)
 	case WAVEFORM_RAMP_DOWN:
 		/* Starts at zero, wraps around at the middle */
-		return (int8_t)(-step * 4 - 1);
+		return (int8_t)(-step - 1);
 	#endif
 
 	#if HAS_FEATURE(FEATURE_WAVEFORM_RAMP_UP)
 	case WAVEFORM_RAMP_UP:
 		/* Only used by autovibrato, regular E4y/E7y will use a square
 		   wave instead (this is set by load.c) */
-		return (int8_t)(step * 4);
+		return (int8_t)step;
 	#endif
 
 	}
@@ -201,7 +201,7 @@ static void xm_autovibrato(xm_channel_context_t* ch) {
 	ch->autovibrato_offset = (int8_t)
 		(((int16_t)xm_waveform(instr->vibrato_type,
 		                       (uint8_t)(ch->autovibrato_ticks
-		                                 * instr->vibrato_rate / 4)))
+		                                 * instr->vibrato_rate)))
 		 * (-instr->vibrato_depth) / 128);
 
 	if(ch->autovibrato_ticks < instr->vibrato_sweep) {
@@ -224,7 +224,7 @@ static void xm_vibrato(xm_channel_context_t* ch) {
 		((int16_t)xm_waveform(VIBRATO_CONTROL_PARAM(ch),
 		                      ch->vibrato_ticks)
 		 * (ch->vibrato_param & 0x0F) / 0x10);
-	ch->vibrato_ticks += (ch->vibrato_param >> 4);
+	ch->vibrato_ticks += (uint8_t)((ch->vibrato_param >> 4) << 2);
 }
 
 static bool xm_slot_has_vibrato(const xm_pattern_slot_t* s) {
@@ -263,7 +263,7 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 	ch->volume_offset = (int8_t)
 		((int16_t)xm_waveform(TREMOLO_CONTROL_PARAM(ch), ticks)
 		* (ch->tremolo_param & 0x0F) * 4 / 128);
-	ch->tremolo_ticks += (ch->tremolo_param >> 4);
+	ch->tremolo_ticks += (uint8_t)((ch->tremolo_param >> 4) << 2);
 }
 #endif
 
