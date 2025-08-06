@@ -1276,6 +1276,7 @@ void xm_tick(xm_context_t* ctx) {
 		#endif
 
 		#if HAS_PANNING
+		/* Default XM panning (full stereo) */
 		uint8_t panning = (uint8_t)
 			(ch->panning
 			 + (PANNING_ENVELOPE_PANNING(ch)
@@ -1291,34 +1292,19 @@ void xm_tick(xm_context_t* ctx) {
 		out[1] = volume * sqrtf((float)panning
 		                        / (float)MAX_PANNING);
 
-		#elif XM_PANNING_TYPE
-		static constexpr float panning_lut[2] = {
-			/* No constexpr sqrtf() in C23 :-( */
-			#if XM_PANNING_TYPE == 1
-			0.66015625f,  0.75f
-			#elif XM_PANNING_TYPE == 2
-			0.61328125f, 0.7890625f
-			#elif XM_PANNING_TYPE == 3
-			0.55859375f, 0.828125f
-			#elif XM_PANNING_TYPE == 4
-			0.5f, 0.8671875f
-			#elif XM_PANNING_TYPE == 5
-			0.43359375f, 0.90234375f
-			#elif XM_PANNING_TYPE == 6
-			0.353515625f, 0.93359375f
-			#else
-			0.25f, 0.96875f
-			#endif
-		};
-		if(((i >> 1) ^ i) & 1) {
-			out[0] = volume * panning_lut[0];
-			out[1] = volume * panning_lut[1];
-		} else {
-			out[0] = volume * panning_lut[1];
-			out[1] = volume * panning_lut[0];
-		}
-		#else
+		#elif XM_PANNING_TYPE >= 1 && XM_PANNING_TYPE <= 7
+		/* Hard Amiga panning (LRRL) */
+		__builtin_memset(out, 0, 2 * sizeof(float));
+		out[((i >> 1) ^ i) & 1] = volume;
+		#elif XM_PANNING_TYPE == 9
+		/* Scream Tracker 3 default panning (3/C/3/C/...) */
+		out[0] = out[1] = volume * .43359375f;
+		out[i & 1] *= 2.09375f;
+		#elif XM_PANNING_TYPE == 0
+		/* Mono */
 		out[0] = out[1] = volume * 0.70703125f;
+		#else
+		static_assert(0);
 		#endif
 	}
 

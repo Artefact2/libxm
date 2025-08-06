@@ -297,19 +297,22 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	}
 
 	if(panning_type == 0) {
-		if(ctx->module.num_channels == 1) {
-			pannings[1] = MAX_PANNING - pannings[0];
-		}
-		if((ctx->module.num_channels < 4
-		    || pannings[0] == pannings[3])
-		   && (ctx->module.num_channels < 3
-		       || pannings[1] == pannings[2])
-		   && pannings[0] <= pannings[1]
-		   && pannings[0] + pannings[1] == MAX_PANNING) {
-			panning_type = (uint8_t)
-				(8 * (pannings[1] - pannings[0]) / 256);
-			assert(panning_type <= 8);
+		#define PANNING_EQ(x, y) ((x) >= ctx->module.num_channels \
+		                          || pannings[x] == -1 \
+		                          || pannings[x] == (y))
+		if(PANNING_EQ(0, 0x80) && PANNING_EQ(1, 0x80)
+		   && PANNING_EQ(2, 0x80) && PANNING_EQ(3, 0x80)) {
+			/* Mono, panning_type = 0 is OK */
+		} else if(PANNING_EQ(0, 1) && PANNING_EQ(1, 255)
+		          && PANNING_EQ(2, 255) && PANNING_EQ(3, 1)) {
+			/* Amiga */
+			panning_type = 1;
+		} else if(PANNING_EQ(0, 0x30) && PANNING_EQ(1, 0xD0)
+		          && PANNING_EQ(2, 0x30) && PANNING_EQ(3, 0xD0)) {
+			/* ST3 */
+			panning_type = 9;
 		} else {
+			/* Full stereo */
 			panning_type = 8;
 		}
 	}

@@ -1558,7 +1558,7 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 			/* Emulate hard panning (LRRL LRRL etc) */
 			if(!has_panning_effects && slot->instrument) {
 				slot->panning_column = (((ch >> 1) ^ ch) & 1)
-					? 0xF0 : 0x10;
+					? 0xFF : 0x01;
 			}
 			#endif
 
@@ -1827,9 +1827,11 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 		__builtin_memset(channel_pannings, 8, 32);
 	} else if(READ_U8(53) != 252) {
 		/* Use default pannings 0x3(L) / 0xC(R) */
+		/* Actually, use 0xD to make it center balanced */
+		#define S3M_DEFAULT_PAN(x) (x < 8 ? 0x3 : 0xD)
 		for(uint8_t ch = 0; ch < 32; ++ch) {
 			channel_pannings[ch] =
-				(channel_settings[ch] < 8) ? 0x3 : 0xC;
+				S3M_DEFAULT_PAN(channel_settings[ch]);
 		}
 	} else {
 		/* Use custom pannings */
@@ -1842,7 +1844,7 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 			if(channel_pannings[ch] & 16) {
 				/* Ignore custom value, use default */
 				channel_pannings[ch] =
-					(channel_settings[ch] < 8) ? 0x3 : 0xC;
+					S3M_DEFAULT_PAN(channel_settings[ch]);
 			} else {
 				/* Use custom value */
 				channel_pannings[ch] &= 0xF;

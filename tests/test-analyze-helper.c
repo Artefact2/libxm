@@ -46,12 +46,18 @@ static int compare_f32ne_streams(const char* path1, const char* path2) {
 	while(!feof(a) && !feof(b)) {
 		size_t x = fread(buf1, sizeof(float), 2048, a);
 		size_t y = fread(buf2, sizeof(float), 2048, b);
-		if(x != y) return 1;
-		for(size_t i = 0; i < x; ++i) {
-			/* Maximum error per channel: .002 (max rounding
-			   error for panning) * .25 (global
-			   amplification) = .0005 */
-			if(__builtin_fabsf(buf1[i] - buf2[i]) > .0005f) {
+		if(x != y || (x & 1) || (y & 1)) return 1;
+		for(size_t i = 0; i < x; i += 2) {
+			float x1 = buf1[i] * buf1[i], y1 = buf1[i+1] * buf1[i+1];
+			float x2 = buf2[i] * buf2[i], y2 = buf2[i+1] * buf2[i+1];
+
+			float vol1 = __builtin_sqrtf(x1 + y1),
+				vol2 = __builtin_sqrtf(x2 + y2),
+				pan1 = y1 / (x1 + y1),
+				pan2 = y2 / (x2 + y2);
+
+			if(__builtin_fabsf(vol1 - vol2) > .004f
+			   || __builtin_fabsf(pan1 - pan2) > .004f) {
 				return 1;
 			}
 		}

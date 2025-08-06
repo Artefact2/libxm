@@ -265,7 +265,7 @@ struct xm_sample_s {
 	uint8_t volume;
 	#endif
 
-	#define HAS_PANNING (XM_PANNING_TYPE < 0 || XM_PANNING_TYPE > 7)
+	#define HAS_PANNING (XM_PANNING_TYPE == 8)
 	#define HAS_SAMPLE_PANNINGS (HAS_PANNING \
 	                             && HAS_FEATURE(FEATURE_SAMPLE_PANNINGS))
 	#if HAS_SAMPLE_PANNINGS
