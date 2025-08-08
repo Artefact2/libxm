@@ -1825,13 +1825,11 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 
 	uint8_t channel_pannings[32];
 
-	if((READ_U8(51) & 128) == 0) {
-		/* All channels are mono */
-		__builtin_memset(channel_pannings, 8, 32);
-	} else if(READ_U8(53) != 252) {
-		/* Use default pannings 0x3(L) / 0xC(R) */
+	if(READ_U8(53) != 252) {
+		/* Use default pannings 0x3(L) / 0xC(R) or 0x8(Mono) */
 		/* Actually, use 0xD to make it center balanced */
-		#define S3M_DEFAULT_PAN(x) (x < 8 ? 0x3 : 0xD)
+		#define S3M_DEFAULT_PAN(x) ((READ_U8(51) & 128) == 0 ? 0x80 \
+		                            : ((x) < 8 ? 0x30 : 0xD0))
 		for(uint8_t ch = 0; ch < 32; ++ch) {
 			channel_pannings[ch] =
 				S3M_DEFAULT_PAN(channel_settings[ch]);
@@ -1844,13 +1842,20 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 		                   + ctx->module.num_patterns),
 		            32);
 		for(uint8_t ch = 0; ch < 32; ++ch) {
-			if(channel_pannings[ch] & 16) {
+			if(channel_pannings[ch] & 0b00100000) {
 				/* Ignore custom value, use default */
 				channel_pannings[ch] =
 					S3M_DEFAULT_PAN(channel_settings[ch]);
 			} else {
 				/* Use custom value */
-				channel_pannings[ch] &= 0xF;
+				channel_pannings[ch] &= 0b00011111;
+				if(channel_pannings[ch] == 0) {
+					channel_pannings[ch] = 1;
+				} else if(channel_pannings[ch] >= 16) {
+					channel_pannings[ch] = 255;
+				} else {
+					channel_pannings[ch] <<= 4;
+				}
 			}
 		}
 	}
@@ -2028,12 +2033,9 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 
 			#if HAS_PANNING_COLUMN
 			uint8_t pan = channel_pannings[x & 31];
-			if(s->instrument && pan != 0x8) {
+			if(s->instrument && pan != 0x80) {
 				/* Emulate S3M channel panning */
-				s->panning_column = (uint8_t)(pan << 4);
-				if(s->panning_column == 0) {
-					s->panning_column = 1;
-				}
+				s->panning_column = pan;
 			}
 			#endif
 		}
