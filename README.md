@@ -126,6 +126,7 @@ Known inaccuracies
 * (S3M only) Most effect memories are wrong across pattern boundaries
 * (S3M only) Note cut (SCy) and finetune (S2y) are implemented incorrectly
 * (S3M only) Tone portamento (Gxx) is implemented incorrectly
+* (S3M only) Note is not cut on period wraparound
 
 To report more, please [open an issue](../../issues?q=is%3Aissue%20state%3Aopen%20label%3Abug).
 
