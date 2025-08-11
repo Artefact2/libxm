@@ -26,6 +26,21 @@ features:
 
 Written in C23 and released under the WTFPL license, version 2.
 
+Disclaimer
+==========
+
+Libxm comes **without any warranty, to the extent permitted by applicable law**.
+In particular,
+
+* Load untrusted modules at your own risk. While precautions are taken in the
+  loading/parsing code, bugs are likely and a maliciously crafted module file
+  could cause arbitrary code execution, data loss or worse;
+
+* Load modules with `xm_create_context_from_libxm()` *if and only if* you used
+  `xm_context_to_libxm()` yourself, as there are no safety checks at all in the
+  loading code. This function is meant for sizecoding, the use case being
+  statically embedding *known* modules in games, demos, intros and such.
+
 Building
 ========
 
