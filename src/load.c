@@ -2060,11 +2060,10 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			/* Some S3M effects have "indiscriminate memory" and
 			   will reuse whatever last value was seen, regardless
 			   of effect type. Work around this as best as possible
-			   (still inaccurate across pattern boundaries) */
+			   (still inaccurate across pattern boundaries,
+			   jumps/breaks, loops) */
 			switch(s->effect_type) {
 			case 4: /* Dxy */
-			case 5: /* Exx */
-			case 6: /* Fxx */
 			case 9: /* Ixy */
 			case 10: /* Jxy */
 			case 11: /* Kxy */
@@ -2153,45 +2152,11 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				break;
 
 			case 5:
-				switch(s->effect_param >> 4) {
-				case 0xE:
-					/* Extra fine slide */
-					s->effect_type = EFFECT_EXTRA_FINE_PORTAMENTO_DOWN;
-					s->effect_param &= 0xF;
-					break;
-
-				case 0xF:
-					/* Fine slide */
-					s->effect_type = EFFECT_FINE_PORTAMENTO_DOWN;
-					s->effect_param &= 0xF;
-					break;
-
-				default:
-					/* Regular slide */
-					s->effect_type = EFFECT_PORTAMENTO_DOWN;
-					break;
-				}
+				s->effect_type = EFFECT_S3M_PORTAMENTO_DOWN;
 				break;
 
 			case 6:
-				switch(s->effect_param >> 4) {
-				case 0xE:
-					/* Extra fine slide */
-					s->effect_type = EFFECT_EXTRA_FINE_PORTAMENTO_UP;
-					s->effect_param &= 0xF;
-					break;
-
-				case 0xF:
-					/* Fine slide */
-					s->effect_type = EFFECT_FINE_PORTAMENTO_UP;
-					s->effect_param &= 0xF;
-					break;
-
-				default:
-					/* Regular slide */
-					s->effect_type = EFFECT_PORTAMENTO_UP;
-					break;
-				}
+				s->effect_type = EFFECT_S3M_PORTAMENTO_UP;
 				break;
 
 			case 7:

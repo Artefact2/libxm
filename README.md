@@ -60,7 +60,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **3907 bytes** (x86_64-linux-gnu).
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **4080 bytes** (GCC 15.1, x86_64-linux-gnu).
 
 ~~~
 cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_VERBOSE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF -DXM_TIMING_FUNCTIONS=OFF -DXM_MUTING_FUNCTIONS=OFF -DXM_SAMPLE_TYPE=float -DXM_SAMPLE_RATE=44100 -Bbuild-libxmize -Sexamples/libxmize
@@ -72,7 +72,7 @@ xzcrush build-libxmize/libxmtoau
 If you are using libxm to play a single module (like in a demo/intro), disable
 features as suggested by `libxmize --analyze` to save a few more bytes.
 
-For example, `libxmize --analyze mindrmr.xm` suggests `-DXM_DISABLED_EFFECTS=0xFFFFD9FBFFDE68E1 -DXM_DISABLED_VOLUME_EFFECTS=0x0CC0 -DXM_DISABLED_FEATURES=0xFFFFFF003477EE04 -DXM_PANNING_TYPE=8`. We only want to play the module once and quit, so we can use `-DXM_LOOPING_TYPE=1`. Compiling with these new flags, the resulting binary is crushed to **2694 bytes**.
+For example, `libxmize --analyze mindrmr.xm` suggests `-DXM_DISABLED_EFFECTS=0xFFFFD9FBFFDE68E1 -DXM_DISABLED_VOLUME_EFFECTS=0x0CC0 -DXM_DISABLED_FEATURES=0xFFFFFF003477EE04 -DXM_PANNING_TYPE=8`. We only want to play the module once and quit, so we can use `-DXM_LOOPING_TYPE=1`. Compiling with these new flags, the resulting binary is crushed to **2688 bytes**.
 
 Examples
 ========
@@ -126,7 +126,6 @@ Known inaccuracies
 * (S3M only) Most effect memories are wrong across pattern boundaries
 * (S3M only) Note cut (SCy) and finetune (S2y) are implemented incorrectly
 * (S3M only) Tone portamento (Gxx) is implemented incorrectly
-* (S3M only) Note is not cut on period wraparound
 
 To report more, please [open an issue](../../issues?q=is%3Aissue%20state%3Aopen%20label%3Abug).
 

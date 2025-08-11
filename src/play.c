@@ -40,7 +40,8 @@ static void xm_tone_portamento(const xm_context_t*, xm_channel_context_t*) __att
 static void xm_tone_portamento_target(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 #endif
 
-[[maybe_unused]] static void xm_pitch_slide(xm_channel_context_t*, int16_t) __attribute__((nonnull));
+typedef enum:uint8_t { PITCH_SLIDE_WRAPAROUND, PITCH_SLIDE_CLAMP, PITCH_SLIDE_CUT } xm_pitch_slide_behaviour_t;
+[[maybe_unused]] static void xm_pitch_slide(xm_channel_context_t*, int16_t, xm_pitch_slide_behaviour_t) __attribute__((nonnull));
 [[maybe_unused]] static void xm_param_slide(uint8_t*, uint8_t, uint8_t) __attribute__((nonnull));
 static void xm_tick_effects(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 
@@ -217,7 +218,7 @@ static void xm_autovibrato(xm_channel_context_t* ch) {
 #if HAS_VIBRATO
 static void xm_vibrato(xm_channel_context_t* ch) {
 	/* Reset glissando control error */
-	xm_pitch_slide(ch, 0);
+	xm_pitch_slide(ch, 0, 0);
 
 	/* Regular vibrato: depth 8 == 2 semitones amplitude (-1 then +1) */
 	/* Fine vibrato: depth 8 == 0.5 semitone amplitude */
@@ -359,7 +360,7 @@ static void xm_tone_portamento([[maybe_unused]] const xm_context_t* ctx,
 	int32_t diff = ch->tone_portamento_target_period - ch->period;
 	diff = diff > incr ? incr : diff;
 	diff = diff < (-incr) ? (-incr) : diff;
-	xm_pitch_slide(ch, (int16_t)diff);
+	xm_pitch_slide(ch, (int16_t)diff, 0);
 
 	#if HAS_GLISSANDO_CONTROL
 	if(ch->glissando_control_param) {
@@ -401,7 +402,8 @@ static void xm_tone_portamento_target(const xm_context_t* ctx,
 #endif
 
 static void xm_pitch_slide(xm_channel_context_t* ch,
-                           int16_t period_offset) {
+                           int16_t period_offset,
+                           xm_pitch_slide_behaviour_t mode) {
 	/* All pitch slides seem to reset the glissando error, and also cancel
 	   any lingering vibrato effect */
 	#if HAS_GLISSANDO_CONTROL
@@ -413,14 +415,27 @@ static void xm_pitch_slide(xm_channel_context_t* ch,
 	ch->vibrato_offset = 0;
 	#endif
 
-	#if HAS_FEATURE(FEATURE_CLAMP_PERIODS)
-	/* Clamp period when sliding up (matches FT2 behaviour), wrap around
-	   when sliding down (albeit still in a broken way compared to FT2) */
-	ch->period = (ch->period + period_offset < 1)
-		? 1 : (uint16_t)(ch->period + period_offset);
-	#else
-	ch->period = (uint16_t)(ch->period + period_offset);
+	switch(mode) {
+	default:
+		ch->period = (uint16_t)(ch->period + period_offset);
+		break;
+
+	#if HAS_FEATURE(FEATURE_ACCURATE_PITCH_SLIDE_CLAMP)
+	case PITCH_SLIDE_CLAMP:
+		if(ckd_add(&ch->period, ch->period, period_offset)) {
+			ch->period = period_offset > 0 ? INT16_MAX : 1;
+		}
+		break;
 	#endif
+
+	#if HAS_FEATURE(FEATURE_ACCURATE_PITCH_SLIDE_CUT)
+	case PITCH_SLIDE_CUT:
+		if(ckd_add(&ch->period, ch->period, period_offset)) {
+			ch->sample = NULL;
+		}
+		break;
+	#endif
+	}
 }
 
 static void xm_param_slide(uint8_t* param, uint8_t rawval, uint8_t max) {
@@ -510,7 +525,7 @@ static void xm_round_amiga_period_to_semitone([[maybe_unused]] xm_channel_contex
 static void xm_round_period_to_semitone([[maybe_unused]] const xm_context_t* ctx,
                                         xm_channel_context_t* ch) {
 	/* Reset glissando control error */
-	xm_pitch_slide(ch, 0);
+	xm_pitch_slide(ch, 0, 0);
 
 	if(AMIGA_FREQUENCIES(&ctx->module)) {
 		xm_round_amiga_period_to_semitone(ch);
@@ -598,6 +613,14 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		if(s->effect_param > 0) {
 			ch->tone_portamento_param = s->effect_param;
 		}
+	}
+	#endif
+
+	#if HAS_GLOBAL_EFFECT_MEMORY
+	if(s->effect_param) {
+		/* XXX: test me better. Is it always set, or does it depend on
+		   the effect (eg only set on ticks 1+)? */
+		ch->effect_param = s->effect_param;
 	}
 	#endif
 
@@ -740,7 +763,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		if(s->effect_param & 0x0F) {
 			ch->extra_fine_portamento_up_param = s->effect_param;
 		}
-		xm_pitch_slide(ch, -ch->extra_fine_portamento_up_param);
+		xm_pitch_slide(ch, -ch->extra_fine_portamento_up_param,
+		               PITCH_SLIDE_CLAMP);
 		break;
 	#endif
 
@@ -749,7 +773,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		if(s->effect_param) {
 			ch->extra_fine_portamento_down_param = s->effect_param;
 		}
-		xm_pitch_slide(ch, ch->extra_fine_portamento_down_param);
+		xm_pitch_slide(ch, ch->extra_fine_portamento_down_param,
+		               PITCH_SLIDE_WRAPAROUND);
 		break;
 	#endif
 
@@ -758,7 +783,8 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		if(s->effect_param) {
 			ch->fine_portamento_up_param = 4 * s->effect_param;
 		}
-		xm_pitch_slide(ch, -ch->fine_portamento_up_param);
+		xm_pitch_slide(ch, -ch->fine_portamento_up_param,
+		               PITCH_SLIDE_CLAMP);
 		break;
 	#endif
 
@@ -767,7 +793,40 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		if(s->effect_param) {
 			ch->fine_portamento_down_param = 4 * s->effect_param;
 		}
-		xm_pitch_slide(ch, ch->fine_portamento_down_param);
+		xm_pitch_slide(ch, ch->fine_portamento_down_param,
+		               PITCH_SLIDE_WRAPAROUND);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_PORTAMENTO_UP)
+	case EFFECT_S3M_PORTAMENTO_UP:
+		switch(s->effect_param >> 4) {
+		case 0xE:
+			/* Extra fine */
+			xm_pitch_slide(ch, -ch->effect_param, PITCH_SLIDE_CUT);
+			break;
+		case 0xF:
+			/* Fine */
+			xm_pitch_slide(ch, -ch->effect_param * 4,
+			               PITCH_SLIDE_CUT);
+			break;
+		}
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_PORTAMENTO_DOWN)
+	case EFFECT_S3M_PORTAMENTO_DOWN:
+		switch(s->effect_param >> 4) {
+		case 0xE:
+			/* Extra fine */
+			xm_pitch_slide(ch, ch->effect_param, PITCH_SLIDE_CUT);
+			break;
+		case 0xF:
+			/* Fine */
+			xm_pitch_slide(ch, ch->effect_param * 4,
+			               PITCH_SLIDE_CUT);
+			break;
+		}
 		break;
 	#endif
 
@@ -1089,7 +1148,7 @@ static void xm_row(xm_context_t* ctx) {
 		#if HAS_ARPEGGIO_RESET
 		if(ch->should_reset_arpeggio) {
 			/* Reset glissando control error */
-			xm_pitch_slide(ch, 0);
+			xm_pitch_slide(ch, 0, 0);
 			ch->should_reset_arpeggio = false;
 			ch->arp_note_offset = 0;
 		}
@@ -1407,7 +1466,17 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 		if(ch->current->effect_param > 0) {
 			ch->portamento_up_param = ch->current->effect_param;
 		}
-		xm_pitch_slide(ch, -4 * ch->portamento_up_param);
+		xm_pitch_slide(ch, -4 * ch->portamento_up_param,
+		               PITCH_SLIDE_CLAMP);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_PORTAMENTO_UP)
+	case EFFECT_S3M_PORTAMENTO_UP:
+		if(ch->effect_param < 0xE0) {
+			xm_pitch_slide(ch, -4 * ch->effect_param,
+			               PITCH_SLIDE_CUT);
+		}
 		break;
 	#endif
 
@@ -1416,7 +1485,17 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 		if(ch->current->effect_param > 0) {
 			ch->portamento_down_param = ch->current->effect_param;
 		}
-		xm_pitch_slide(ch, 4 * ch->portamento_down_param);
+		xm_pitch_slide(ch, 4 * ch->portamento_down_param,
+		               PITCH_SLIDE_WRAPAROUND);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_PORTAMENTO_DOWN)
+	case EFFECT_S3M_PORTAMENTO_DOWN:
+		if(ch->effect_param < 0xE0) {
+			xm_pitch_slide(ch, 4 * ch->effect_param,
+			               PITCH_SLIDE_CUT);
+		}
 		break;
 	#endif
 

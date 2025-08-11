@@ -56,7 +56,7 @@ add_test(NAME XXX_test_period_wraparound_amiga COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/period-wraparound-amiga.xm)
 add_test(NAME test_pitch_slides COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/pitch-slides.xm)
-add_test(NAME XXX_test_pitch_slides_s3m COMMAND test-libxm
+add_test(NAME test_pitch_slides_s3m COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/pitch-slides.s3m)
 add_test(NAME test_pitch_slides_amiga COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/pitch-slides-amiga.xm)

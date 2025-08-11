@@ -76,6 +76,8 @@ static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
 #define FEATURE_AUTOVIBRATO 7
 #define FEATURE_LINEAR_FREQUENCIES 8
 #define FEATURE_AMIGA_FREQUENCIES 9
+#define FEATURE_ACCURATE_PITCH_SLIDE_CLAMP 10
+#define FEATURE_ACCURATE_PITCH_SLIDE_CUT 11
 #define FEATURE_WAVEFORM_SINE (12|WAVEFORM_SINE)
 #define FEATURE_WAVEFORM_RAMP_DOWN (12|WAVEFORM_RAMP_DOWN)
 #define FEATURE_WAVEFORM_SQUARE (12|WAVEFORM_SQUARE)
@@ -86,7 +88,7 @@ static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
 #define FEATURE_INVALID_INSTRUMENTS 19
 #define FEATURE_INVALID_SAMPLES 20
 #define FEATURE_INVALID_NOTES 21
-#define FEATURE_CLAMP_PERIODS 22
+/* 22 unused */
 #define FEATURE_SAMPLE_RELATIVE_NOTES 23
 #define FEATURE_SAMPLE_FINETUNES 24
 #define FEATURE_SAMPLE_PANNINGS 25
@@ -130,7 +132,8 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define EFFECT_FINE_VIBRATO 0x16 /* Not vanilla XM. Behaves like regular vibrato
                                     at quarter depth, sharing its effect memory.
                                     Used for S3M compatibility. */
-/* 0x17, 0x18 unused */
+#define EFFECT_S3M_PORTAMENTO_UP 0x17 /* Not vanilla XM. For S3M compat. */
+#define EFFECT_S3M_PORTAMENTO_DOWN 0x18 /* Not vanilla XM. For S3M compat. */
 #define EFFECT_PANNING_SLIDE 0x19
 /* 0x1A unused */
 #define EFFECT_MULTI_RETRIG_NOTE 0x1B
@@ -779,6 +782,12 @@ struct xm_channel_context_s {
 	bool tremor_on;
 	#endif
 
+	#define HAS_GLOBAL_EFFECT_MEMORY (HAS_EFFECT(EFFECT_S3M_PORTAMENTO_UP) \
+	                    || HAS_EFFECT(EFFECT_S3M_PORTAMENTO_DOWN))
+	#if HAS_GLOBAL_EFFECT_MEMORY
+	uint8_t effect_param;
+	#endif
+
 	#if HAS_SUSTAIN
 	#define SUSTAINED(ch) ((ch)->sustained)
 	bool sustained;
@@ -793,7 +802,7 @@ struct xm_channel_context_s {
 	#define CHANNEL_MUTED(ch) false
 	#endif
 
-	#define CHANNEL_CONTEXT_PADDING (4 \
+	#define CHANNEL_CONTEXT_PADDING (3 \
 		+ 4*!XM_TIMING_FUNCTIONS \
 		+ 2*!HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
 		+ 3*!HAS_EFFECT(EFFECT_TREMOR) \
@@ -806,6 +815,7 @@ struct xm_channel_context_s {
 		+ !(HAS_EFFECT(EFFECT_TREMOLO) \
 		       && HAS_EFFECT(EFFECT_SET_TREMOLO_CONTROL)) \
 		+ !HAS_VOLUME_OFFSET \
+		+ !HAS_GLOBAL_EFFECT_MEMORY \
 		+ !HAS_VOLUME_SLIDE \
 		+ 3*!HAS_VIBRATO \
 		+ !(HAS_VIBRATO && HAS_VIBRATO_RESET) \
