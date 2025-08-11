@@ -135,14 +135,16 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define EFFECT_S3M_PORTAMENTO_UP 0x17 /* Not vanilla XM. For S3M compat. */
 #define EFFECT_S3M_PORTAMENTO_DOWN 0x18 /* Not vanilla XM. For S3M compat. */
 #define EFFECT_PANNING_SLIDE 0x19
-/* 0x1A unused */
+#define EFFECT_S3M_VIBRATO_VOLUME_SLIDE 0x1A /* Not vanilla XM */
 #define EFFECT_MULTI_RETRIG_NOTE 0x1B
-/* 0x1C unused */
+#define EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE 0x1C /* Not vanilla XM */
 #define EFFECT_TREMOR 0x1D
 #define EFFECT_ROW_LOOP 0x1E /* Not vanilla XM. Behaves exactly like combined
                               E60 and E6y in the same slot. Used for S3M
                               compatibility. */
-/* 0x1F, 0x20 unused */
+#define EFFECT_S3M_VOLUME_SLIDE 0x1F /* Not vanilla XM */
+#define EFFECT_S3M_FAST_VOLUME_SLIDE 0x20 /* Not vanilla XM. Also applied on
+                                             tick 0. */
 #define EFFECT_FINE_PORTAMENTO_UP 0x21 /* Remapped from vanilla XM */
 #define EFFECT_FINE_PORTAMENTO_DOWN 0x22 /* Remapped from vanilla XM */
 #define EFFECT_SET_GLISSANDO_CONTROL 0x23 /* Remapped vanilla XM */
@@ -150,14 +152,18 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define EFFECT_SET_FINETUNE 0x25 /* Remapped from vanilla XM */
 #define EFFECT_PATTERN_LOOP 0x26 /* Remapped from vanilla XM */
 #define EFFECT_SET_TREMOLO_CONTROL 0x27 /* Remapped from vanilla XM */
-/* 0x28 unused */
+#define EFFECT_S3M_FINE_VOLUME_SLIDE 0x28 /* Not vanilla XM */
 #define EFFECT_RETRIGGER_NOTE 0x29 /* Remapped from vanilla XM */
 #define EFFECT_FINE_VOLUME_SLIDE_UP 0x2A /* Remapped from vanilla XM */
 #define EFFECT_FINE_VOLUME_SLIDE_DOWN 0x2B /* Remapped from vanilla XM */
 #define EFFECT_CUT_NOTE 0x2C /* Remapped from vanilla XM */
 #define EFFECT_DELAY_NOTE 0x2D /* Remapped from vanilla XM */
 #define EFFECT_DELAY_PATTERN 0x2E /* Remapped from vanilla XM */
-/* 0x2F..=0xFF unused */
+#define EFFECT_S3M_TREMOLO 0x2F /* Not vanilla XM (uses global memory) */
+#define EFFECT_S3M_ARPEGGIO 0x30 /* Not vanilla XM (uses global memory) */
+#define EFFECT_S3M_TREMOR 0x31 /* Not vanilla XM (uses global memory) */
+#define EFFECT_S3M_MULTI_RETRIG_NOTE 0x32 /* Not vanilla XM (uses global memory) */
+/* 0x33..=0x3F unused */
 
 #define VOLUME_EFFECT_SLIDE_DOWN 6
 #define VOLUME_EFFECT_SLIDE_UP 7
@@ -597,8 +603,11 @@ struct xm_channel_context_s {
 
 	uint8_t volume; /* 0..=MAX_VOLUME */
 
+
 	#define HAS_VOLUME_OFFSET (HAS_EFFECT(EFFECT_TREMOLO) \
-	                           || HAS_EFFECT(EFFECT_TREMOR))
+	                           || HAS_EFFECT(EFFECT_S3M_TREMOLO) \
+	                           || HAS_EFFECT(EFFECT_TREMOR) \
+	                           || HAS_EFFECT(EFFECT_S3M_TREMOR))
 	#if HAS_VOLUME_OFFSET
 	#define VOLUME_OFFSET(ch) ((ch)->volume_offset)
 	#define RESET_VOLUME_OFFSET(ch) (ch)->volume_offset = 0
@@ -672,8 +681,9 @@ struct xm_channel_context_s {
 	uint8_t extra_fine_portamento_down_param;
 	#endif
 
-	#define HAS_GLISSANDO_CONTROL ( \
-		(HAS_EFFECT(EFFECT_ARPEGGIO) \
+	#define HAS_ARPEGGIO (HAS_EFFECT(EFFECT_ARPEGGIO) \
+		              || HAS_EFFECT(EFFECT_S3M_ARPEGGIO))
+	#define HAS_GLISSANDO_CONTROL ((HAS_ARPEGGIO \
 		    && HAS_FEATURE(FEATURE_ACCURATE_ARPEGGIO_GLISSANDO)) \
 		|| (HAS_TONE_PORTAMENTO \
 		    && HAS_EFFECT(EFFECT_SET_GLISSANDO_CONTROL)))
@@ -688,6 +698,10 @@ struct xm_channel_context_s {
 
 	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 	uint8_t multi_retrig_param;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
+		|| HAS_EFFECT(EFFECT_S3M_MULTI_RETRIG_NOTE)
 	uint8_t multi_retrig_ticks;
 	#endif
 
@@ -714,10 +728,14 @@ struct xm_channel_context_s {
 
 	#if HAS_EFFECT(EFFECT_TREMOLO)
 	uint8_t tremolo_param;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_TREMOLO) || HAS_EFFECT(EFFECT_S3M_TREMOLO)
 	uint8_t tremolo_ticks;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_TREMOLO) && HAS_EFFECT(EFFECT_SET_TREMOLO_CONTROL)
+	#if (HAS_EFFECT(EFFECT_TREMOLO) || HAS_EFFECT(EFFECT_S3M_TREMOLO)) \
+		&& HAS_EFFECT(EFFECT_SET_TREMOLO_CONTROL)
 	#define TREMOLO_CONTROL_PARAM(ch) ((ch)->tremolo_control_param)
 	uint8_t tremolo_control_param;
 	#else
@@ -728,9 +746,10 @@ struct xm_channel_context_s {
 		|| HAS_EFFECT(EFFECT_FINE_VIBRATO) \
 		|| HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
 	#define HAS_VIBRATO_RESET ((HAS_EFFECT(EFFECT_VIBRATO) \
-	                            || HAS_EFFECT(EFFECT_FINE_VIBRATO) \
-	                            || HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)) \
-	                           && HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
+	                        || HAS_EFFECT(EFFECT_FINE_VIBRATO) \
+	                        || HAS_EFFECT(EFFECT_S3M_VIBRATO_VOLUME_SLIDE) \
+	                        || HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)) \
+	                     && HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
 	#if HAS_VIBRATO
 	#define VIBRATO_OFFSET(ch) ((ch)->vibrato_offset)
 	uint8_t vibrato_param;
@@ -763,13 +782,13 @@ struct xm_channel_context_s {
 	#define AUTOVIBRATO_OFFSET(ch) 0
 	#endif
 
-	#define HAS_ARPEGGIO_RESET (HAS_EFFECT(EFFECT_ARPEGGIO) \
+	#define HAS_ARPEGGIO_RESET (HAS_ARPEGGIO \
 		&& HAS_FEATURE(FEATURE_ACCURATE_ARPEGGIO_GLISSANDO))
 	#if HAS_ARPEGGIO_RESET
 	bool should_reset_arpeggio;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_ARPEGGIO)
+	#if HAS_ARPEGGIO
 	#define ARP_NOTE_OFFSET(ch) ((ch)->arp_note_offset)
 	uint8_t arp_note_offset; /* in full semitones */
 	#else
@@ -778,12 +797,24 @@ struct xm_channel_context_s {
 
 	#if HAS_EFFECT(EFFECT_TREMOR)
 	uint8_t tremor_param;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_TREMOR) || HAS_EFFECT(EFFECT_S3M_TREMOR)
 	uint8_t tremor_ticks; /* Decrements from max 16 */
 	bool tremor_on;
 	#endif
 
 	#define HAS_GLOBAL_EFFECT_MEMORY (HAS_EFFECT(EFFECT_S3M_PORTAMENTO_UP) \
-	                    || HAS_EFFECT(EFFECT_S3M_PORTAMENTO_DOWN))
+	            || HAS_EFFECT(EFFECT_S3M_PORTAMENTO_DOWN) \
+	            || HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE) \
+	            || HAS_EFFECT(EFFECT_S3M_FINE_VOLUME_SLIDE) \
+	            || HAS_EFFECT(EFFECT_S3M_FAST_VOLUME_SLIDE) \
+	            || HAS_EFFECT(EFFECT_S3M_VIBRATO_VOLUME_SLIDE) \
+	            || HAS_EFFECT(EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE) \
+	            || HAS_EFFECT(EFFECT_S3M_TREMOR) \
+	            || HAS_EFFECT(EFFECT_S3M_MULTI_RETRIG_NOTE) \
+	            || HAS_EFFECT(EFFECT_S3M_ARPEGGIO) \
+	            || HAS_EFFECT(EFFECT_S3M_TREMOLO))
 	#if HAS_GLOBAL_EFFECT_MEMORY
 	uint8_t effect_param;
 	#endif
@@ -804,14 +835,20 @@ struct xm_channel_context_s {
 
 	#define CHANNEL_CONTEXT_PADDING (3 \
 		+ 4*!XM_TIMING_FUNCTIONS \
-		+ 2*!HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
-		+ 3*!HAS_EFFECT(EFFECT_TREMOR) \
-		+ !HAS_EFFECT(EFFECT_ARPEGGIO) \
+		+ !HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
+		+ !(HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
+		       || HAS_EFFECT(EFFECT_S3M_MULTI_RETRIG_NOTE)) \
+		+ !HAS_EFFECT(EFFECT_TREMOR) \
+		+ 2*!(HAS_EFFECT(EFFECT_TREMOR) \
+		       || HAS_EFFECT(EFFECT_S3M_TREMOR)) \
+		+ !HAS_ARPEGGIO \
 		+ !HAS_ARPEGGIO_RESET \
 		+ !HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE) \
 		+ !HAS_EFFECT(EFFECT_PORTAMENTO_UP) \
 		+ !HAS_EFFECT(EFFECT_PORTAMENTO_DOWN) \
-		+ 2*!HAS_EFFECT(EFFECT_TREMOLO) \
+		+ !HAS_EFFECT(EFFECT_TREMOLO) \
+		+ !(HAS_EFFECT(EFFECT_TREMOLO) \
+		       || HAS_EFFECT(EFFECT_S3M_TREMOLO)) \
 		+ !(HAS_EFFECT(EFFECT_TREMOLO) \
 		       && HAS_EFFECT(EFFECT_SET_TREMOLO_CONTROL)) \
 		+ !HAS_VOLUME_OFFSET \

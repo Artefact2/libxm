@@ -2063,157 +2063,113 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			   (still inaccurate across pattern boundaries,
 			   jumps/breaks, loops) */
 			switch(s->effect_type) {
-			case 4: /* Dxy */
 			case 9: /* Ixy */
-			case 10: /* Jxy */
-			case 11: /* Kxy */
-			case 12: /* Lxy */
 			case 17: /* Qxy */
-			case 18: /* Rxy */
 			case 19: /* Sxy */
 				/* XXX: is effect memory per channel (0..32) or
 				   per mapped channel (eg PCM0, PCM1 etc)? */
+			}
+
+			/* Fixup effect semantics */
+			/* Reminder: try not to change effect_param for effects
+			   with global memory (potential side effects) */
+			switch(s->effect_type) {
+			/* No effect memory */
+			case 1:
+				s->effect_type = EFFECT_SET_TEMPO;
+				break;
+			case 2:
+				s->effect_type = EFFECT_JUMP_TO_ORDER;
+				break;
+			case 3:
+				s->effect_type = EFFECT_PATTERN_BREAK;
+				break;
+			case 20:
+				s->effect_type = EFFECT_SET_BPM;
+				if(s->effect_param <= 32) {
+					goto blank_effect;
+				}
+				break;
+			case 22:
+				if(s->effect_param <= MAX_VOLUME) {
+					s->effect_type =
+						EFFECT_SET_GLOBAL_VOLUME;
+					break;
+				} else {
+					goto blank_effect;
+				}
+
+			/* Local effect memory */
+			case 7:
+				s->effect_type = EFFECT_TONE_PORTAMENTO;
+				break;
+			case 8:
+				s->effect_type = EFFECT_VIBRATO;
+				break;
+			case 15:
+				s->effect_type = EFFECT_SET_SAMPLE_OFFSET;
+				break;
+			case 21:
+				/* Shared memory with regular vibrato */
+				s->effect_type = EFFECT_FINE_VIBRATO;
+				break;
+
+			/* Global effect memory; do not touch s->effect_param,
+			   as any change can have global side effects. */
+			case 4:
+				bool tick_zero = (s->effect_param >> 4 == 0xF)
+					|| (s->effect_param & 0xF) == 0xF;
+				bool other_ticks = (s->effect_param >> 4 == 0)
+					|| (s->effect_param & 0xF) == 0
+					|| !tick_zero;
+				if((tick_zero || fast_slides) && other_ticks) {
+					s->effect_type =
+						EFFECT_S3M_FAST_VOLUME_SLIDE;
+				} else if(tick_zero) {
+					s->effect_type =
+						EFFECT_S3M_FINE_VOLUME_SLIDE;
+				} else {
+					s->effect_type = EFFECT_S3M_VOLUME_SLIDE;
+				}
+				break;
+			case 5:
+				s->effect_type = EFFECT_S3M_PORTAMENTO_DOWN;
+				break;
+			case 6:
+				s->effect_type = EFFECT_S3M_PORTAMENTO_UP;
+				break;
+			case 9:
+				s->effect_type = EFFECT_S3M_TREMOR;
+				break;
+			case 10:
+				s->effect_type = EFFECT_S3M_ARPEGGIO;
+				break;
+			case 11:
+				s->effect_type =
+					EFFECT_S3M_VIBRATO_VOLUME_SLIDE;
+				break;
+			case 12:
+				s->effect_type =
+					EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE;
+				break;
+			case 17:
+				s->effect_type = EFFECT_S3M_MULTI_RETRIG_NOTE;
+				break;
+			case 18:
+				s->effect_type = EFFECT_S3M_TREMOLO;
+				break;
+
+			case 19: /* XXX: effect memory logic is not a perfect
+			            workaround */
 				if(s->effect_param == 0) {
 					s->effect_param =
 						last_effect_parameters[x & 31];
 					if(s->effect_param == 0) {
-						NOTICE("inaccurate memory for effect %c00 in pattern %x", 'A' + s->effect_type - 1, patidx);
-					}
-				}
-			}
-
-			/* Fixup effect semantics */
-			switch(s->effect_type) {
-			case 1:
-				s->effect_type = EFFECT_SET_TEMPO;
-				break;
-
-			case 2:
-				s->effect_type = EFFECT_JUMP_TO_ORDER;
-				break;
-
-			case 3:
-				s->effect_type = EFFECT_PATTERN_BREAK;
-				break;
-
-			case 4:
-				if((s->effect_param >> 4)
-				   && (s->effect_param >> 4) < 0xF
-				   && (s->effect_param & 0xF)
-				   && (s->effect_param & 0xF) < 0xF) {
-					/* Dxy with no 0 or F for either x or y,
-					   convert to D0y */
-					s->effect_param &= 0xF;
-				}
-
-				bool slide_on_nonzero_ticks =
-					(s->effect_param >> 4) == 0
-					|| (s->effect_param & 0xF) == 0;
-				[[maybe_unused]] bool slide_on_tick_zero =
-					(slide_on_nonzero_ticks && fast_slides)
-					|| (s->effect_param >> 4) == 0xF
-					|| (s->effect_param & 0xF) == 0xF;
-				bool slide_up = s->effect_param != 0xF
-					&& ((s->effect_param & 0xF) == 0
-					    || (s->effect_param & 0xF) == 0xF);
-				uint8_t slide_amount = slide_up
-					? (s->effect_param >> 4)
-					: (s->effect_param & 0xF);
-
-				if(slide_on_nonzero_ticks) {
-					s->effect_type = EFFECT_VOLUME_SLIDE;
-					s->effect_param = slide_up
-						? (uint8_t)(slide_amount << 4)
-						: slide_amount;
-				} else {
-					s->effect_type = 0;
-					s->effect_param = 0;
-				}
-
-				#if HAS_VOLUME_COLUMN
-				if(slide_on_tick_zero) {
-					if(s->volume_column == 0) {
-						s->volume_column = (uint8_t)((slide_up ? VOLUME_EFFECT_FINE_SLIDE_UP : VOLUME_EFFECT_FINE_SLIDE_DOWN) << 4) | slide_amount;
-					} else if(slide_up) {
-						s->volume_column += slide_amount;
-						if(s->volume_column > 0x50) {
-							s->volume_column = 0x50;
-						}
+						goto blank_effect;
 					} else {
-						if(ckd_sub(&s->volume_column,
-						           s->volume_column,
-						           slide_amount)
-						   || s->volume_column < 0x10) {
-							s->volume_column = 0x10;
-						}
+						NOTICE("conversion from S00 to S%02X in pattern %x might be inaccurate", s->effect_param, patidx);
 					}
 				}
-				#endif
-				break;
-
-			case 5:
-				s->effect_type = EFFECT_S3M_PORTAMENTO_DOWN;
-				break;
-
-			case 6:
-				s->effect_type = EFFECT_S3M_PORTAMENTO_UP;
-				break;
-
-			case 7:
-				s->effect_type = EFFECT_TONE_PORTAMENTO;
-				break;
-
-			case 8:
-				s->effect_type = EFFECT_VIBRATO;
-				break;
-
-			case 9:
-				s->effect_type = EFFECT_TREMOR;
-				break;
-
-			case 10:
-				s->effect_type = EFFECT_ARPEGGIO;
-				break;
-
-			case 11:
-				s->effect_type = EFFECT_VIBRATO_VOLUME_SLIDE;
-				goto fixup_combo_volume_slide;
-
-			case 12:
-				s->effect_type = EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE;
-			fixup_combo_volume_slide:
-				/* Same as Dxy (regular volume slide), but tick
-				   0 is always a no-op */
-
-				if((s->effect_param >> 4)
-				   && (s->effect_param >> 4) < 0xF
-				   && (s->effect_param & 0xF)
-				   && (s->effect_param & 0xF) < 0xF) {
-					/* Kxy/Lxy with no 0 or F for either x
-					   or y, convert to K0y/L0y */
-					s->effect_param &= 0xF;
-				}
-
-				if((s->effect_param & 0xF)
-				   && (s->effect_param >> 4)) {
-					/* Only a fine slide, no-op */
-					goto blank_effect;
-				}
-				break;
-
-			case 15:
-				s->effect_type = EFFECT_SET_SAMPLE_OFFSET;
-				break;
-
-			case 17:
-				s->effect_type = EFFECT_MULTI_RETRIG_NOTE;
-				break;
-
-			case 18:
-				s->effect_type = EFFECT_TREMOLO;
-				break;
-
-			case 19:
 				switch(s->effect_param >> 4) {
 				case 1:
 					s->effect_type = EFFECT_SET_GLISSANDO_CONTROL;
@@ -2291,27 +2247,15 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				}
 				break;
 
-			case 20:
-				s->effect_type = EFFECT_SET_BPM;
-				if(s->effect_param <= 32) {
-					goto blank_effect;
-				}
-				break;
-
-			case 22:
-				if(s->effect_param <= MAX_VOLUME) {
-					s->effect_type = EFFECT_SET_GLOBAL_VOLUME;
-					break;
-				} else {
-					goto blank_effect;
-				}
-
-			case 21:
-				s->effect_type = EFFECT_FINE_VIBRATO;
-				break;
-
 			default: /* Trim unsupported effect */
 			blank_effect:
+				if(s->effect_type || s->effect_param) {
+					NOTICE("deleting effect %02X%02X "
+					       "in pattern %x",
+					       s->effect_type,
+					       s->effect_param,
+					       patidx);
+				}
 				s->effect_type = 0;
 				s->effect_param = 0;
 				break;

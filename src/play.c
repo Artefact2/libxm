@@ -22,22 +22,31 @@ static bool xm_slot_has_vibrato(const xm_pattern_slot_t*) __attribute__((const))
 static void xm_vibrato(xm_channel_context_t*) __attribute__((nonnull));
 #endif
 
-#if HAS_EFFECT(EFFECT_TREMOLO)
-static void xm_tremolo(xm_channel_context_t*) __attribute__((nonnull));
+#if HAS_EFFECT(EFFECT_TREMOLO) || HAS_EFFECT(EFFECT_S3M_TREMOLO)
+static void xm_tremolo(xm_channel_context_t*, uint8_t) __attribute__((nonnull));
 #endif
 
-#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
-static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+#if HAS_EFFECT(EFFECT_TREMOR) || HAS_EFFECT(EFFECT_S3M_TREMOR)
+static void xm_tremor(xm_channel_context_t*, uint8_t) __attribute__((nonnull));
 #endif
 
-#if HAS_EFFECT(EFFECT_ARPEGGIO)
-static void xm_arpeggio(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
+	|| HAS_EFFECT(EFFECT_S3M_MULTI_RETRIG_NOTE)
+static void xm_multi_retrig_note(xm_context_t*, xm_channel_context_t*, uint8_t) __attribute__((nonnull));
+#endif
+
+#if HAS_ARPEGGIO
+static void xm_arpeggio(const xm_context_t*, xm_channel_context_t*, uint8_t) __attribute__((nonnull));
 #endif
 
 #if HAS_TONE_PORTAMENTO
 static bool xm_slot_has_tone_portamento(const xm_pattern_slot_t*) __attribute__((const)) __attribute((nonnull));
 static void xm_tone_portamento(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
 static void xm_tone_portamento_target(const xm_context_t*, xm_channel_context_t*) __attribute__((nonnull));
+#endif
+
+#if HAS_GLOBAL_EFFECT_MEMORY
+[[maybe_unused]] static void xm_volume_slide_s3m(xm_channel_context_t*) __attribute__((nonnull));
 #endif
 
 typedef enum:uint8_t { PITCH_SLIDE_WRAPAROUND, PITCH_SLIDE_CLAMP, PITCH_SLIDE_CUT } xm_pitch_slide_behaviour_t;
@@ -240,13 +249,15 @@ static bool xm_slot_has_vibrato(const xm_pattern_slot_t* s) {
 		    && s->effect_type == EFFECT_FINE_VIBRATO)
 		|| (HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)
 		    &&s->effect_type == EFFECT_VIBRATO_VOLUME_SLIDE)
+		|| (HAS_EFFECT(EFFECT_S3M_VIBRATO_VOLUME_SLIDE)
+		    &&s->effect_type == EFFECT_S3M_VIBRATO_VOLUME_SLIDE)
 		|| (HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO)
 		    && (VOLUME_COLUMN(s) >> 4) == VOLUME_EFFECT_VIBRATO);
 }
 #endif
 
-#if HAS_EFFECT(EFFECT_TREMOLO)
-static void xm_tremolo(xm_channel_context_t* ch) {
+#if HAS_EFFECT(EFFECT_TREMOLO) || HAS_EFFECT(EFFECT_S3M_TREMOLO)
+static void xm_tremolo(xm_channel_context_t* ch, uint8_t param) {
 	/* Additive volume effect based on a waveform. Depth 8 is plus or minus
 	   32 volume. Works in the opposite direction of vibrato (ie, ramp down
 	   means pitch goes down with vibrato, but volume goes up with
@@ -271,24 +282,48 @@ static void xm_tremolo(xm_channel_context_t* ch) {
 	}
 	ch->volume_offset = (int8_t)
 		((int16_t)xm_waveform(TREMOLO_CONTROL_PARAM(ch), ticks)
-		* (ch->tremolo_param & 0x0F) * 4 / 128);
-	ch->tremolo_ticks += (uint8_t)((ch->tremolo_param >> 4) << 2);
+		* (param & 0x0F) * 4 / 128);
+	ch->tremolo_ticks += (uint8_t)((param >> 4) << 2);
 }
 #endif
 
-#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
-static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
+#if HAS_EFFECT(EFFECT_TREMOR) || HAS_EFFECT(EFFECT_S3M_TREMOR)
+static void xm_tremor(xm_channel_context_t* ch, uint8_t param) {
+	/* (x+1) ticks on, then (y+1) ticks off */
+	/* Effect is not the same every row: it keeps an internal tick
+	   counter and updates to the parameter only matters at the end
+	   of an on or off cycle */
+	/* If tremor ends with "off" volume, volume stays off, but *any*
+	   volume effect restores the volume (with the volume effect
+	   applied). */
+	/* It works exactly like 7xy: Tremolo with a square waveform,
+	   and xy param defines the period and duty cycle. */
+	/* Tremor x and y params do not appear to be separately kept in
+	   memory, unlike Rxy */
+	if(ch->tremor_ticks-- == 0) {
+		ch->tremor_on = !ch->tremor_on;
+		if(ch->tremor_on) {
+			ch->tremor_ticks = param >> 4;
+		} else {
+			ch->tremor_ticks = param & 0xF;
+		}
+	}
+	ch->volume_offset = ch->tremor_on ? 0 : MAX_VOLUME;
+}
+#endif
+
+#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
+	|| HAS_EFFECT(EFFECT_S3M_MULTI_RETRIG_NOTE)
+static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch,
+                                 uint8_t param) {
 	/* Seems to work similarly to Txy tremor effect. It uses an increasing
 	   counter and also runs on tick 0. */
-
-	UPDATE_EFFECT_MEMORY_XY(&ch->multi_retrig_param,
-	                        ch->current->effect_param);
 
 	if(VOLUME_COLUMN(ch->current) && ctx->current_tick == 0) {
 		/* ??? */
 		return;
 	}
-	if(++ch->multi_retrig_ticks < (ch->multi_retrig_param & 0x0F)) {
+	if(++ch->multi_retrig_ticks < (param & 0x0F)) {
 		return;
 	}
 	ch->multi_retrig_ticks = 0;
@@ -309,7 +344,7 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	static constexpr uint8_t mul[] = {
 		1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 3, 2,
 	};
-	uint8_t x = (uint8_t)(ch->multi_retrig_param >> 4);
+	uint8_t x = (uint8_t)(param >> 4);
 	ch->volume += add[x];
 	ch->volume -= add[x ^ 8];
 	ch->volume *= mul[x];
@@ -322,8 +357,9 @@ static void xm_multi_retrig_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 }
 #endif
 
-#if HAS_EFFECT(EFFECT_ARPEGGIO)
-static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch) {
+#if HAS_ARPEGGIO
+static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch,
+                        uint8_t param) {
 	uint8_t t = CURRENT_TEMPO(ctx) - ctx->current_tick;
 
 	if((HAS_EFFECT(EFFECT_DELAY_PATTERN) && ctx->current_tick == 0)
@@ -341,11 +377,11 @@ static void xm_arpeggio(const xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	if((HAS_FEATURE(FEATURE_ACCURATE_ARPEGGIO_OVERFLOW) && t > 16)
 	   || t % 3 == 2) {
-		ch->arp_note_offset = ch->current->effect_param & 0x0F;
+		ch->arp_note_offset = param & 0x0F;
 		return;
 	}
 
-	ch->arp_note_offset = ch->current->effect_param >> 4;
+	ch->arp_note_offset = param >> 4;
 }
 #endif
 
@@ -374,6 +410,8 @@ static bool xm_slot_has_tone_portamento(const xm_pattern_slot_t* s) {
 	        && s->effect_type == EFFECT_TONE_PORTAMENTO)
 		|| (HAS_EFFECT(EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE)
 		    && s->effect_type == EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE)
+		|| (HAS_EFFECT(EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE)
+		    && s->effect_type == EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE)
 		|| (HAS_VOLUME_EFFECT(VOLUME_EFFECT_TONE_PORTAMENTO)
 		    && (VOLUME_COLUMN(s) >> 4) == VOLUME_EFFECT_TONE_PORTAMENTO);
 }
@@ -452,6 +490,20 @@ static void xm_param_slide(uint8_t* param, uint8_t rawval, uint8_t max) {
 		}
 	}
 }
+
+#if HAS_GLOBAL_EFFECT_MEMORY
+static void xm_volume_slide_s3m(xm_channel_context_t* ch) {
+	uint8_t x = ch->effect_param >> 4;
+	uint8_t y = ch->effect_param & 0xF;
+	uint8_t p = (x == 0 || y == 0)
+		? ch->effect_param /* Dx0, D0y, D0F, DF0 */
+		: (y == 0xF
+		   ? (uint8_t)(x << 4) /* DxF, DFF */
+		   : y /* DFy, Dxy */);
+	RESET_VOLUME_OFFSET(ch);
+	xm_param_slide(&ch->volume, p, MAX_VOLUME);
+}
+#endif
 
 static uint16_t xm_linear_period(int16_t note) {
 	assert(7680 - note * 4 > 0);
@@ -698,6 +750,18 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 	#endif
 
+	#if HAS_EFFECT(EFFECT_S3M_FAST_VOLUME_SLIDE)
+	case EFFECT_S3M_FAST_VOLUME_SLIDE:
+	#endif
+	#if HAS_EFFECT(EFFECT_S3M_FINE_VOLUME_SLIDE)
+	case EFFECT_S3M_FINE_VOLUME_SLIDE:
+	#endif
+	#if HAS_EFFECT(EFFECT_S3M_FAST_VOLUME_SLIDE) \
+		|| HAS_EFFECT(EFFECT_S3M_FINE_VOLUME_SLIDE)
+		xm_volume_slide_s3m(ch);
+		break;
+	#endif
+
 	#if HAS_PANNING && HAS_EFFECT(EFFECT_SET_PANNING)
 	case EFFECT_SET_PANNING:
 		ch->panning = s->effect_param;
@@ -754,7 +818,22 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 	case EFFECT_MULTI_RETRIG_NOTE:
-		xm_multi_retrig_note(ctx, ch);
+		UPDATE_EFFECT_MEMORY_XY(&ch->multi_retrig_param,
+		                        ch->current->effect_param);
+		xm_multi_retrig_note(ctx, ch, ch->multi_retrig_param);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_MULTI_RETRIG_NOTE)
+	case EFFECT_S3M_MULTI_RETRIG_NOTE:
+		xm_multi_retrig_note(ctx, ch, ch->effect_param);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_TREMOR)
+	case EFFECT_S3M_TREMOR:
+		/* XXX: test S3M tremor on tick 0 */
+		xm_tremor(ch, ch->effect_param);
 		break;
 	#endif
 
@@ -800,14 +879,15 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 	#if HAS_EFFECT(EFFECT_S3M_PORTAMENTO_UP)
 	case EFFECT_S3M_PORTAMENTO_UP:
-		switch(s->effect_param >> 4) {
+		switch(ch->effect_param >> 4) {
 		case 0xE:
 			/* Extra fine */
-			xm_pitch_slide(ch, -ch->effect_param, PITCH_SLIDE_CUT);
+			xm_pitch_slide(ch, -(ch->effect_param & 0xF),
+			               PITCH_SLIDE_CUT);
 			break;
 		case 0xF:
 			/* Fine */
-			xm_pitch_slide(ch, -ch->effect_param * 4,
+			xm_pitch_slide(ch, -(ch->effect_param & 0xF) * 4,
 			               PITCH_SLIDE_CUT);
 			break;
 		}
@@ -816,14 +896,15 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 
 	#if HAS_EFFECT(EFFECT_S3M_PORTAMENTO_DOWN)
 	case EFFECT_S3M_PORTAMENTO_DOWN:
-		switch(s->effect_param >> 4) {
+		switch(ch->effect_param >> 4) {
 		case 0xE:
 			/* Extra fine */
-			xm_pitch_slide(ch, ch->effect_param, PITCH_SLIDE_CUT);
+			xm_pitch_slide(ch, ch->effect_param & 0xF,
+			               PITCH_SLIDE_CUT);
 			break;
 		case 0xF:
 			/* Fine */
-			xm_pitch_slide(ch, ch->effect_param * 4,
+			xm_pitch_slide(ch, (ch->effect_param & 0xF) * 4,
 			               PITCH_SLIDE_CUT);
 			break;
 		}
@@ -1457,7 +1538,13 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 	#if HAS_EFFECT(EFFECT_ARPEGGIO)
 	case EFFECT_ARPEGGIO:
 		if(ch->current->effect_param == 0) break;
-		xm_arpeggio(ctx, ch);
+		xm_arpeggio(ctx, ch, ch->current->effect_param);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_ARPEGGIO)
+	case EFFECT_S3M_ARPEGGIO:
+		xm_arpeggio(ctx, ch, ch->effect_param);
 		break;
 	#endif
 
@@ -1586,11 +1673,46 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 		break;
 	#endif
 
+	#if HAS_EFFECT(EFFECT_S3M_FAST_VOLUME_SLIDE)
+	case EFFECT_S3M_FAST_VOLUME_SLIDE:
+	#endif
+	#if HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
+	case EFFECT_S3M_VOLUME_SLIDE:
+	#endif
+	#if HAS_EFFECT(EFFECT_S3M_FAST_VOLUME_SLIDE) \
+		|| HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
+		xm_volume_slide_s3m(ch);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_VIBRATO_VOLUME_SLIDE)
+	case EFFECT_S3M_VIBRATO_VOLUME_SLIDE:
+		#if HAS_VIBRATO_RESET
+		ch->should_reset_vibrato = true;
+		#endif
+		xm_vibrato(ch);
+		xm_volume_slide_s3m(ch);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE)
+	case EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE:
+		xm_tone_portamento(ctx, ch);
+		xm_volume_slide_s3m(ch);
+		break;
+	#endif
+
 	#if HAS_EFFECT(EFFECT_TREMOLO)
 	case EFFECT_TREMOLO:
 		UPDATE_EFFECT_MEMORY_XY(&ch->tremolo_param,
 		                        ch->current->effect_param);
-		xm_tremolo(ch);
+		xm_tremolo(ch, ch->tremolo_param);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_TREMOLO)
+	case EFFECT_S3M_TREMOLO:
+		xm_tremolo(ch, ch->effect_param);
 		break;
 	#endif
 
@@ -1623,35 +1745,29 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 
 	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 	case EFFECT_MULTI_RETRIG_NOTE:
-		xm_multi_retrig_note(ctx, ch);
+		/* Effect memory was already set in tick 0 */
+		xm_multi_retrig_note(ctx, ch, ch->multi_retrig_param);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_MULTI_RETRIG_NOTE)
+	case EFFECT_S3M_MULTI_RETRIG_NOTE:
+		xm_multi_retrig_note(ctx, ch, ch->effect_param);
 		break;
 	#endif
 
 	#if HAS_EFFECT(EFFECT_TREMOR)
 	case EFFECT_TREMOR:
-		/* (x+1) ticks on, then (y+1) ticks off */
-		/* Effect is not the same every row: it keeps an internal tick
-		   counter and updates to the parameter only matters at the end
-		   of an on or off cycle */
-		/* If tremor ends with "off" volume, volume stays off, but *any*
-		   volume effect restores the volume (with the volume effect
-		   applied). */
-		/* It works exactly like 7xy: Tremolo with a square waveform,
-		   and xy param defines the period and duty cycle. */
-		/* Tremor x and y params do not appear to be separately kept in
-		   memory, unlike Rxy */
 		if(ch->current->effect_param > 0) {
 			ch->tremor_param = ch->current->effect_param;
 		}
-		if(ch->tremor_ticks-- == 0) {
-			ch->tremor_on = !ch->tremor_on;
-			if(ch->tremor_on) {
-				ch->tremor_ticks = ch->tremor_param >> 4;
-			} else {
-				ch->tremor_ticks = ch->tremor_param & 0xF;
-			}
-		}
-		ch->volume_offset = ch->tremor_on ? 0 : MAX_VOLUME;
+		xm_tremor(ch, ch->tremor_param);
+		break;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_TREMOR)
+	case EFFECT_S3M_TREMOR:
+		xm_tremor(ch, ch->effect_param);
 		break;
 	#endif
 
