@@ -1825,11 +1825,17 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 
 	uint8_t channel_pannings[32];
 
-	if(READ_U8(53) != 252) {
-		/* Use default pannings 0x3(L) / 0xC(R) or 0x8(Mono) */
-		/* Actually, use 0xD to make it center balanced */
-		#define S3M_DEFAULT_PAN(x) ((READ_U8(51) & 128) == 0 ? 0x80 \
-		                            : ((x) < 8 ? 0x30 : 0xD0))
+	/* In ST3, panning 0 is hard left and 0xF is hard right. True center
+	   (0x7.80) is impossible when stereo is enabled. */
+	/* NB: There is a BUG in dosbox 0.74.3 where S80/S8F do not work on the
+	   emulated GUS. (Soundblaster also has swapped L/R channels.) */
+	if((READ_U8(51) & 128) == 0) {
+		/* Stereo bit off, use mono. In ST3 this setting has precedence
+		   over custom channel pannings. */
+		__builtin_memset(channel_pannings, 0x80, 32);
+	} else if(READ_U8(53) != 252) {
+		/* ST3 default pannings: 0x3(L) / 0xC(R) */
+		#define S3M_DEFAULT_PAN(x) ((x) < 8 ? 0x33 : 0xCC)
 		for(uint8_t ch = 0; ch < 32; ++ch) {
 			channel_pannings[ch] =
 				S3M_DEFAULT_PAN(channel_settings[ch]);
@@ -1842,20 +1848,14 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 		                   + ctx->module.num_patterns),
 		            32);
 		for(uint8_t ch = 0; ch < 32; ++ch) {
-			if(channel_pannings[ch] & 0b00100000) {
+			if((channel_pannings[ch] & 0b00100000) == 0) {
 				/* Ignore custom value, use default */
 				channel_pannings[ch] =
 					S3M_DEFAULT_PAN(channel_settings[ch]);
 			} else {
 				/* Use custom value */
-				channel_pannings[ch] &= 0b00011111;
-				if(channel_pannings[ch] == 0) {
-					channel_pannings[ch] = 1;
-				} else if(channel_pannings[ch] >= 16) {
-					channel_pannings[ch] = 255;
-				} else {
-					channel_pannings[ch] <<= 4;
-				}
+				channel_pannings[ch] &= 0xF;
+				channel_pannings[ch] *= 0x11;
 			}
 		}
 	}
