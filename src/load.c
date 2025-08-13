@@ -2108,11 +2108,25 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			/* Global effect memory; do not touch s->effect_param,
 			   as any change can have global side effects. */
 			case 4:
+			case 11:
+			case 12:
 				bool tick_zero = (s->effect_param >> 4 == 0xF)
 					|| (s->effect_param & 0xF) == 0xF;
 				bool other_ticks = (s->effect_param >> 4 == 0)
 					|| (s->effect_param & 0xF) == 0
 					|| !tick_zero;
+				if(s->effect_type != 4) {
+					/* Kxy, Lxy are no-ops if fine, but
+					   still set global memory */
+					if(tick_zero && !other_ticks) {
+						s->effect_type = EFFECT_NOP;
+						break;
+					}
+					s->effect_type = (s->effect_type == 11)
+						? EFFECT_S3M_VIBRATO_VOLUME_SLIDE
+						: EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE;
+					break;
+				}
 				if((tick_zero || fast_slides) && other_ticks) {
 					s->effect_type =
 						EFFECT_S3M_FAST_VOLUME_SLIDE;
@@ -2134,14 +2148,6 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				break;
 			case 10:
 				s->effect_type = EFFECT_S3M_ARPEGGIO;
-				break;
-			case 11:
-				s->effect_type =
-					EFFECT_S3M_VIBRATO_VOLUME_SLIDE;
-				break;
-			case 12:
-				s->effect_type =
-					EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE;
 				break;
 			case 17:
 				s->effect_type = EFFECT_S3M_MULTI_RETRIG_NOTE;
@@ -2240,15 +2246,17 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 
 			default: /* Trim unsupported effect */
 			blank_effect:
-				if(s->effect_type || s->effect_param) {
-					NOTICE("deleting effect %02X%02X "
-					       "in pattern %x",
+				if(s->effect_param) {
+					NOTICE("converting effect %02X%02X "
+					       "in pattern %x to nop",
 					       s->effect_type,
 					       s->effect_param,
 					       patidx);
+					/* Keep the param for global memory */
+					s->effect_type = EFFECT_NOP;
+				} else {
+					s->effect_param = 0;
 				}
-				s->effect_type = 0;
-				s->effect_param = 0;
 				break;
 			}
 		}

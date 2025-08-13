@@ -164,6 +164,8 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define EFFECT_S3M_MULTI_RETRIG_NOTE 0x32 /* Not vanilla XM (uses global memory) */
 #define EFFECT_SET_CHANNEL_PANNING 0x33
 /* 0x34..=0x3F unused */
+#define EFFECT_NOP 0xFF /* Not vanilla XM. Does nothing but still sets global
+                           memory. */
 
 #define VOLUME_EFFECT_SLIDE_DOWN 6
 #define VOLUME_EFFECT_SLIDE_UP 7

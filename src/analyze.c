@@ -164,14 +164,16 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 
 		xm_channel_context_t* ch = ctx->channels;
 		for(uint8_t i = 0; i < ctx->module.num_channels; ++i, ++ch) {
-			assert(ch->current->effect_type < 64); /* XXX */
+			/* XXX */
+			assert(ch->current->effect_type < 64
+			       || ch->current->effect_type == EFFECT_NOP);
 			static_assert(EFFECT_ARPEGGIO == 0);
 			if(ch->current->effect_type == 0) {
 				/* Do not count "000" as an arpeggio */
 				if(ch->current->effect_param) {
 					used_effects |= 1;
 				}
-			} else {
+			} else if(ch->current->effect_type != EFFECT_NOP) {
 				/* XXX: some effects can be checked after the
 				   volume==0 check */
 				used_effects |=
