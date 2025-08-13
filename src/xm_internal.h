@@ -97,9 +97,7 @@ static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
 #define FEATURE_VARIABLE_BPM 32 /* 32..40 (8 bits) */
 #define HAS_HARDCODED_TEMPO ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_TEMPO) & 31)
 #define HAS_HARDCODED_BPM ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_BPM) & 255)
-#define FEATURE_PANNING_COLUMN 40 /* Not vanilla XM. Applied after
-                                     note/instrument, but before volume/effect
-                                     columns */
+#define FEATURE_DEFAULT_CHANNEL_PANNINGS 40
 
 static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
               || HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES),
@@ -161,9 +159,11 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define EFFECT_DELAY_PATTERN 0x2E /* Remapped from vanilla XM */
 #define EFFECT_S3M_TREMOLO 0x2F /* Not vanilla XM (uses global memory) */
 #define EFFECT_S3M_ARPEGGIO 0x30 /* Not vanilla XM (uses global memory) */
-#define EFFECT_S3M_TREMOR 0x31 /* Not vanilla XM (uses global memory) */
+#define EFFECT_S3M_TREMOR 0x31 /* Not vanilla XM (uses global memory, also runs
+                                  on tick 0) */
 #define EFFECT_S3M_MULTI_RETRIG_NOTE 0x32 /* Not vanilla XM (uses global memory) */
-/* 0x33..=0x3F unused */
+#define EFFECT_SET_CHANNEL_PANNING 0x33
+/* 0x34..=0x3F unused */
 
 #define VOLUME_EFFECT_SLIDE_DOWN 6
 #define VOLUME_EFFECT_SLIDE_UP 7
@@ -283,7 +283,16 @@ struct xm_sample_s {
 	uint8_t volume;
 	#endif
 
-	#define HAS_PANNING (XM_PANNING_TYPE == 8)
+	#define HAS_PANNING (XM_PANNING_TYPE == 8 && ( \
+		HAS_FEATURE(FEATURE_PANNING_ENVELOPES) \
+		|| HAS_FEATURE(FEATURE_SAMPLE_PANNINGS) \
+		|| HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS) \
+		|| HAS_EFFECT(EFFECT_PANNING_SLIDE) \
+		|| HAS_EFFECT(EFFECT_SET_PANNING) \
+		|| HAS_EFFECT(EFFECT_SET_CHANNEL_PANNING) \
+		|| HAS_VOLUME_EFFECT(VOLUME_EFFECT_SET_PANNING) \
+		|| HAS_VOLUME_EFFECT(VOLUME_EFFECT_PANNING_SLIDE_LEFT) \
+		|| HAS_VOLUME_EFFECT(VOLUME_EFFECT_PANNING_SLIDE_RIGHT)))
 	#define HAS_SAMPLE_PANNINGS (HAS_PANNING \
 	                             && HAS_FEATURE(FEATURE_SAMPLE_PANNINGS))
 	#if HAS_SAMPLE_PANNINGS
@@ -402,15 +411,6 @@ struct xm_pattern_slot_s {
 	uint8_t note; /* 0..=MAX_NOTE or NOTE_KEY_OFF or NOTE_RETRIGGER */
 	uint8_t instrument; /* 1..=128 */
 
-	#define HAS_PANNING_COLUMN (HAS_FEATURE(FEATURE_PANNING_COLUMN) \
-	                            && HAS_PANNING)
-	#if HAS_PANNING_COLUMN
-	#define PANNING_COLUMN(s) ((s)->panning_column)
-	uint8_t panning_column; /* 1..=255, 0 = no effect */
-	#else
-	#define PANNING_COLUMN(s) 0
-	#endif
-
 	#define HAS_VOLUME_COLUMN ((~(XM_DISABLED_VOLUME_EFFECTS)) & \
 	             (HAS_PANNING ? 0b1111111111111110 : 0b1000111111111110))
 	#if HAS_VOLUME_COLUMN
@@ -497,6 +497,15 @@ struct xm_module_s {
 	#define DEFAULT_GLOBAL_VOLUME(mod) MAX_VOLUME
 	#endif
 
+	static_assert(MAX_CHANNELS % 8 == 7);
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
+	uint8_t default_channel_panning[MAX_CHANNELS];
+	#define DEFAULT_CHANNEL_PANNING(mod, i) \
+		((mod)->default_channel_panning[i])
+	#else
+	#define DEFAULT_CHANNEL_PANNING(mod, i) (MAX_PANNING/2)
+	#endif
+
 	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
 		&& HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)
 	#define AMIGA_FREQUENCIES(mod) ((mod)->amiga_frequencies)
@@ -514,7 +523,7 @@ struct xm_module_s {
 	char trackername[TRACKER_NAME_LENGTH];
 	#endif
 
-	#define MODULE_PADDING (2 \
+	#define MODULE_PADDING (3 \
 		+ !(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
 		    && HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)) \
 		+ !HAS_INSTRUMENTS \
@@ -522,7 +531,9 @@ struct xm_module_s {
 		+ (XM_LOOPING_TYPE == 1) \
 		+ (HAS_HARDCODED_TEMPO > 0) \
 		+ (HAS_HARDCODED_BPM > 0) \
-		+ !HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME))
+		+ !HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME) \
+		+ MAX_CHANNELS*!(HAS_PANNING \
+		    && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)))
 	#if MODULE_PADDING % POINTER_SIZE
 	char __pad[MODULE_PADDING % POINTER_SIZE];
 	#endif
@@ -621,6 +632,13 @@ struct xm_channel_context_s {
 
 	#if HAS_PANNING
 	uint8_t panning; /* 0..MAX_PANNING  */
+	#endif
+
+	#if HAS_PANNING && HAS_EFFECT(EFFECT_SET_CHANNEL_PANNING)
+	#define BASE_PANNING(ctx, i) ((ctx)->channels[i].base_panning)
+	uint8_t base_panning;
+	#else
+	#define BASE_PANNING(ctx, i) DEFAULT_CHANNEL_PANNING(&ctx->module, i)
 	#endif
 
 	uint8_t orig_note; /* Last valid note seen in a slot. Could be 0. */
@@ -833,7 +851,7 @@ struct xm_channel_context_s {
 	#define CHANNEL_MUTED(ch) false
 	#endif
 
-	#define CHANNEL_CONTEXT_PADDING (3 \
+	#define CHANNEL_CONTEXT_PADDING (2 \
 		+ 4*!XM_TIMING_FUNCTIONS \
 		+ !HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
 		+ !(HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
@@ -876,6 +894,7 @@ struct xm_channel_context_s {
 		+ !HAS_SUSTAIN \
 		+ !XM_MUTING_FUNCTIONS \
 		+ !HAS_PANNING \
+		+ !(HAS_PANNING && HAS_EFFECT(EFFECT_SET_CHANNEL_PANNING)) \
 		+ !HAS_FINETUNES)
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];

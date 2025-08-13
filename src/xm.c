@@ -276,6 +276,13 @@ void xm_reset_context(xm_context_t* ctx) {
 	__builtin_memset(ctx->channels, 0, sizeof(xm_channel_context_t)
 	                                     * ctx->module.num_channels);
 
+	#if HAS_PANNING && HAS_EFFECT(EFFECT_SET_CHANNEL_PANNING)
+	for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+		ctx->channels[ch].base_panning =
+			DEFAULT_CHANNEL_PANNING(&ctx->module, ch);
+	}
+	#endif
+
 	#if XM_LOOPING_TYPE == 2
 	__builtin_memset(ctx->row_loop_count, 0, MAX_ROWS_PER_PATTERN
 	                                           * ctx->module.length);
@@ -331,7 +338,7 @@ void xm_print_pattern([[maybe_unused]] xm_context_t* ctx,
 	#if XM_VERBOSE
 	fprintf(stderr, "+-%02X-+", pat);
 	for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
-		fprintf(stderr, "------ CH %02d ------+", ch + 1);
+		fprintf(stderr, "---- CH %02d -----+", ch + 1);
 	}
 	fprintf(stderr, "\n");
 	for(uint8_t row = 0; row < 64; ++row) {
@@ -361,11 +368,6 @@ void xm_print_pattern([[maybe_unused]] xm_context_t* ctx,
 			} else {
 				fprintf(stderr, ".. ");
 			}
-			if(PANNING_COLUMN(s)) {
-				fprintf(stderr, "%02X ", PANNING_COLUMN(s));
-			} else {
-				fprintf(stderr, ".. ");
-			}
 			if(VOLUME_COLUMN(s)) {
 				fprintf(stderr, "%02X ", VOLUME_COLUMN(s));
 			} else {
@@ -382,7 +384,7 @@ void xm_print_pattern([[maybe_unused]] xm_context_t* ctx,
 	}
 	fprintf(stderr, "+----+");
 	for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
-		fprintf(stderr, "-------------------+");
+		fprintf(stderr, "----------------+");
 	}
 	fprintf(stderr, "\n");
 	#endif

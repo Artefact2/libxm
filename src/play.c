@@ -629,12 +629,6 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		}
 	}
 
-	#if HAS_PANNING
-	if(PANNING_COLUMN(s)) {
-		ch->panning = PANNING_COLUMN(s);
-	}
-	#endif
-
 	/* These volume effects always work, even when called with a delay by
 	   EDy. */
 	if((HAS_VOLUME_EFFECT(1) || HAS_VOLUME_EFFECT(2)
@@ -765,6 +759,12 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 	#if HAS_PANNING && HAS_EFFECT(EFFECT_SET_PANNING)
 	case EFFECT_SET_PANNING:
 		ch->panning = s->effect_param;
+		break;
+	#endif
+
+	#if HAS_PANNING && HAS_EFFECT(EFFECT_SET_CHANNEL_PANNING)
+	case EFFECT_SET_CHANNEL_PANNING:
+		ch->base_panning = s->effect_param;
 		break;
 	#endif
 
@@ -1425,13 +1425,18 @@ void xm_tick(xm_context_t* ctx) {
 
 		#if HAS_PANNING
 		/* Default XM panning (full stereo) */
-		uint8_t panning = (uint8_t)
-			(ch->panning
-			 + (PANNING_ENVELOPE_PANNING(ch)
-			    - MAX_ENVELOPE_VALUE / 2)
-			 * (MAX_PANNING/2
-			    - __builtin_abs(ch->panning - MAX_PANNING / 2))
-			 / (MAX_ENVELOPE_VALUE / 2));
+		uint8_t panning = ch->panning;
+		panning += (uint8_t)
+			((BASE_PANNING(ctx, i) - MAX_PANNING/2)
+			* (MAX_PANNING/2
+			   - __builtin_abs(ch->panning - MAX_PANNING/2))
+			/ (MAX_PANNING/2));
+		panning += (uint8_t)
+			((PANNING_ENVELOPE_PANNING(ch)
+			   - MAX_ENVELOPE_VALUE/2)
+			* (MAX_PANNING/2
+			   - __builtin_abs(panning - MAX_PANNING/2))
+			/ (MAX_ENVELOPE_VALUE/2));
 
 		/* See https://modarchive.org/forums/index.php?topic=3517.0
 		 * and https://github.com/Artefact2/libxm/pull/16 */
@@ -1446,8 +1451,8 @@ void xm_tick(xm_context_t* ctx) {
 		out[((i >> 1) ^ i) & 1] = volume;
 		#elif XM_PANNING_TYPE == 9
 		/* Scream Tracker 3 default panning (3/C/3/C/...) */
-		out[0] = out[1] = volume * .43359375f;
-		out[i & 1] *= 2.09375f;
+		out[0] = out[1] = volume * .447265625f;
+		out[i & 1] *= 2.f;
 		#elif XM_PANNING_TYPE == 0
 		/* Mono */
 		out[0] = out[1] = volume * 0.70703125f;

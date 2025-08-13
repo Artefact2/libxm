@@ -116,7 +116,7 @@ static void xm_fixup_mod_flt8(xm_context_t*);
 static bool xm_prescan_s3m(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_s3m(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
 static void xm_load_s3m_instrument(xm_context_t*, uint8_t, bool, const char*, uint32_t, uint32_t);
-static void xm_load_s3m_pattern(xm_context_t*, uint8_t, const uint8_t*, const uint8_t*, const uint8_t*, bool, const char*, uint32_t, uint32_t);
+static void xm_load_s3m_pattern(xm_context_t*, uint8_t, const uint8_t*, const uint8_t*, bool, const char*, uint32_t, uint32_t);
 
 /* ----- Function definitions ----- */
 
@@ -1213,6 +1213,11 @@ static void xm_load_xm0104(xm_context_t* ctx,
 	uint32_t offset = xm_load_xm0104_module_header(ctx, &num_instruments,
 	                                               moddata, moddata_length);
 
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
+	__builtin_memset(ctx->module.default_channel_panning, MAX_PANNING/2,
+	                 sizeof(ctx->module.default_channel_panning));
+	#endif
+
 	/* Read pattern headers + slots */
 	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
 		offset = xm_load_xm0104_pattern(ctx, ctx->patterns + i,
@@ -1307,9 +1312,9 @@ static void xm_fixup_xm0104(xm_context_t* ctx) {
 		}
 
 		if(slot->effect_type == 40) {
-			/* Convert E8x to 8xx */
-			slot->effect_type = EFFECT_SET_PANNING;
-			slot->effect_param = slot->effect_param * 0x10;
+			/* Handle E8y */
+			slot->effect_type = EFFECT_SET_CHANNEL_PANNING;
+			slot->effect_param *= 0x11;
 		}
 
 		if(slot->effect_type == EFFECT_KEY_OFF
@@ -1489,8 +1494,15 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 	READ_MEMCPY(ctx->module.pattern_table, offset + 2, 128);
 	offset += 134;
 
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
+	/* Emulate hard panning (LRRL LRRL etc) */
+	for(uint8_t ch = 0; ch < MAX_CHANNELS; ++ch) {
+		ctx->module.default_channel_panning[ch] =
+			(((ch >> 1) ^ ch) & 1) ? 0xFF : 0x01;
+	}
+	#endif
+
 	/* Read patterns */
-	[[maybe_unused]] bool has_panning_effects = false;
 	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
 		xm_pattern_t* pat = ctx->patterns + i;
 		pat->num_rows = 64;
@@ -1512,12 +1524,6 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 				(((x & 0xF0000000) >> 24) | ((x >> 12) & 0x0F));
 			slot->effect_type = (uint8_t)((x >> 8) & 0x0F);
 			slot->effect_param = (uint8_t)(x & 0xFF);
-
-			if(slot->effect_type == 0x8
-			   || (slot->effect_type == 0xE
-			       && slot->effect_param >> 4 == 0x8)) {
-				has_panning_effects = true;
-			}
 
 			uint16_t period = (uint16_t)((x >> 16) & 0x0FFF);
 			if(period > 0) {
@@ -1554,14 +1560,6 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 	xm_pattern_slot_t* slot = ctx->pattern_slots;
 	for(uint32_t row = 0; row < ctx->module.num_rows; ++row) {
 		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
-			#if HAS_PANNING_COLUMN
-			/* Emulate hard panning (LRRL LRRL etc) */
-			if(!has_panning_effects && slot->instrument) {
-				slot->panning_column = (((ch >> 1) ^ ch) & 1)
-					? 0xFF : 0x01;
-			}
-			#endif
-
 			if(slot->instrument && slot->note == 0) {
 				/* Ghost instruments in PT2 immediately switch
 				   to the new sample */
@@ -1823,7 +1821,9 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 	ctx->module.length = p->pot_length;
 	uint16_t pot_length = READ_U16(32);
 
-	uint8_t channel_pannings[32];
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
+	__builtin_memset(ctx->module.default_channel_panning + 32, 0,
+	                 MAX_CHANNELS - 32);
 
 	/* In ST3, panning 0 is hard left and 0xF is hard right. True center
 	   (0x7.80) is impossible when stereo is enabled. */
@@ -1832,33 +1832,34 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 	if((READ_U8(51) & 128) == 0) {
 		/* Stereo bit off, use mono. In ST3 this setting has precedence
 		   over custom channel pannings. */
-		__builtin_memset(channel_pannings, 0x80, 32);
+		__builtin_memset(ctx->module.default_channel_panning, 0x80, 32);
 	} else if(READ_U8(53) != 252) {
 		/* ST3 default pannings: 0x3(L) / 0xC(R) */
 		#define S3M_DEFAULT_PAN(x) ((x) < 8 ? 0x33 : 0xCC)
 		for(uint8_t ch = 0; ch < 32; ++ch) {
-			channel_pannings[ch] =
+			ctx->module.default_channel_panning[ch] =
 				S3M_DEFAULT_PAN(channel_settings[ch]);
 		}
 	} else {
 		/* Use custom pannings */
-		READ_MEMCPY(channel_pannings,
+		READ_MEMCPY(ctx->module.default_channel_panning,
 		            96u + pot_length
 		            + 2u * (ctx->module.num_samples
 		                   + ctx->module.num_patterns),
 		            32);
 		for(uint8_t ch = 0; ch < 32; ++ch) {
-			if((channel_pannings[ch] & 0b00100000) == 0) {
+			uint8_t* pan = ctx->module.default_channel_panning + ch;
+			if((*pan & 0b00100000) == 0) {
 				/* Ignore custom value, use default */
-				channel_pannings[ch] =
-					S3M_DEFAULT_PAN(channel_settings[ch]);
+				*pan = S3M_DEFAULT_PAN(channel_settings[ch]);
 			} else {
 				/* Use custom value */
-				channel_pannings[ch] &= 0xF;
-				channel_pannings[ch] *= 0x11;
+				*pan &= 0xF;
+				*pan *= 0x11;
 			}
 		}
 	}
+	#endif
 
 	for(uint8_t i = 0, j = 0; i < pot_length; ++i) {
 		uint8_t x = READ_U8(96 + i);
@@ -1881,7 +1882,6 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 
 	for(uint8_t pat = 0; pat < ctx->module.num_patterns; ++pat) {
 		xm_load_s3m_pattern(ctx, pat, channel_settings, channel_map,
-		                    channel_pannings,
 		                    mod_flags & 0b01000000,
 		                    moddata, moddata_length,
 		                    16 * READ_U16(offset));
@@ -1975,7 +1975,6 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
                                 uint8_t patidx,
                                 const uint8_t* restrict channel_settings,
                                 const uint8_t* restrict channel_map,
-                                [[maybe_unused]] const uint8_t* restrict channel_pannings,
                                 bool fast_slides,
                                 const char* restrict moddata,
                                 uint32_t moddata_length,
@@ -2030,14 +2029,6 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				s->note = (uint8_t)(1 + (s->note >> 4) * 12
 				                    + (s->note & 0xF));
 			}
-
-			#if HAS_PANNING_COLUMN
-			uint8_t pan = channel_pannings[x & 31];
-			if(s->instrument && pan != 0x80) {
-				/* Emulate S3M channel panning */
-				s->panning_column = pan;
-			}
-			#endif
 		}
 
 		if(x & 64) {
@@ -2188,13 +2179,16 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 					goto erase_high_nibble;
 
 				case 8:
-					s->effect_type = EFFECT_SET_PANNING;
-					s->effect_param *= 0x10;
+					s->effect_type =
+						EFFECT_SET_CHANNEL_PANNING;
+					s->effect_param &= 0xF;
+					s->effect_param *= 0x11;
 					break;
 
 				case 0xA: /* XXX: contradicting info on SAy
 				             (stereo control) */
-					s->effect_type = EFFECT_SET_PANNING;
+					s->effect_type =
+						EFFECT_SET_CHANNEL_PANNING;
 					bool left_ch =
 						channel_settings[x & 31] < 8;
 					switch(s->effect_param & 0xF) {
@@ -2202,16 +2196,14 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 					case 2:
 						/* Normal panning */
 						s->effect_param =
-							left_ch ? 0 : 0xF0;
+							left_ch ? 0 : 0xFF;
 						break;
-
 					case 1:
 					case 3:
 						/* Reversed panning */
 						s->effect_param =
-							left_ch ? 0xF0 : 0;
+							left_ch ? 0xFF : 0;
 						break;
-
 					case 4:
 					case 5:
 					case 6:
@@ -2219,7 +2211,6 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 						/* Center panning */
 						s->effect_param = 0x80;
 						break;
-
 					default:
 						/* No effect */
 						goto blank_effect;

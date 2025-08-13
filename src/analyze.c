@@ -139,6 +139,14 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			<< FEATURE_DEFAULT_GLOBAL_VOLUME;
 	}
 
+	for(uint8_t i = 0; i < MAX_CHANNELS; ++i) {
+		if(DEFAULT_CHANNEL_PANNING(&ctx->module, i) != MAX_PANNING/2) {
+			used_features |= (uint64_t)1
+				<< FEATURE_DEFAULT_CHANNEL_PANNINGS;
+			break;
+		}
+	}
+
 	while(XM_LOOPING_TYPE != 0 && LOOP_COUNT(ctx) == 0) {
 		xm_tick(ctx);
 
@@ -191,12 +199,6 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 					<< FEATURE_FADEOUT_VOLUME;
 			}
 			#endif
-
-			if(PANNING_COLUMN(ch->current) != PANNING(ch->sample)
-			   && PANNING_COLUMN(ch->current)) {
-				used_features |= (uint64_t)1
-					<< FEATURE_PANNING_COLUMN;
-			}
 
 			if(ch->actual_volume[0] == 0.f
 			   && ch->actual_volume[1] == 0.f) {
@@ -303,12 +305,12 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 		if(PANNING_EQ(0, 0x80) && PANNING_EQ(1, 0x80)
 		   && PANNING_EQ(2, 0x80) && PANNING_EQ(3, 0x80)) {
 			/* Mono, panning_type = 0 is OK */
-		} else if(PANNING_EQ(0, 1) && PANNING_EQ(1, 255)
-		          && PANNING_EQ(2, 255) && PANNING_EQ(3, 1)) {
+		} else if(PANNING_EQ(0, 0x01) && PANNING_EQ(1, 0xFF)
+		          && PANNING_EQ(2, 0xFF) && PANNING_EQ(3, 0x01)) {
 			/* Amiga */
 			panning_type = 1;
-		} else if(PANNING_EQ(0, 0x30) && PANNING_EQ(1, 0xD0)
-		          && PANNING_EQ(2, 0x30) && PANNING_EQ(3, 0xD0)) {
+		} else if(PANNING_EQ(0, 0x33) && PANNING_EQ(1, 0xCC)
+		          && PANNING_EQ(2, 0x33) && PANNING_EQ(3, 0xCC)) {
 			/* ST3 */
 			panning_type = 9;
 		} else {

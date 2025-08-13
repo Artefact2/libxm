@@ -75,7 +75,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **4230 bytes** (GCC 15.1, x86_64-linux-gnu).
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **4233 bytes** (GCC 15.1, x86_64-linux-gnu).
 
 ~~~
 cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_VERBOSE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF -DXM_TIMING_FUNCTIONS=OFF -DXM_MUTING_FUNCTIONS=OFF -DXM_SAMPLE_TYPE=float -DXM_SAMPLE_RATE=44100 -Bbuild-libxmize -Sexamples/libxmize
@@ -127,7 +127,8 @@ accuracy):
 Known inaccuracies
 ==================
 
-* E8y panning effect is supported, FT2 has no support for this command
+* Set channel panning (E8y; not in base FT2) is supported for XM/MOD
+  * Can be disabled via `EFFECT_SET_CHANNEL_PANNING`
 * Glissando control (E3y) with Amiga frequencies is not yet supported
 * Arpeggios after pitch slides with Amiga frequencies are subtly incorrect
 * Amiga filter toggle (E0y) is not supported, and is unlikely to be
@@ -141,6 +142,7 @@ Known inaccuracies
 * (S3M only) Sxy has incorrect memory semantics
 * (S3M only) Note cut (SCy) and finetune (S2y) are implemented incorrectly
 * (S3M only) Tone portamento (Gxx) is implemented incorrectly
+* (S3M only) Old stereo control (SAy) might not behave correctly
 
 To report more, please [open an issue](../../issues?q=is%3Aissue%20state%3Aopen%20label%3Abug).
 
