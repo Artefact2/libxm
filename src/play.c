@@ -744,15 +744,13 @@ static void xm_handle_pattern_slot(xm_context_t* ctx, xm_channel_context_t* ch) 
 		break;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_S3M_FAST_VOLUME_SLIDE)
-	case EFFECT_S3M_FAST_VOLUME_SLIDE:
-	#endif
-	#if HAS_EFFECT(EFFECT_S3M_FINE_VOLUME_SLIDE)
-	case EFFECT_S3M_FINE_VOLUME_SLIDE:
-	#endif
-	#if HAS_EFFECT(EFFECT_S3M_FAST_VOLUME_SLIDE) \
-		|| HAS_EFFECT(EFFECT_S3M_FINE_VOLUME_SLIDE)
-		xm_volume_slide_s3m(ch);
+	#if HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
+	case EFFECT_S3M_VOLUME_SLIDE:
+		if(ch->effect_param >> 4 == 0xF
+		   || (ch->effect_param & 0xF) == 0xF
+		   || FAST_S3M_VOLUME_SLIDES(&ctx->module)) {
+			xm_volume_slide_s3m(ch);
+		}
 		break;
 	#endif
 
@@ -1678,32 +1676,39 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 		break;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_S3M_FAST_VOLUME_SLIDE)
-	case EFFECT_S3M_FAST_VOLUME_SLIDE:
-	#endif
 	#if HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
 	case EFFECT_S3M_VOLUME_SLIDE:
 	#endif
-	#if HAS_EFFECT(EFFECT_S3M_FAST_VOLUME_SLIDE) \
-		|| HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
-		xm_volume_slide_s3m(ch);
-		break;
-	#endif
-
 	#if HAS_EFFECT(EFFECT_S3M_VIBRATO_VOLUME_SLIDE)
 	case EFFECT_S3M_VIBRATO_VOLUME_SLIDE:
-		#if HAS_VIBRATO_RESET
-		ch->should_reset_vibrato = true;
-		#endif
-		xm_vibrato(ch);
-		xm_volume_slide_s3m(ch);
-		break;
 	#endif
-
 	#if HAS_EFFECT(EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE)
 	case EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE:
-		xm_tone_portamento(ctx, ch);
-		xm_volume_slide_s3m(ch);
+	#endif
+	#if HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE) \
+		|| HAS_EFFECT(EFFECT_S3M_VIBRATO_VOLUME_SLIDE) \
+		|| HAS_EFFECT(EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE)
+		if(ch->effect_param >> 4 == 0
+		   || (ch->effect_param & 0xF) == 0
+		   || ((ch->effect_param >> 4) != 0xF
+		       && (ch->effect_param & 0xF) != 0xF)) {
+			#if HAS_EFFECT(EFFECT_S3M_VIBRATO_VOLUME_SLIDE)
+			if(ch->current->effect_type
+			   == EFFECT_S3M_VIBRATO_VOLUME_SLIDE) {
+				#if HAS_VIBRATO_RESET
+				ch->should_reset_vibrato = true;
+				#endif
+				xm_vibrato(ch);
+			}
+			#endif
+			#if HAS_EFFECT(EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE)
+			if(ch->current->effect_type
+			   == EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE) {
+				xm_tone_portamento(ctx, ch);
+			}
+			#endif
+			xm_volume_slide_s3m(ch);
+		}
 		break;
 	#endif
 

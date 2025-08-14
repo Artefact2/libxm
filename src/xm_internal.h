@@ -141,8 +141,7 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
                               E60 and E6y in the same slot. Used for S3M
                               compatibility. */
 #define EFFECT_S3M_VOLUME_SLIDE 0x1F /* Not vanilla XM */
-#define EFFECT_S3M_FAST_VOLUME_SLIDE 0x20 /* Not vanilla XM. Also applied on
-                                             tick 0. */
+#define EFFECT_S3M_MULTI_RETRIG_NOTE 0x20 /* Not vanilla XM (uses global memory) */
 #define EFFECT_FINE_PORTAMENTO_UP 0x21 /* Remapped from vanilla XM */
 #define EFFECT_FINE_PORTAMENTO_DOWN 0x22 /* Remapped from vanilla XM */
 #define EFFECT_SET_GLISSANDO_CONTROL 0x23 /* Remapped vanilla XM */
@@ -150,7 +149,7 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define EFFECT_SET_FINETUNE 0x25 /* Remapped from vanilla XM */
 #define EFFECT_PATTERN_LOOP 0x26 /* Remapped from vanilla XM */
 #define EFFECT_SET_TREMOLO_CONTROL 0x27 /* Remapped from vanilla XM */
-#define EFFECT_S3M_FINE_VOLUME_SLIDE 0x28 /* Not vanilla XM */
+#define EFFECT_SET_CHANNEL_PANNING 0x28 /* Not vanilla XM */
 #define EFFECT_RETRIGGER_NOTE 0x29 /* Remapped from vanilla XM */
 #define EFFECT_FINE_VOLUME_SLIDE_UP 0x2A /* Remapped from vanilla XM */
 #define EFFECT_FINE_VOLUME_SLIDE_DOWN 0x2B /* Remapped from vanilla XM */
@@ -161,9 +160,7 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define EFFECT_S3M_ARPEGGIO 0x30 /* Not vanilla XM (uses global memory) */
 #define EFFECT_S3M_TREMOR 0x31 /* Not vanilla XM (uses global memory, also runs
                                   on tick 0) */
-#define EFFECT_S3M_MULTI_RETRIG_NOTE 0x32 /* Not vanilla XM (uses global memory) */
-#define EFFECT_SET_CHANNEL_PANNING 0x33
-/* 0x34..=0x3F unused */
+/* 0x32..=0x3F unused */
 #define EFFECT_NOP 0xFF /* Not vanilla XM. Does nothing but still sets global
                            memory. */
 
@@ -518,6 +515,13 @@ struct xm_module_s {
 	#define AMIGA_FREQUENCIES(mod) false
 	#endif
 
+	#if HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
+	#define FAST_S3M_VOLUME_SLIDES(mod) ((mod)->fast_s3m_volume_slides)
+	bool fast_s3m_volume_slides;
+	#else
+	#define FAST_S3M_VOLUME_SLIDES(mod) false
+	#endif
+
 	#if XM_STRINGS
 	static_assert(MODULE_NAME_LENGTH % 8 == 0);
 	static_assert(TRACKER_NAME_LENGTH % 8 == 0);
@@ -525,7 +529,7 @@ struct xm_module_s {
 	char trackername[TRACKER_NAME_LENGTH];
 	#endif
 
-	#define MODULE_PADDING (3 \
+	#define MODULE_PADDING (2 \
 		+ !(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
 		    && HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)) \
 		+ !HAS_INSTRUMENTS \
@@ -534,6 +538,7 @@ struct xm_module_s {
 		+ (HAS_HARDCODED_TEMPO > 0) \
 		+ (HAS_HARDCODED_BPM > 0) \
 		+ !HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME) \
+		+ !HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE) \
 		+ MAX_CHANNELS*!(HAS_PANNING \
 		    && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)))
 	#if MODULE_PADDING % POINTER_SIZE
@@ -827,8 +832,6 @@ struct xm_channel_context_s {
 	#define HAS_GLOBAL_EFFECT_MEMORY (HAS_EFFECT(EFFECT_S3M_PORTAMENTO_UP) \
 	            || HAS_EFFECT(EFFECT_S3M_PORTAMENTO_DOWN) \
 	            || HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE) \
-	            || HAS_EFFECT(EFFECT_S3M_FINE_VOLUME_SLIDE) \
-	            || HAS_EFFECT(EFFECT_S3M_FAST_VOLUME_SLIDE) \
 	            || HAS_EFFECT(EFFECT_S3M_VIBRATO_VOLUME_SLIDE) \
 	            || HAS_EFFECT(EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE) \
 	            || HAS_EFFECT(EFFECT_S3M_TREMOR) \

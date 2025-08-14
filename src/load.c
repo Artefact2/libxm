@@ -116,7 +116,7 @@ static void xm_fixup_mod_flt8(xm_context_t*);
 static bool xm_prescan_s3m(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_s3m(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
 static void xm_load_s3m_instrument(xm_context_t*, uint8_t, bool, const char*, uint32_t, uint32_t);
-static void xm_load_s3m_pattern(xm_context_t*, uint8_t, const uint8_t*, const uint8_t*, bool, const char*, uint32_t, uint32_t);
+static void xm_load_s3m_pattern(xm_context_t*, uint8_t, const uint8_t*, const uint8_t*, const char*, uint32_t, uint32_t);
 
 /* ----- Function definitions ----- */
 
@@ -1299,22 +1299,28 @@ static void xm_fixup_xm0104(xm_context_t* ctx) {
 		}
 
 		if(slot->effect_type == 0xE) {
-			/* Now that effects 32..=47 are free, use these for Exy
-			   extended commands */
-			slot->effect_type = 32 | (slot->effect_param >> 4);
-			slot->effect_param &= 0xF;
+			if(slot->effect_param >> 4 == 0
+			   || slot->effect_param >> 4 == 0xF) {
+				/* E0y / EFy unsupported */
+				slot->effect_type = 0;
+				slot->effect_param = 0;
+			} else {
+				slot->effect_type =
+					0x20 | (slot->effect_param >> 4);
+				slot->effect_param &= 0xF;
+
+				static_assert(EFFECT_SET_CHANNEL_PANNING
+				              == 0x28);
+				if(slot->effect_type == 0x28) {
+					slot->effect_param *= 0x11;
+				}
+			}
 		}
 
 		if(slot->effect_type == EFFECT_SET_BPM
 		   && slot->effect_param < MIN_BPM) {
 			/* Now that effect E is free, use it for "set tempo" */
 			slot->effect_type = EFFECT_SET_TEMPO;
-		}
-
-		if(slot->effect_type == 40) {
-			/* Handle E8y */
-			slot->effect_type = EFFECT_SET_CHANNEL_PANNING;
-			slot->effect_param *= 0x11;
 		}
 
 		if(slot->effect_type == EFFECT_KEY_OFF
@@ -1765,13 +1771,23 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 	ctx->module.num_patterns = p->num_patterns;
 	ctx->module.num_rows = p->num_rows;
 
-	uint8_t mod_flags = READ_U8(38);
-	if(tracker_version == 0x1300) {
-		/* Implied ST3.00 volume slides (aka "fast slides") */
-		mod_flags |= 0b01000000;
-	}
-	if(mod_flags & 0b10111111) {
-		NOTICE("ignoring module flags %x", mod_flags & 0b10111111);
+	{
+		uint8_t mod_flags = READ_U8(38);
+
+		#if HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
+		if(tracker_version == 0x1300) {
+			/* Implied ST3.00 volume slides (aka "fast slides") */
+			mod_flags |= 0b01000000;
+		}
+		ctx->module.fast_s3m_volume_slides = mod_flags & 0b01000000;
+		#endif
+
+		uint8_t ignored_flags = mod_flags
+			& (HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
+			   ? 0b10111111 : 0xFF);
+		if(ignored_flags) {
+			NOTICE("ignoring module flags %x", ignored_flags);
+		}
 	}
 
 	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
@@ -1882,7 +1898,6 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 
 	for(uint8_t pat = 0; pat < ctx->module.num_patterns; ++pat) {
 		xm_load_s3m_pattern(ctx, pat, channel_settings, channel_map,
-		                    mod_flags & 0b01000000,
 		                    moddata, moddata_length,
 		                    16 * READ_U16(offset));
 		offset += 2;
@@ -1975,7 +1990,6 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
                                 uint8_t patidx,
                                 const uint8_t* restrict channel_settings,
                                 const uint8_t* restrict channel_map,
-                                bool fast_slides,
                                 const char* restrict moddata,
                                 uint32_t moddata_length,
                                 uint32_t offset) {
@@ -2048,19 +2062,6 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				last_effect_parameters[x & 31] = s->effect_param;
 			}
 
-			/* Some S3M effects have "indiscriminate memory" and
-			   will reuse whatever last value was seen, regardless
-			   of effect type. Work around this as best as possible
-			   (still inaccurate across pattern boundaries,
-			   jumps/breaks, loops) */
-			switch(s->effect_type) {
-			case 9: /* Ixy */
-			case 17: /* Qxy */
-			case 19: /* Sxy */
-				/* XXX: is effect memory per channel (0..32) or
-				   per mapped channel (eg PCM0, PCM1 etc)? */
-			}
-
 			/* Fixup effect semantics */
 			/* Reminder: try not to change effect_param for effects
 			   with global memory (potential side effects) */
@@ -2108,34 +2109,15 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			/* Global effect memory; do not touch s->effect_param,
 			   as any change can have global side effects. */
 			case 4:
+				s->effect_type = EFFECT_S3M_VOLUME_SLIDE;
+				break;
 			case 11:
+				s->effect_type =
+					EFFECT_S3M_VIBRATO_VOLUME_SLIDE;
+				break;
 			case 12:
-				bool tick_zero = (s->effect_param >> 4 == 0xF)
-					|| (s->effect_param & 0xF) == 0xF;
-				bool other_ticks = (s->effect_param >> 4 == 0)
-					|| (s->effect_param & 0xF) == 0
-					|| !tick_zero;
-				if(s->effect_type != 4) {
-					/* Kxy, Lxy are no-ops if fine, but
-					   still set global memory */
-					if(tick_zero && !other_ticks) {
-						s->effect_type = EFFECT_NOP;
-						break;
-					}
-					s->effect_type = (s->effect_type == 11)
-						? EFFECT_S3M_VIBRATO_VOLUME_SLIDE
-						: EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE;
-					break;
-				}
-				if((tick_zero || fast_slides) && other_ticks) {
-					s->effect_type =
-						EFFECT_S3M_FAST_VOLUME_SLIDE;
-				} else if(tick_zero) {
-					s->effect_type =
-						EFFECT_S3M_FINE_VOLUME_SLIDE;
-				} else {
-					s->effect_type = EFFECT_S3M_VOLUME_SLIDE;
-				}
+				s->effect_type =
+					EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE;
 				break;
 			case 5:
 				s->effect_type = EFFECT_S3M_PORTAMENTO_DOWN;
@@ -2241,12 +2223,16 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				erase_high_nibble:
 					s->effect_param &= 0xF;
 					break;
+
+				default:
+					goto blank_effect;
 				}
 				break;
 
 			default: /* Trim unsupported effect */
 			blank_effect:
 				if(s->effect_param) {
+					/* XXX: test this behaviour in ST3 */
 					NOTICE("converting effect %02X%02X "
 					       "in pattern %x to nop",
 					       s->effect_type,

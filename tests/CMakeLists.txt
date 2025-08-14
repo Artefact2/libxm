@@ -98,3 +98,5 @@ add_test(NAME test_volume_envelope COMMAND test-libxm
 	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/volume-envelope.xm)
 add_test(NAME test_volume_slides_s3m COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/volume-slides.s3m)
+add_test(NAME test_volume_slides_fast_s3m COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/volume-slides-fast.s3m)
