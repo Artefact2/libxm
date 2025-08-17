@@ -1607,6 +1607,11 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 				slot->effect_param ^= 0b00001000;
 			}
 
+			/* XXX: Convert 8xx to use channel panning */
+			if(slot->effect_type == 8) {
+				slot->effect_type = EFFECT_SET_CHANNEL_PANNING;
+			}
+
 			slot++;
 		}
 	}
@@ -2114,6 +2119,19 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				} else {
 					goto blank_effect;
 				}
+			case 24:
+				/* XXX: Need more info on effect Xxx */
+				if(s->effect_param <= 0x80) {
+					s->effect_type =
+						EFFECT_SET_CHANNEL_PANNING;
+					/* Remap from 0..=0x80 to 0..=0xFF */
+					s->effect_param =
+						(s->effect_param == 0x80)
+						? 0xFF : (s->effect_param * 2);
+				} else {
+					goto blank_effect;
+				}
+				break;
 
 			/* Local effect memory */
 			case 7:
