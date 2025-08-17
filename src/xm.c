@@ -10,6 +10,11 @@
 
 
 
+uint16_t xm_rand16(uint32_t* state) {
+	/* https://arxiv.org/abs/2001.05304 */
+	return (uint16_t)(*state = *state * 0xD9F5 + 1);
+}
+
 void xm_set_max_loop_count([[maybe_unused]] xm_context_t* context,
                            [[maybe_unused]] uint8_t loopcnt) {
 	#if XM_LOOPING_TYPE == 2

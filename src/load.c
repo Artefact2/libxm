@@ -107,10 +107,10 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t*, xm_instrument_t*, const
 static uint32_t xm_load_xm0104_sample_header(xm_sample_t*, bool*, const char*, uint32_t, uint32_t);
 static void xm_load_xm0104_8b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
 static void xm_load_xm0104_16b_sample_data(uint32_t, xm_sample_point_t*, const char*, uint32_t, uint32_t);
-static void xm_fixup_xm0104(xm_context_t*);
 
 static bool xm_prescan_mod(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_mod(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
+static void xm_load_mod_effect(xm_pattern_slot_t*);
 static void xm_fixup_mod_flt8(xm_context_t*);
 
 static bool xm_prescan_s3m(const char*, uint32_t, xm_prescan_data_t*);
@@ -283,18 +283,15 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	switch(p->format) {
 	case XM_FORMAT_XM0104:
 		xm_load_xm0104(ctx, moddata, moddata_length);
-		xm_fixup_xm0104(ctx);
 		break;
 
 	case XM_FORMAT_MOD:
 		xm_load_mod(ctx, moddata, moddata_length, p);
-		xm_fixup_xm0104(ctx);
 		break;
 
 	case XM_FORMAT_MOD_FLT8:
 		xm_load_mod(ctx, moddata, moddata_length, p);
 		xm_fixup_mod_flt8(ctx);
-		xm_fixup_xm0104(ctx);
 		break;
 
 	case XM_FORMAT_S3M:
@@ -334,25 +331,6 @@ static void xm_fixup_common(xm_context_t* ctx) {
 		   && slot->effect_param > MAX_VOLUME) {
 			/* Clamp Cxx and Gxx */
 			slot->effect_param = MAX_VOLUME;
-		}
-
-		if(slot->effect_type == EFFECT_PATTERN_BREAK) {
-			/* Convert Dxx to base 16, saves doing the math in
-			   play.c */
-			slot->effect_param = (uint8_t)
-				(slot->effect_param
-				 - 6 * (slot->effect_param >> 4));
-		}
-
-		if(slot->effect_type == EFFECT_SET_VIBRATO_CONTROL
-		   || slot->effect_type == EFFECT_SET_TREMOLO_CONTROL) {
-			/* Convert random waveform to square waveform (FT2
-			   behaviour, lets us reuse waveform 3 for
-			   autovibrato ramp) */
-			/* Also clear useless bit 3 */
-			slot->effect_param &=
-				((slot->effect_param & 0b11) == 0b11) ?
-				0b11110110 : 0b11110111;
 		}
 
 		if(slot->effect_type == EFFECT_CUT_NOTE
@@ -430,12 +408,9 @@ uint32_t xm_context_size(const xm_context_t* ctx) {
 
 
 static int8_t xm_dither_16b_8b(int16_t x) {
-	static uint32_t next = 1;
-	next = next * 214013 + 2531011;
-	/* Not that this is perf critical, but this should compile to a cmovl
-	   (branchless) */
+	static uint32_t state = 0; /* XXX: make me reentrant */
 	return (x >= 32512) ? 127 :
-		(int8_t)((x + (int16_t)((next >> 16) % 256)) / 256);
+		(int8_t)((x + (int16_t)(xm_rand16(&state) % 256)) / 256);
 }
 
 static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
@@ -859,6 +834,77 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 			slot->effect_param = READ_U8(offset + j + 4);
 			j += 5;
 		}
+
+		if(slot->note == 97) {
+			slot->note = NOTE_KEY_OFF;
+		}
+
+		if(slot->effect_type > 0xF) {
+			switch(slot->effect_type) {
+			default:
+			blank_effect:
+				NOTICE("deleting effect %02X%02X",
+				       slot->effect_type,
+				       slot->effect_param);
+				slot->effect_type = 0;
+				slot->effect_param = 0;
+				break;
+			case 16:
+				slot->effect_type = EFFECT_SET_GLOBAL_VOLUME;
+				break;
+			case 17:
+				slot->effect_type = EFFECT_GLOBAL_VOLUME_SLIDE;
+				break;
+			case 20:
+				if(slot->effect_param == 0) {
+					/* Convert K00 to key off note. This is
+					   coherent with FT2 behaviour. */
+					slot->note = NOTE_KEY_OFF;
+					slot->effect_type = 0;
+				} else {
+					slot->effect_type = EFFECT_KEY_OFF;
+				}
+				break;
+			case 21:
+				slot->effect_type = EFFECT_SET_ENVELOPE_POSITION;
+				break;
+			case 25:
+				slot->effect_type = EFFECT_PANNING_SLIDE;
+				break;
+			case 27:
+				slot->effect_type = EFFECT_MULTI_RETRIG_NOTE;
+				break;
+			case 29:
+				slot->effect_type = EFFECT_TREMOR;
+				break;
+			case 33:
+				switch(slot->effect_param >> 4) {
+				case 1:
+					slot->effect_type =
+						EFFECT_EXTRA_FINE_PORTAMENTO_UP;
+					slot->effect_param &= 0xF;
+					break;
+				case 2:
+					slot->effect_type =
+						EFFECT_EXTRA_FINE_PORTAMENTO_DOWN;
+					slot->effect_param &= 0xF;
+					break;
+				default:
+					goto blank_effect;
+				}
+				break;
+			}
+		} else {
+			xm_load_mod_effect(slot);
+			if((slot->effect_type == EFFECT_SET_VIBRATO_CONTROL
+			    || slot->effect_type == EFFECT_SET_TREMOLO_CONTROL)
+			   && (slot->effect_param & 127) == WAVEFORM_RANDOM) {
+				/* FT2 quirk: random waveform is not supported,
+				   converted to square instead */
+				slot->effect_param = (slot->effect_param & 128)
+					| WAVEFORM_SQUARE;
+			}
+		}
 	}
 
 	if(k != pat->num_rows * ctx->module.num_channels) {
@@ -933,15 +979,21 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	#endif
 
 	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
-	instr->vibrato_type = READ_U8(offset + 235);
-	/* Swap around autovibrato waveforms to match xm_waveform() semantics */
-	/* FT2 values: 0 = Sine, 1 = Square, 2 = Ramp down, 3 = Ramp up */
-	/* Swap square and ramp */
-	static const uint8_t lut[] = { 0b00, 0b11, 0b11, 0b00 };
-	instr->vibrato_type ^= lut[instr->vibrato_type & 0b11];
-	/* Swap ramp types */
-	if(instr->vibrato_type & 1) {
-		instr->vibrato_type ^= 0b10;
+	switch(READ_U8(offset + 235)) {
+	case 0:
+		instr->vibrato_type = WAVEFORM_SINE;
+		break;
+	case 1:
+		instr->vibrato_type = WAVEFORM_SQUARE;
+		break;
+	case 2:
+		instr->vibrato_type = WAVEFORM_RAMP_DOWN;
+		break;
+	case 3:
+		instr->vibrato_type = WAVEFORM_RAMP_UP;
+		break;
+	default:
+		assert(0);
 	}
 	instr->vibrato_sweep = READ_U8(offset + 236);
 	instr->vibrato_depth = READ_U8(offset + 237);
@@ -1266,76 +1318,6 @@ static void xm_load_xm0104(xm_context_t* ctx,
 	}
 }
 
-/* Also shared with .MOD */
-static void xm_fixup_xm0104(xm_context_t* ctx) {
-	xm_pattern_slot_t* slot = ctx->pattern_slots;
-	static_assert(MAX_PATTERNS * MAX_ROWS_PER_PATTERN * MAX_CHANNELS
-	              <= UINT32_MAX);
-	for(uint32_t i = ctx->module.num_rows * ctx->module.num_channels;
-	    i; --i, ++slot) {
-		if(slot->note == 97) {
-			slot->note = NOTE_KEY_OFF;
-		}
-
-		if(slot->effect_type == 33) {
-			/* Split X1y/X2y effect */
-			switch(slot->effect_param >> 4) {
-			case 1:
-				slot->effect_type =
-					EFFECT_EXTRA_FINE_PORTAMENTO_UP;
-				slot->effect_param &= 0xF;
-				break;
-			case 2:
-				slot->effect_type =
-					EFFECT_EXTRA_FINE_PORTAMENTO_DOWN;
-				slot->effect_param &= 0xF;
-				break;
-			default:
-				/* Invalid X effect, clear it */
-				slot->effect_type = 0;
-				slot->effect_param = 0;
-				break;
-			}
-		}
-
-		if(slot->effect_type == 0xE) {
-			if(slot->effect_param >> 4 == 0
-			   || slot->effect_param >> 4 == 0xF) {
-				/* E0y / EFy unsupported */
-				slot->effect_type = 0;
-				slot->effect_param = 0;
-			} else {
-				slot->effect_type =
-					0x20 | (slot->effect_param >> 4);
-				slot->effect_param &= 0xF;
-
-				static_assert(EFFECT_SET_CHANNEL_PANNING
-				              == 0x28);
-				if(slot->effect_type == 0x28) {
-					slot->effect_param *= 0x11;
-				}
-			}
-		}
-
-		if(slot->effect_type == EFFECT_SET_BPM
-		   && slot->effect_param < MIN_BPM) {
-			/* Now that effect E is free, use it for "set tempo" */
-			slot->effect_type = EFFECT_SET_TEMPO;
-		}
-
-		if(slot->effect_type == EFFECT_KEY_OFF
-		   && slot->effect_param == 0) {
-			/* Convert K00 to key off note. This is vital, as Kxx
-			   effect logic would otherwise be applied much later,
-			   and this has all kinds of nasty side effects when K00
-			   is used with either a note, or an instrument in the
-			   same slot. */
-			slot->effect_type = 0;
-			slot->note = NOTE_KEY_OFF;
-		}
-	}
-}
-
 /* ----- Amiga .MOD (M.K., xCHN, etc.): big endian ------ */
 
 static bool xm_prescan_mod(const char* restrict moddata,
@@ -1530,7 +1512,6 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 				(((x & 0xF0000000) >> 24) | ((x >> 12) & 0x0F));
 			slot->effect_type = (uint8_t)((x >> 8) & 0x0F);
 			slot->effect_param = (uint8_t)(x & 0xFF);
-
 			uint16_t period = (uint16_t)((x >> 16) & 0x0FFF);
 			if(period > 0) {
 				slot->note = 73;
@@ -1548,6 +1529,48 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 				    i < 11 && period < x[i];
 				    ++i, ++slot->note);
 			}
+
+			xm_load_mod_effect(slot);
+
+			if(slot->instrument && slot->note == 0) {
+				/* Ghost instruments in PT2 immediately switch
+				   to the new sample */
+				slot->note = NOTE_SWITCH;
+			}
+
+			/* PT2 has no effect memory for 1xx, 2xx, 5xx, 6xx, Axx,
+			   E1x, E2x, EAx, EBx */
+			if(slot->effect_param == 0) {
+				switch(slot->effect_type) {
+				case EFFECT_PORTAMENTO_UP:
+				case EFFECT_PORTAMENTO_DOWN:
+				case EFFECT_VOLUME_SLIDE:
+				case EFFECT_FINE_PORTAMENTO_UP:
+				case EFFECT_FINE_PORTAMENTO_DOWN:
+				case EFFECT_FINE_VOLUME_SLIDE_UP:
+				case EFFECT_FINE_VOLUME_SLIDE_DOWN:
+					slot->effect_type = 0;
+					break;
+				case EFFECT_VIBRATO_VOLUME_SLIDE:
+					slot->effect_type = EFFECT_VIBRATO;
+					break;
+				case EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE:
+					slot->effect_type =
+						EFFECT_TONE_PORTAMENTO;
+					break;
+				}
+			}
+
+			switch(slot->effect_type) {
+			case EFFECT_SET_FINETUNE:
+				/* E50 -> E58, E51 ->  E59, ..., E5F -> E57 */
+				slot->effect_param ^= 0b00001000;
+				break;
+			case EFFECT_SET_PANNING:
+				/* XXX: Convert 8xx to use channel panning */
+				slot->effect_type = EFFECT_SET_CHANNEL_PANNING;
+				break;
+			}
 		}
 	}
 
@@ -1562,59 +1585,149 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 		ctx->samples[i].index = ctx->module.samples_data_length;
 		ctx->module.samples_data_length += ctx->samples[i].length;
 	}
+}
 
-	xm_pattern_slot_t* slot = ctx->pattern_slots;
-	for(uint32_t row = 0; row < ctx->module.num_rows; ++row) {
-		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
-			if(slot->instrument && slot->note == 0) {
-				/* Ghost instruments in PT2 immediately switch
-				   to the new sample */
-				slot->note = NOTE_SWITCH;
+static void xm_load_mod_effect(xm_pattern_slot_t* slot) {
+	if(slot->effect_type == 0xE) {
+		switch(slot->effect_param >> 4) {
+		case 0:
+		case 0xF:
+			NOTICE("removing unsupported E%02X",
+			       slot->effect_param);
+			slot->effect_type = 0;
+			slot->effect_param = 0;
+			return;
+		case 1:
+			slot->effect_type =
+				EFFECT_FINE_PORTAMENTO_UP;
+			goto erase_high_nibble;
+		case 2:
+			slot->effect_type =
+				EFFECT_FINE_PORTAMENTO_DOWN;
+			goto erase_high_nibble;
+		case 3:
+			slot->effect_type =
+				EFFECT_SET_GLISSANDO_CONTROL;
+			slot->effect_param = (slot->effect_param > 0);
+			return;
+		case 4:
+			slot->effect_type =
+				EFFECT_SET_VIBRATO_CONTROL;
+			goto fixup_control_param;
+		case 5:
+			slot->effect_type = EFFECT_SET_FINETUNE;
+			goto erase_high_nibble;
+		case 6:
+			slot->effect_type = EFFECT_PATTERN_LOOP;
+			goto erase_high_nibble;
+		case 7:
+			slot->effect_type = EFFECT_SET_TREMOLO_CONTROL;
+		fixup_control_param:
+			uint8_t new_param;
+			switch(slot->effect_param & 3) {
+			case 0:
+				new_param = WAVEFORM_SINE;
+				break;
+			case 1:
+				new_param = WAVEFORM_RAMP_DOWN;
+				break;
+			case 2:
+				new_param = WAVEFORM_SQUARE;
+				break;
+			case 3:
+				new_param = WAVEFORM_RANDOM;
+				break;
 			}
-
-			/* Imitate ProTracker 2/3 lacking effect memory for
-			   1xx/2xx/Axy (based on the MilkyTracker docs) */
-			if(slot->effect_param == 0) {
-				if(slot->effect_type == 0x1
-				   || slot->effect_type == 0x2
-				   || slot->effect_type == 0xA) {
-					slot->effect_type = 0;
-				}
-				if(slot->effect_type == 0x5
-				   || slot->effect_type == 0x6) {
-					slot->effect_type -= 2;
-				}
-			}
-
-			/* Convert 0xy arpeggio from ProTracker 2/3 semantics to
-			   Fasttracker II semantics */
-			if(slot->effect_type == 0) {
-				/* XXX: this breaks down with spd=2 */
-				/* 0xy -> 0yx */
-				/* slot->effect_param = (uint8_t) */
-				/* 	((slot->effect_param << 4) */
-				/* 	 | (slot->effect_param >> 4)); */
-			}
-
-			/* XXX: In PT2, 9xx beyond the end of a sample will
-			   still work for looped samples */
-
-			/* Convert E5y finetune from ProTracker 2/3 semantics to
-			   Fasttracker II semantics */
-			if(slot->effect_type == 0xE
-			   && slot->effect_param >> 4 == 0x5) {
-				/* E50 -> E58, E51 ->  E59, ..., E5F -> E57 */
-				slot->effect_param ^= 0b00001000;
-			}
-
-			/* XXX: Convert 8xx to use channel panning */
-			if(slot->effect_type == 8) {
-				slot->effect_type = EFFECT_SET_CHANNEL_PANNING;
-			}
-
-			slot++;
+			slot->effect_param = new_param
+				| ((slot->effect_param & 4) ? 128 : 0);
+			return;
+		case 8:
+			slot->effect_type = EFFECT_SET_CHANNEL_PANNING;
+			slot->effect_param &= 0xF;
+			slot->effect_param *= 0x11;
+			return;
+		case 9:
+			slot->effect_type = EFFECT_RETRIGGER_NOTE;
+			goto erase_high_nibble;
+		case 0xA:
+			slot->effect_type = EFFECT_FINE_VOLUME_SLIDE_UP;
+			goto erase_high_nibble;
+		case 0xB:
+			slot->effect_type = EFFECT_FINE_VOLUME_SLIDE_DOWN;
+			goto erase_high_nibble;
+		case 0xC:
+			slot->effect_type = EFFECT_CUT_NOTE;
+			goto erase_high_nibble;
+		case 0xD:
+			slot->effect_type = EFFECT_DELAY_NOTE;
+			goto erase_high_nibble;
+		case 0xE:
+			slot->effect_type = EFFECT_DELAY_PATTERN;
+		erase_high_nibble:
+			slot->effect_param &= 0xF;
+			return;
 		}
+
+		assert(0);
 	}
+
+	switch(slot->effect_type) {
+	case 0:
+		slot->effect_type = EFFECT_ARPEGGIO;
+		return;
+	case 1:
+		slot->effect_type = EFFECT_PORTAMENTO_UP;
+		return;
+	case 2:
+		slot->effect_type = EFFECT_PORTAMENTO_DOWN;
+		return;
+	case 3:
+		slot->effect_type = EFFECT_TONE_PORTAMENTO;
+		return;
+	case 4:
+		slot->effect_type = EFFECT_VIBRATO;
+		return;
+	case 5:
+		slot->effect_type =
+			EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE;
+		return;
+	case 6:
+		slot->effect_type = EFFECT_VIBRATO_VOLUME_SLIDE;
+		return;
+	case 7:
+		slot->effect_type = EFFECT_TREMOLO;
+		return;
+	case 8:
+		slot->effect_type = EFFECT_SET_PANNING;
+		return;
+	case 9:
+		slot->effect_type = EFFECT_SET_SAMPLE_OFFSET;
+		return;
+	case 0xA:
+		slot->effect_type = EFFECT_VOLUME_SLIDE;
+		return;
+	case 0xB:
+		slot->effect_type = EFFECT_JUMP_TO_ORDER;
+		return;
+	case 0xC:
+		slot->effect_type = EFFECT_SET_VOLUME;
+		return;
+	case 0xD:
+		slot->effect_type = EFFECT_PATTERN_BREAK;
+		/* Convert Dxx to base 16, saves doing the math in play.c */
+		slot->effect_param = (uint8_t)
+			(slot->effect_param - 6 * (slot->effect_param >> 4));
+		return;
+	case 0xF:
+		if(slot->effect_param < MIN_BPM) {
+			slot->effect_type = EFFECT_SET_TEMPO;
+		} else {
+			slot->effect_type = EFFECT_SET_BPM;
+		}
+		return;
+	}
+
+	assert(0);
 }
 
 static void xm_fixup_mod_flt8(xm_context_t* ctx) {
@@ -1732,7 +1845,7 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
                         const char* restrict moddata,
                         uint32_t moddata_length,
                         const xm_prescan_data_t* restrict p) {
-	uint16_t tracker_version = READ_U16(40);
+	[[maybe_unused]] uint16_t tracker_version = READ_U16(40);
 
 	#if XM_STRINGS
 	/* Module name is already NUL-terminated in S3M */
@@ -2175,6 +2288,11 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				break;
 			case 17:
 				s->effect_type = EFFECT_S3M_MULTI_RETRIG_NOTE;
+				/* Convert Q0y to Q8y, as FT2 behaviour is to
+				   reuse last x value when x=0 */
+				if(s->effect_param >> 4 == 0) {
+					s->effect_param |= 0x80;
+				}
 				break;
 			case 18:
 				s->effect_type = EFFECT_S3M_TREMOLO;
@@ -2194,7 +2312,8 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				switch(s->effect_param >> 4) {
 				case 1:
 					s->effect_type = EFFECT_SET_GLISSANDO_CONTROL;
-					goto erase_high_nibble;
+					s->effect_param = (s->effect_param > 0);
+					break;
 
 				case 2:
 					s->effect_type = EFFECT_SET_FINETUNE;
@@ -2202,11 +2321,29 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 
 				case 3:
 					s->effect_type = EFFECT_SET_VIBRATO_CONTROL;
-					goto erase_high_nibble;
+					goto fixup_control_param;
 
 				case 4:
 					s->effect_type = EFFECT_SET_TREMOLO_CONTROL;
-					goto erase_high_nibble;
+				fixup_control_param:
+					switch(s->effect_param & 3) {
+					case 0:
+						s->effect_param = WAVEFORM_SINE;
+						break;
+					case 1:
+						s->effect_param =
+							WAVEFORM_RAMP_DOWN;
+						break;
+					case 2:
+						s->effect_param =
+							WAVEFORM_SQUARE;
+						break;
+					case 3:
+						s->effect_param =
+							WAVEFORM_RANDOM;
+						break;
+					}
+					break;
 
 				case 8:
 					s->effect_type =

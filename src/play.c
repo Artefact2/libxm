@@ -150,11 +150,16 @@ static int8_t xm_waveform([[maybe_unused]] uint8_t waveform,
 	#if !HAS_FEATURE(FEATURE_WAVEFORM_SINE) \
 		&& !HAS_FEATURE(FEATURE_WAVEFORM_SQUARE) \
 		&& !HAS_FEATURE(FEATURE_WAVEFORM_RAMP_DOWN) \
-		&& !HAS_FEATURE(FEATURE_WAVEFORM_RAMP_UP)
+		&& !HAS_FEATURE(FEATURE_WAVEFORM_RAMP_UP) \
+		&& !HAS_FEATURE(FEATURE_WAVEFORM_RANDOM)
 	return 0;
 	#endif
 
-	switch(waveform & 3) {
+	#if HAS_FEATURE(FEATURE_WAVEFORM_CONTINUE)
+	waveform &= 127;
+	#endif
+
+	switch(waveform) {
 
 	/* In case some waveforms were compiled out, default to the first
 	   enabled waveform */
@@ -190,7 +195,16 @@ static int8_t xm_waveform([[maybe_unused]] uint8_t waveform,
 		return (int8_t)step;
 	#endif
 
+	#if HAS_FEATURE(FEATURE_WAVEFORM_RANDOM)
+	case WAVEFORM_RANDOM:
+		/* XXX: make me reentrant */
+		static uint32_t state = 0;
+		return (int8_t)xm_rand16(&state);
+	#endif
+
 	}
+
+	assert(0);
 }
 
 #if HAS_FEATURE(FEATURE_AUTOVIBRATO)
@@ -267,16 +281,16 @@ static void xm_tremolo(xm_channel_context_t* ch, uint8_t param) {
 	   effect, but is reset after any volume command. */
 
 	uint8_t ticks = ch->tremolo_ticks;
-	if(TREMOLO_CONTROL_PARAM(ch) & 1) {
-		ticks %= 0x40;
+	if(HAS_FEATURE(FEATURE_WAVEFORM_RAMP_DOWN)
+	   && (TREMOLO_CONTROL_PARAM(ch) & 127) == WAVEFORM_RAMP_DOWN) {
 		/* FT2 quirk, ramp waveform with tremolo is weird and is also
 		   influenced by vibrato ticks... */
-		if(ticks >= 0x20) {
-			ticks = 0x20 - ticks;
+		if(ticks >= 0x80) {
+			ticks = 0x80 - ticks;
 		}
 		#if HAS_VIBRATO
-		if(ch->vibrato_ticks % 0x40 >= 0x20) {
-			ticks = 0x20 - ticks;
+		if(ch->vibrato_ticks >= 0x80) {
+			ticks = 0x80 - ticks;
 		}
 		#endif
 	}
@@ -1002,13 +1016,15 @@ static void xm_trigger_instrument([[maybe_unused]] xm_context_t* ctx,
 	RESET_VOLUME_OFFSET(ch);
 
 	#if HAS_VIBRATO
-	if(!(VIBRATO_CONTROL_PARAM(ch) & 4)) {
+	if(!HAS_FEATURE(FEATURE_WAVEFORM_CONTINUE)
+	   || !(VIBRATO_CONTROL_PARAM(ch) & 128)) {
 		ch->vibrato_ticks = 0;
 	}
 	#endif
 
 	#if HAS_EFFECT(EFFECT_TREMOLO)
-	if(!(TREMOLO_CONTROL_PARAM(ch) & 4)) {
+	if(!HAS_FEATURE(FEATURE_WAVEFORM_CONTINUE)
+	   || !(TREMOLO_CONTROL_PARAM(ch) & 128)) {
 		ch->tremolo_ticks = 0;
 	}
 	#endif
@@ -1723,6 +1739,8 @@ static void xm_tick_effects([[maybe_unused]] xm_context_t* ctx,
 	#if HAS_EFFECT(EFFECT_S3M_TREMOLO)
 	case EFFECT_S3M_TREMOLO:
 		xm_tremolo(ch, ch->effect_param);
+		/* S3M tremolo peaks at +32 */
+		ch->volume_offset >>= 1;
 		break;
 	#endif
 

@@ -22,6 +22,7 @@ static void append_str(char* restrict, uint16_t*, const char* restrict);
 static void append_u16(char*, uint16_t*, uint16_t);
 static void append_u64(char*, uint16_t*, uint64_t);
 
+static uint8_t FEATURE_WAVEFORM(uint8_t);
 static void analyze_note_trigger(xm_context_t*, xm_channel_context_t*, uint64_t*);
 
 /* ----- Function definitions ----- */
@@ -52,6 +53,23 @@ static void append_u64(char* dest, uint16_t* dest_offset, uint64_t x) {
 	append_u16(dest, dest_offset, (uint16_t)((x >> 32) & 0xFFFF));
 	append_u16(dest, dest_offset, (uint16_t)((x >> 16) & 0xFFFF));
 	append_u16(dest, dest_offset, (uint16_t)(x & 0xFFFF));
+}
+
+static uint8_t FEATURE_WAVEFORM(uint8_t x) {
+	switch(x & 127) {
+	case WAVEFORM_SINE:
+		return FEATURE_WAVEFORM_SINE;
+	case WAVEFORM_SQUARE:
+		return FEATURE_WAVEFORM_SQUARE;
+	case WAVEFORM_RAMP_DOWN:
+		return FEATURE_WAVEFORM_RAMP_DOWN;
+	case WAVEFORM_RAMP_UP:
+		return FEATURE_WAVEFORM_RAMP_UP;
+	case WAVEFORM_RANDOM:
+		return FEATURE_WAVEFORM_RANDOM;
+	default:
+		assert(0);
+	}
 }
 
 static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
@@ -239,22 +257,39 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			#endif
 
 			#if HAS_VIBRATO
+			/* XXX: use xm_slot_has_vibrato() */
 			if((ch->current->effect_type == EFFECT_VIBRATO
 			    || ch->current->effect_type
+			           == EFFECT_FINE_VIBRATO
+			    || ch->current->effect_type
 			           == EFFECT_VIBRATO_VOLUME_SLIDE
+			    || ch->current->effect_type
+			           == EFFECT_S3M_VIBRATO_VOLUME_SLIDE
 			    || VOLUME_COLUMN(ch->current) >> 4
 			           == VOLUME_EFFECT_VIBRATO)
 			   && ch->vibrato_param & 0xF) {
 				used_features |= (uint64_t)1
-					<< (12|(VIBRATO_CONTROL_PARAM(ch) & 3));
+					<< FEATURE_WAVEFORM(
+					            VIBRATO_CONTROL_PARAM(ch));
+				if(VIBRATO_CONTROL_PARAM(ch) & 128) {
+					used_features |= (uint64_t)1
+						<< FEATURE_WAVEFORM_CONTINUE;
+				}
 			}
 			#endif
 
-			#if HAS_EFFECT(EFFECT_TREMOLO)
-			if(ch->current->effect_type == EFFECT_TREMOLO
+			#if HAS_EFFECT(EFFECT_TREMOLO) \
+				|| HAS_EFFECT(EFFECT_S3M_TREMOLO)
+			if((ch->current->effect_type == EFFECT_TREMOLO
+			    || ch->current->effect_type == EFFECT_S3M_TREMOLO)
 			   && ch->tremolo_param & 0xF) {
 				used_features |= (uint64_t)1
-					<< (12|(TREMOLO_CONTROL_PARAM(ch) & 3));
+					<< FEATURE_WAVEFORM(
+					            TREMOLO_CONTROL_PARAM(ch));
+				if(TREMOLO_CONTROL_PARAM(ch) & 128) {
+					used_features |= (uint64_t)1
+						<< FEATURE_WAVEFORM_CONTINUE;
+				}
 			}
 			#endif
 
@@ -285,7 +320,8 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 				used_features |= (uint64_t)1
 					<< FEATURE_AUTOVIBRATO;
 				used_features |= (uint64_t)1
-					<< (12|ch->instrument->vibrato_type);
+					<< FEATURE_WAVEFORM(
+					        ch->instrument->vibrato_type);
 			}
 			#endif
 

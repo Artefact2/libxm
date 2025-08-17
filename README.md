@@ -75,7 +75,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **4275 bytes** (GCC 15.1, x86_64-linux-gnu).
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **4293 bytes** (GCC 15.1, x86_64-linux-gnu).
 
 ~~~
 cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_VERBOSE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF -DXM_TIMING_FUNCTIONS=OFF -DXM_MUTING_FUNCTIONS=OFF -DXM_SAMPLE_TYPE=float -DXM_SAMPLE_RATE=44100 -Bbuild-libxmize -Sexamples/libxmize
@@ -140,8 +140,7 @@ Known inaccuracies
 * (MOD only) Sample offset (9xx) beyond sample loop end will cut the note
   * Can be manually toggled with `FEATURE_ACCURATE_SAMPLE_OFFSET_EFFECT`
 * (S3M only) Sxy has incorrect memory semantics
-* (S3M only) Note cut (SCy) and finetune (S2y) are implemented incorrectly
-* (S3M only) Tone portamento (Gxx) is implemented incorrectly
+* (S3M only) Note cut (SCy), finetune (S2y), tone portamento (Gxx), waveform control (S3y/S4y) effects are implemented incorrectly
 * (S3M only) Old stereo control (SAy) might not behave correctly
 * (S3M only) 16 bit samples are supported (not in base ST3)
 * (S3M only) Stereo samples are not supported (not in base ST3)
@@ -173,6 +172,7 @@ ramping.xm                      | PASS           | FT2clone 1.94          | If X
 waveform-control-autovibrato.xm | PASS           | FT2clone 1.94          | Should sound identical. Patterns 0 and 1 should also sound identical. Use a spectrogram as it is very hard to hear subtle changes in pitch.
 waveform-control-combo.xm       | PASS           | FT2clone 1.94          | Should sound identical.
 waveform-control-tremolo.xm     | PASS           | FT2clone 1.94          | Should sound identical.
+waveform-control-tremolo.s3m    | FAIL           | Scream Tracker 3.21    | Should sound identical (except random waveform bits).
 waveform-control-vibrato.xm     | PASS           | FT2clone 1.94          | Should sound identical.
 ~~~
 
