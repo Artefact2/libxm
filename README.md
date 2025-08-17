@@ -143,6 +143,8 @@ Known inaccuracies
 * (S3M only) Note cut (SCy) and finetune (S2y) are implemented incorrectly
 * (S3M only) Tone portamento (Gxx) is implemented incorrectly
 * (S3M only) Old stereo control (SAy) might not behave correctly
+* (S3M only) 16 bit samples are supported (not in base ST3)
+* (S3M only) Stereo samples are not supported (not in base ST3)
 
 To report more, please [open an issue](../../issues?q=is%3Aissue%20state%3Aopen%20label%3Abug).
 

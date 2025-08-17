@@ -1645,6 +1645,7 @@ static void xm_fixup_mod_flt8(xm_context_t* ctx) {
    https://github.com/vlohacks/misc/blob/master/modplay/docs/FS3MDOC.TXT
    https://wiki.multimedia.cx/index.php?title=Scream_Tracker_3_Module
    https://moddingwiki.shikadi.net/wiki/S3M_Format
+   https://wiki.openmpt.org/Manual:_Effect_Reference#S3M_Effect_Commands
  */
 
 static bool xm_prescan_s3m(const char* restrict moddata,
@@ -1702,6 +1703,11 @@ static bool xm_prescan_s3m(const char* restrict moddata,
 		uint32_t loop_start = READ_U32(ins_offset + 20);
 		uint32_t loop_end = READ_U32(ins_offset + 24);
 		uint8_t smp_flags = READ_U8(ins_offset + 31);
+		if(smp_flags & 4) {
+			length /= 2;
+			loop_start /= 2;
+			loop_end /= 2;
+		}
 		length = TRIM_SAMPLE_LENGTH(length, loop_start,
 		                            loop_end - loop_start,
 		                            (smp_flags & 1) ?
@@ -1929,10 +1935,18 @@ void xm_load_s3m_instrument(xm_context_t* restrict ctx,
 	uint32_t base_loop_start = READ_U32(offset + 20);
 	uint32_t base_loop_end = READ_U32(offset + 24);
 	uint8_t base_volume = READ_U8(offset + 28);
-	uint8_t base_flags = READ_U8(offset + 31); /* XXX: stereo/16bit */
+	uint8_t base_flags = READ_U8(offset + 31);
 
-	if(base_flags & 0b11111110) {
-		NOTICE("ignoring sample %x flags (%x)", idx, base_flags);
+	bool is_looped = base_flags & 1;
+	bool is_stereo = base_flags & 2;
+	bool is_16bit = base_flags & 4;
+
+	if(is_stereo) {
+		NOTICE("sample %x has stereo data, this is not supported", idx);
+	}
+	if(base_flags & 0b11111000) {
+		NOTICE("ignoring sample %x flags (%x)",
+		       idx, base_flags & 0b11111000);
 	}
 
 	uint32_t base_c_frequency = READ_U32(offset + 32);
@@ -1952,9 +1966,9 @@ void xm_load_s3m_instrument(xm_context_t* restrict ctx,
 
 	smp->length = TRIM_SAMPLE_LENGTH(base_length, base_loop_start,
 	                                 base_loop_end - base_loop_start,
-	                                 (base_flags & 1) ?
+	                                 is_looped ?
 	                                 SAMPLE_FLAG_FORWARD : 0);
-	if(base_flags & 1) {
+	if(is_looped) {
 		smp->loop_length = base_loop_end - base_loop_start;
 		if(smp->loop_length > smp->length) {
 			smp->loop_length = smp->length;
@@ -1976,14 +1990,24 @@ void xm_load_s3m_instrument(xm_context_t* restrict ctx,
 	smp->index = ctx->module.samples_data_length;
 	xm_sample_point_t* out = ctx->samples_data
 		+ ctx->module.samples_data_length;
-	ctx->module.samples_data_length += smp->length;
 	offset = 16 * ((((uint32_t)READ_U8(offset + 13)) << 16)
 	               + READ_U16(offset + 14));
-	for(uint32_t k = 0; k < smp->length; ++k) {
-		*out++ = SAMPLE_POINT_FROM_S8(signed_smp_data
-		                              ? ((int8_t)READ_U8(offset+k))
-		                              : (int8_t)(READ_U8(offset+k)-128));
+	if(is_16bit) {
+		smp->length /= 2;
+		smp->loop_length /= 2;
 	}
+	for(uint32_t k = 0; k < smp->length; ++k) {
+		*out++ = is_16bit
+			? SAMPLE_POINT_FROM_S16((int16_t)
+			                        (READ_U16(offset + 2*k)
+			                         + (signed_smp_data
+			                            ? 0 : INT16_MIN)))
+			: SAMPLE_POINT_FROM_S8((int8_t)
+			                       (READ_U8(offset + k)
+			                        + (signed_smp_data
+			                           ? 0 : INT8_MIN)));
+	}
+	ctx->module.samples_data_length += smp->length;
 }
 
 static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
@@ -2233,8 +2257,9 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			blank_effect:
 				if(s->effect_param) {
 					/* XXX: test this behaviour in ST3 */
-					NOTICE("converting effect %02X%02X "
+					NOTICE("converting effect %c(%02X)%02X "
 					       "in pattern %x to nop",
+					       s->effect_type + 'A' - 1,
 					       s->effect_type,
 					       s->effect_param,
 					       patidx);
