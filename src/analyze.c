@@ -22,6 +22,7 @@ static void append_str(char* restrict, uint16_t*, const char* restrict);
 static void append_u16(char*, uint16_t*, uint16_t);
 static void append_u64(char*, uint16_t*, uint64_t);
 
+static uint8_t FEATURE_WAVEFORM(uint8_t);
 static void analyze_note_trigger(xm_context_t*, xm_channel_context_t*, uint64_t*);
 
 /* ----- Function definitions ----- */
@@ -52,6 +53,23 @@ static void append_u64(char* dest, uint16_t* dest_offset, uint64_t x) {
 	append_u16(dest, dest_offset, (uint16_t)((x >> 32) & 0xFFFF));
 	append_u16(dest, dest_offset, (uint16_t)((x >> 16) & 0xFFFF));
 	append_u16(dest, dest_offset, (uint16_t)(x & 0xFFFF));
+}
+
+static uint8_t FEATURE_WAVEFORM(uint8_t x) {
+	switch(x & 127) {
+	case WAVEFORM_SINE:
+		return FEATURE_WAVEFORM_SINE;
+	case WAVEFORM_SQUARE:
+		return FEATURE_WAVEFORM_SQUARE;
+	case WAVEFORM_RAMP_DOWN:
+		return FEATURE_WAVEFORM_RAMP_DOWN;
+	case WAVEFORM_RAMP_UP:
+		return FEATURE_WAVEFORM_RAMP_UP;
+	case WAVEFORM_RANDOM:
+		return FEATURE_WAVEFORM_RANDOM;
+	default:
+		assert(0);
+	}
 }
 
 static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
@@ -119,6 +137,10 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	       " -DXM_LOOPING_TYPE=2 to suppress this warning");
 	#endif
 
+	#if XM_SAMPLE_RATE == 0
+	ctx->current_sample_rate = 1;
+	#endif
+
 	uint64_t used_features = AMIGA_FREQUENCIES(&ctx->module)
 		? ((uint64_t)1 << FEATURE_AMIGA_FREQUENCIES)
 		: ((uint64_t)1 << FEATURE_LINEAR_FREQUENCIES);
@@ -129,6 +151,19 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	uint8_t panning_type = 0;
 	int16_t tempo = -1;
 	int16_t bpm = -1;
+
+	if(DEFAULT_GLOBAL_VOLUME(&ctx->module) != MAX_VOLUME) {
+		used_features |= (uint64_t)1
+			<< FEATURE_DEFAULT_GLOBAL_VOLUME;
+	}
+
+	for(uint8_t i = 0; i < MAX_CHANNELS; ++i) {
+		if(DEFAULT_CHANNEL_PANNING(&ctx->module, i) != MAX_PANNING/2) {
+			used_features |= (uint64_t)1
+				<< FEATURE_DEFAULT_CHANNEL_PANNINGS;
+			break;
+		}
+	}
 
 	while(XM_LOOPING_TYPE != 0 && LOOP_COUNT(ctx) == 0) {
 		xm_tick(ctx);
@@ -147,14 +182,16 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 
 		xm_channel_context_t* ch = ctx->channels;
 		for(uint8_t i = 0; i < ctx->module.num_channels; ++i, ++ch) {
-			assert(ch->current->effect_type < 64); /* XXX */
+			/* XXX */
+			assert(ch->current->effect_type < 64
+			       || ch->current->effect_type == EFFECT_NOP);
 			static_assert(EFFECT_ARPEGGIO == 0);
 			if(ch->current->effect_type == 0) {
 				/* Do not count "000" as an arpeggio */
 				if(ch->current->effect_param) {
 					used_effects |= 1;
 				}
-			} else {
+			} else if(ch->current->effect_type != EFFECT_NOP) {
 				/* XXX: some effects can be checked after the
 				   volume==0 check */
 				used_effects |=
@@ -220,33 +257,45 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			#endif
 
 			#if HAS_VIBRATO
+			/* XXX: use xm_slot_has_vibrato() */
 			if((ch->current->effect_type == EFFECT_VIBRATO
 			    || ch->current->effect_type
+			           == EFFECT_FINE_VIBRATO
+			    || ch->current->effect_type
 			           == EFFECT_VIBRATO_VOLUME_SLIDE
+			    || ch->current->effect_type
+			           == EFFECT_S3M_VIBRATO_VOLUME_SLIDE
 			    || VOLUME_COLUMN(ch->current) >> 4
 			           == VOLUME_EFFECT_VIBRATO)
 			   && ch->vibrato_param & 0xF) {
 				used_features |= (uint64_t)1
-					<< (12|(VIBRATO_CONTROL_PARAM(ch) & 3));
+					<< FEATURE_WAVEFORM(
+					            VIBRATO_CONTROL_PARAM(ch));
+				if(VIBRATO_CONTROL_PARAM(ch) & 128) {
+					used_features |= (uint64_t)1
+						<< FEATURE_WAVEFORM_CONTINUE;
+				}
 			}
 			#endif
 
-			#if HAS_EFFECT(EFFECT_TREMOLO)
-			if(ch->current->effect_type == EFFECT_TREMOLO
+			#if HAS_EFFECT(EFFECT_TREMOLO) \
+				|| HAS_EFFECT(EFFECT_S3M_TREMOLO)
+			if((ch->current->effect_type == EFFECT_TREMOLO
+			    || ch->current->effect_type == EFFECT_S3M_TREMOLO)
 			   && ch->tremolo_param & 0xF) {
 				used_features |= (uint64_t)1
-					<< (12|(TREMOLO_CONTROL_PARAM(ch) & 3));
+					<< FEATURE_WAVEFORM(
+					            TREMOLO_CONTROL_PARAM(ch));
+				if(TREMOLO_CONTROL_PARAM(ch) & 128) {
+					used_features |= (uint64_t)1
+						<< FEATURE_WAVEFORM_CONTINUE;
+				}
 			}
 			#endif
 
 			if(PING_PONG(ch->sample)) {
 				used_features |= (uint64_t)1
 					<< FEATURE_PINGPONG_LOOPS;
-			}
-
-			if(ch->period == 1) {
-				used_features |= (uint64_t)1
-					<< FEATURE_CLAMP_PERIODS;
 			}
 
 			if(ch->current->note == NOTE_SWITCH) {
@@ -271,7 +320,8 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 				used_features |= (uint64_t)1
 					<< FEATURE_AUTOVIBRATO;
 				used_features |= (uint64_t)1
-					<< (12|ch->instrument->vibrato_type);
+					<< FEATURE_WAVEFORM(
+					        ch->instrument->vibrato_type);
 			}
 			#endif
 
@@ -287,19 +337,22 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	}
 
 	if(panning_type == 0) {
-		if(ctx->module.num_channels == 1) {
-			pannings[1] = MAX_PANNING - pannings[0];
-		}
-		if((ctx->module.num_channels < 4
-		    || pannings[0] == pannings[3])
-		   && (ctx->module.num_channels < 3
-		       || pannings[1] == pannings[2])
-		   && pannings[0] <= pannings[1]
-		   && pannings[0] + pannings[1] == MAX_PANNING) {
-			panning_type = (uint8_t)
-				(8 * (pannings[1] - pannings[0]) / 256);
-			assert(panning_type <= 8);
+		#define PANNING_EQ(x, y) ((x) >= ctx->module.num_channels \
+		                          || pannings[x] == -1 \
+		                          || pannings[x] == (y))
+		if(PANNING_EQ(0, 0x80) && PANNING_EQ(1, 0x80)
+		   && PANNING_EQ(2, 0x80) && PANNING_EQ(3, 0x80)) {
+			/* Mono, panning_type = 0 is OK */
+		} else if(PANNING_EQ(0, 0x01) && PANNING_EQ(1, 0xFF)
+		          && PANNING_EQ(2, 0xFF) && PANNING_EQ(3, 0x01)) {
+			/* Amiga */
+			panning_type = 1;
+		} else if(PANNING_EQ(0, 0x33) && PANNING_EQ(1, 0xCC)
+		          && PANNING_EQ(2, 0x33) && PANNING_EQ(3, 0xCC)) {
+			/* ST3 */
+			panning_type = 9;
 		} else {
+			/* Full stereo */
 			panning_type = 8;
 		}
 	}

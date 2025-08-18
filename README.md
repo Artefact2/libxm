@@ -15,7 +15,7 @@ features:
   that aren't obviously bugs in FT2, are also libxm bugs. If you have a module
   that plays incorrectly, please test it in FT2/FT2clone and open an issue!
 
-* Can load most XM/MOD files, however playback accuracy of non-XM is
+* Can load most XM/MOD/S3M files, however playback accuracy of non-XM is
   best-effort.
 
 * Timing functions for synchronising against specific instruments,
@@ -25,6 +25,21 @@ features:
   use libxm with softsynths or other real-time signal processors.
 
 Written in C23 and released under the WTFPL license, version 2.
+
+Disclaimer
+==========
+
+Libxm comes **without any warranty, to the extent permitted by applicable law**.
+In particular,
+
+* Load untrusted modules at your own risk. While precautions are taken in the
+  loading/parsing code, bugs are likely and a maliciously crafted module file
+  could cause arbitrary code execution, data loss or worse;
+
+* Load modules with `xm_create_context_from_libxm()` *if and only if* you used
+  `xm_context_to_libxm()` yourself, as there are no safety checks at all in the
+  loading code. This function is meant for sizecoding, the use case being
+  statically embedding *known* modules in games, demos, intros and such.
 
 Building
 ========
@@ -60,7 +75,7 @@ Size
 ====
 
 `libxmtoau` can be compiled (with all playback features enabled) and
-[crushed](https://gitlab.com/artefact2/xzcrush) to about **3875 bytes** (x86_64-linux-gnu).
+[crushed](https://gitlab.com/artefact2/xzcrush) to about **4293 bytes** (GCC 15.1, x86_64-linux-gnu).
 
 ~~~
 cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DXM_VERBOSE=OFF -DXM_LIBXM_DELTA_SAMPLES=OFF -DXM_LINEAR_INTERPOLATION=OFF -DXM_RAMPING=OFF -DXM_STRINGS=OFF -DXM_TIMING_FUNCTIONS=OFF -DXM_MUTING_FUNCTIONS=OFF -DXM_SAMPLE_TYPE=float -DXM_SAMPLE_RATE=44100 -Bbuild-libxmize -Sexamples/libxmize
@@ -72,7 +87,7 @@ xzcrush build-libxmize/libxmtoau
 If you are using libxm to play a single module (like in a demo/intro), disable
 features as suggested by `libxmize --analyze` to save a few more bytes.
 
-For example, `libxmize --analyze mindrmr.xm` suggests `-DXM_DISABLED_EFFECTS=0xFFFFD9FBFFDE68E1 -DXM_DISABLED_VOLUME_EFFECTS=0x0CC0 -DXM_DISABLED_FEATURES=0xFFFFFF0037F7EE04 -DXM_PANNING_TYPE=8`. We only want to play the module once and quit, so we can use `-DXM_LOOPING_TYPE=1`. Compiling with these new flags, the resulting binary is crushed to **2694 bytes**.
+For example, `libxmize --analyze mindrmr.xm` suggests `-DXM_DISABLED_EFFECTS=0xFFFFD9FBFFDE68E1 -DXM_DISABLED_VOLUME_EFFECTS=0x0CC0 -DXM_DISABLED_FEATURES=0xFFFFFF003477EE04 -DXM_PANNING_TYPE=8`. We only want to play the module once and quit, so we can use `-DXM_LOOPING_TYPE=1`. Compiling with these new flags, the resulting binary is crushed to **2688 bytes**.
 
 Examples
 ========
@@ -112,7 +127,8 @@ accuracy):
 Known inaccuracies
 ==================
 
-* E8y panning effect is supported, FT2 has no support for this command
+* Set channel panning (E8y; not in base FT2) is supported for XM/MOD
+  * Can be disabled via `EFFECT_SET_CHANNEL_PANNING`
 * Glissando control (E3y) with Amiga frequencies is not yet supported
 * Arpeggios after pitch slides with Amiga frequencies are subtly incorrect
 * Amiga filter toggle (E0y) is not supported, and is unlikely to be
@@ -123,6 +139,11 @@ Known inaccuracies
 * Arpeggio (0xy) does not reset vibrato offset (Vy) when Spd=1
 * (MOD only) Sample offset (9xx) beyond sample loop end will cut the note
   * Can be manually toggled with `FEATURE_ACCURATE_SAMPLE_OFFSET_EFFECT`
+* (S3M only) Sxy has incorrect memory semantics
+* (S3M only) Note cut (SCy), finetune (S2y), tone portamento (Gxx), waveform control (S3y/S4y) effects are implemented incorrectly
+* (S3M only) Old stereo control (SAy) might not behave correctly
+* (S3M only) 16 bit samples are supported (not in base ST3)
+* (S3M only) Stereo samples are not supported (not in base ST3)
 
 To report more, please [open an issue](../../issues?q=is%3Aissue%20state%3Aopen%20label%3Abug).
 
@@ -151,6 +172,7 @@ ramping.xm                      | PASS           | FT2clone 1.94          | If X
 waveform-control-autovibrato.xm | PASS           | FT2clone 1.94          | Should sound identical. Patterns 0 and 1 should also sound identical. Use a spectrogram as it is very hard to hear subtle changes in pitch.
 waveform-control-combo.xm       | PASS           | FT2clone 1.94          | Should sound identical.
 waveform-control-tremolo.xm     | PASS           | FT2clone 1.94          | Should sound identical.
+waveform-control-tremolo.s3m    | FAIL           | Scream Tracker 3.21    | Should sound identical (except random waveform bits).
 waveform-control-vibrato.xm     | PASS           | FT2clone 1.94          | Should sound identical.
 ~~~
 

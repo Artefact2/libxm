@@ -44,6 +44,8 @@ add_test(NAME test_panning_law COMMAND test-libxm
 	channelpairs_leql ${CMAKE_SOURCE_DIR}/panning-law.xm)
 add_test(NAME test_pattern_delay COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/pattern-delay.xm)
+add_test(NAME test_pattern_loop_s3m COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/pattern-loop.s3m)
 add_test(NAME test_period_clamp COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/period-clamp.xm)
 add_test(NAME test_period_clamp_amiga COMMAND test-libxm
@@ -54,6 +56,8 @@ add_test(NAME XXX_test_period_wraparound_amiga COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/period-wraparound-amiga.xm)
 add_test(NAME test_pitch_slides COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/pitch-slides.xm)
+add_test(NAME test_pitch_slides_s3m COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/pitch-slides.s3m)
 add_test(NAME test_pitch_slides_amiga COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/pitch-slides-amiga.xm)
 add_test(NAME test_protracker_quirks COMMAND test-libxm
@@ -88,5 +92,11 @@ add_test(NAME XXX_test_vibrato_arp_reset COMMAND test-libxm
 	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/vibrato-arp-reset.xm)
 add_test(NAME test_vibrato_amiga COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/vibrato-amiga.xm)
+add_test(NAME test_vibrato_fine COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/vibrato-fine.s3m)
 add_test(NAME test_volume_envelope COMMAND test-libxm
 	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/volume-envelope.xm)
+add_test(NAME test_volume_slides_s3m COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/volume-slides.s3m)
+add_test(NAME test_volume_slides_fast_s3m COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/volume-slides-fast.s3m)

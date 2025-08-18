@@ -75,7 +75,7 @@ set(XM_MICROSTEP_BITS "12" CACHE STRING
 target_compile_definitions(xm PRIVATE XM_MICROSTEP_BITS=${XM_MICROSTEP_BITS})
 
 set(XM_PANNING_TYPE "8" CACHE STRING
-	"Panning type (0=Mono, 1..7=Hard Amiga panning, 8=Full stereo panning)")
+	"Panning type (0=Mono, 1..7=Hard Amiga panning, 8=Full stereo panning, 9=Default ST3 panning)")
 target_compile_definitions(xm PRIVATE XM_PANNING_TYPE=${XM_PANNING_TYPE})
 
 set(XM_LOOPING_TYPE "2" CACHE STRING

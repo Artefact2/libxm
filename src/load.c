@@ -58,18 +58,18 @@
 	READ_MEMCPY_BOUND(dest, offset, length, moddata_length)
 
 #define TRIM_SAMPLE_LENGTH(length, loop_start, loop_length, flags) \
-	(flags & (SAMPLE_FLAG_PING_PONG | SAMPLE_FLAG_FORWARD) ?	\
+	((flags) & (SAMPLE_FLAG_PING_PONG | SAMPLE_FLAG_FORWARD) ? \
 	 ((loop_start > length ? length :				\
 	  (loop_start + (loop_start + loop_length > length ? 0 : loop_length)) \
 	   )) : length)
 
 #define SAMPLE_POINT_FROM_S8(v) \
-	_Generic((xm_sample_point_t){}, int8_t: v, int16_t: (v * 256), \
-	         float: (float)v / (float)INT8_MAX)
+	_Generic((xm_sample_point_t){}, int8_t: (v), int16_t: ((v) * 256), \
+	         float: (float)(v) / (float)INT8_MAX)
 
 #define SAMPLE_POINT_FROM_S16(v) \
 	_Generic((xm_sample_point_t){}, int8_t: xm_dither_16b_8b(v), \
-		int16_t: v, float: (float)v / (float)INT16_MAX)
+		int16_t: (v), float: (float)(v) / (float)INT16_MAX)
 
 struct xm_prescan_data_s {
 	uint32_t context_size;
@@ -79,6 +79,7 @@ struct xm_prescan_data_s {
 		XM_FORMAT_MOD,
 		XM_FORMAT_MOD_FLT8, /* FLT8 requires special logic for its
 		                       pattern data */
+		XM_FORMAT_S3M,
 	} format;
 	uint32_t num_rows:24;
 	uint32_t samples_data_length;
@@ -94,7 +95,7 @@ const uint8_t XM_PRESCAN_DATA_SIZE = sizeof(xm_prescan_data_t);
 
 static int8_t xm_dither_16b_8b(int16_t);
 static uint64_t xm_fnv1a(const unsigned char*, uint32_t) __attribute__((const));
-static void xm_fixup_context(xm_context_t*);
+static void xm_fixup_common(xm_context_t*);
 
 static bool xm_prescan_xm0104(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_xm0104(xm_context_t*, const char*, uint32_t);
@@ -109,7 +110,13 @@ static void xm_load_xm0104_16b_sample_data(uint32_t, xm_sample_point_t*, const c
 
 static bool xm_prescan_mod(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_mod(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
+static void xm_load_mod_effect(xm_pattern_slot_t*);
 static void xm_fixup_mod_flt8(xm_context_t*);
+
+static bool xm_prescan_s3m(const char*, uint32_t, xm_prescan_data_t*);
+static void xm_load_s3m(xm_context_t*, const char*, uint32_t, const xm_prescan_data_t*);
+static void xm_load_s3m_instrument(xm_context_t*, uint8_t, bool, const char*, uint32_t, uint32_t);
+static void xm_load_s3m_pattern(xm_context_t*, uint8_t, const uint8_t*, const uint8_t*, const char*, uint32_t, uint32_t);
 
 /* ----- Function definitions ----- */
 
@@ -125,6 +132,18 @@ bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
 			goto end;
 		} else {
 			return false;
+		}
+	}
+
+	if(moddata_length >= 96) {
+		if(memcmp("\x10\0\0", moddata + 29, 3) == 0
+		   && memcmp("SCRM", moddata + 44, 4) == 0) {
+			out->format = XM_FORMAT_S3M;
+			if(xm_prescan_s3m(moddata, moddata_length, out)) {
+				goto end;
+			} else {
+				return false;
+			}
 		}
 	}
 
@@ -275,6 +294,10 @@ xm_context_t* xm_create_context(char* restrict mempool,
 		xm_fixup_mod_flt8(ctx);
 		break;
 
+	case XM_FORMAT_S3M:
+		xm_load_s3m(ctx, moddata, moddata_length, p);
+		break;
+
 	default:
 		assert(0);
 	}
@@ -288,111 +311,15 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	assert(ctx->module.samples_data_length == p->samples_data_length);
 	assert(xm_context_size(ctx) == ctx_size);
 
-	xm_fixup_context(ctx);
+	xm_fixup_common(ctx);
+	xm_reset_context(ctx);
 	return ctx;
 }
 
-uint32_t xm_size_for_context(const xm_prescan_data_t* p) {
-	return p->context_size;
-}
-
-uint32_t xm_context_size(const xm_context_t* ctx) {
-	return (uint32_t)
-		(sizeof(xm_context_t)
-		 + sizeof(xm_channel_context_t) * ctx->module.num_channels
-		 #if HAS_INSTRUMENTS
-		 + sizeof(xm_instrument_t) * ctx->module.num_instruments
-		 #endif
-		 + sizeof(xm_sample_t) * ctx->module.num_samples
-		 + sizeof(xm_pattern_t) * ctx->module.num_patterns
-		 + sizeof(xm_sample_point_t) * ctx->module.samples_data_length
-		 + sizeof(xm_pattern_slot_t) * ctx->module.num_rows
-		                             * ctx->module.num_channels
-		 #if XM_LOOPING_TYPE == 2
-		 + sizeof(uint8_t) * ctx->module.length * MAX_ROWS_PER_PATTERN
-		 #endif
-		 );
-}
-
-
-static int8_t xm_dither_16b_8b(int16_t x) {
-	static uint32_t next = 1;
-	next = next * 214013 + 2531011;
-	/* Not that this is perf critical, but this should compile to a cmovl
-	   (branchless) */
-	return (x >= 32512) ? 127 :
-		(int8_t)((x + (int16_t)((next >> 16) % 256)) / 256);
-}
-
-static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
-	uint64_t h = 14695981039346656037UL;
-	for(uint32_t i = 0; i < length; ++i) {
-		h ^= data[i];
-		h *= 1099511628211UL;
-	}
-	return h;
-}
-
-static void xm_fixup_context(xm_context_t* ctx) {
-	#if HAS_GLOBAL_VOLUME
-	ctx->global_volume = MAX_VOLUME;
-	#endif
-
-	#if HAS_EFFECT(EFFECT_SET_TEMPO)
-	ctx->current_tempo = MODULE_TEMPO(&ctx->module);
-	#endif
-
-	#if HAS_EFFECT(EFFECT_SET_BPM)
-	ctx->current_bpm = MODULE_BPM(&ctx->module);
-	#endif
-
-	#if XM_SAMPLE_RATE == 0
-	ctx->module.rate = 48000;
-	#endif
-
+static void xm_fixup_common(xm_context_t* ctx) {
 	xm_pattern_slot_t* slot = ctx->pattern_slots;
-	static_assert(MAX_PATTERNS * MAX_ROWS_PER_PATTERN * MAX_CHANNELS
-	              <= UINT32_MAX);
 	for(uint32_t i = ctx->module.num_rows * ctx->module.num_channels;
 	    i; --i, ++slot) {
-		if(slot->note == 97) {
-			slot->note = NOTE_KEY_OFF;
-		}
-
-		if(slot->effect_type == 33) {
-			/* Split X1y/X2y effect */
-			switch(slot->effect_param >> 4) {
-			case 1:
-				slot->effect_type =
-					EFFECT_EXTRA_FINE_PORTAMENTO_UP;
-				slot->effect_param &= 0xF;
-				break;
-			case 2:
-				slot->effect_type =
-					EFFECT_EXTRA_FINE_PORTAMENTO_DOWN;
-				slot->effect_param &= 0xF;
-				break;
-			default:
-				/* Invalid X effect, clear it */
-				slot->effect_type = 0;
-				slot->effect_param = 0;
-				break;
-			}
-		}
-
-		if(slot->effect_type == 0xE) {
-			/* Now that effects 32..=47 are free, use these for Exy
-			   extended commands */
-			slot->effect_type = 32 | (slot->effect_param >> 4);
-			slot->effect_param &= 0xF;
-		}
-
-		if(slot->effect_type == EFFECT_SET_BPM
-		   && slot->effect_param < MIN_BPM) {
-			/* Now that effect E is free, use it for "set tempo" */
-			slot->effect_type = EFFECT_SET_TEMPO;
-		}
-
 		if(slot->effect_type == EFFECT_JUMP_TO_ORDER
 		   && slot->effect_param >= ctx->module.length) {
 			/* Convert invalid Bxx to B00 */
@@ -404,24 +331,6 @@ static void xm_fixup_context(xm_context_t* ctx) {
 		   && slot->effect_param > MAX_VOLUME) {
 			/* Clamp Cxx and Gxx */
 			slot->effect_param = MAX_VOLUME;
-		}
-
-		if(slot->effect_type == EFFECT_SET_VIBRATO_CONTROL
-		   || slot->effect_type == EFFECT_SET_TREMOLO_CONTROL) {
-			/* Convert random waveform to square waveform (FT2
-			   behaviour, lets us reuse waveform 3 for
-			   autovibrato ramp) */
-			/* Also clear useless bit 3 */
-			slot->effect_param &=
-				((slot->effect_param & 0b11) == 0b11) ?
-				0b11110110 : 0b11110111;
-
-		}
-
-		if(slot->effect_type == 40) {
-			/* Convert E8x to 8xx */
-			slot->effect_type = EFFECT_SET_PANNING;
-			slot->effect_param = slot->effect_param * 0x10;
 		}
 
 		if(slot->effect_type == EFFECT_CUT_NOTE
@@ -450,7 +359,8 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			slot->effect_type = 0;
 		}
 
-		if(slot->effect_type == EFFECT_SET_TEMPO
+		if((slot->effect_type == EFFECT_SET_TEMPO
+		    || slot->effect_type == EFFECT_SET_BPM)
 		   && slot->effect_param == 0) {
 			#if XM_LOOPING_TYPE != 1
 			/* F00 is not great for a player, as it stops playback.
@@ -463,25 +373,53 @@ static void xm_fixup_context(xm_context_t* ctx) {
 			#endif
 		}
 
-		if(slot->effect_type == EFFECT_KEY_OFF
-		   && slot->effect_param == 0) {
-			/* Convert K00 to key off note. This is vital, as Kxx
-			   effect logic would otherwise be applied much later,
-			   and this has all kinds of nasty side effects when K00
-			   is used with either a note, or an instrument in the
-			   same slot. */
-			slot->effect_type = 0;
-			slot->note = NOTE_KEY_OFF;
-		}
-
 		#if HAS_VOLUME_COLUMN
-		if(slot->volume_column == 0xA0) {
+		if((slot->volume_column >> 8) == VOLUME_EFFECT_VIBRATO_SPEED
+		   && (slot->volume_column & 0xF) == 0) {
 			/* Delete S0, it does nothing and saves a check in
 			   play.c. */
 			slot->volume_column = 0;
 		}
 		#endif
 	}
+}
+
+uint32_t xm_size_for_context(const xm_prescan_data_t* p) {
+	return p->context_size;
+}
+
+uint32_t xm_context_size(const xm_context_t* ctx) {
+	return (uint32_t)
+		(sizeof(xm_context_t)
+		 + sizeof(xm_channel_context_t) * ctx->module.num_channels
+		 #if HAS_INSTRUMENTS
+		 + sizeof(xm_instrument_t) * ctx->module.num_instruments
+		 #endif
+		 + sizeof(xm_sample_t) * ctx->module.num_samples
+		 + sizeof(xm_pattern_t) * ctx->module.num_patterns
+		 + sizeof(xm_sample_point_t) * ctx->module.samples_data_length
+		 + sizeof(xm_pattern_slot_t) * ctx->module.num_rows
+		                             * ctx->module.num_channels
+		 #if XM_LOOPING_TYPE == 2
+		 + sizeof(uint8_t) * ctx->module.length * MAX_ROWS_PER_PATTERN
+		 #endif
+		 );
+}
+
+
+static int8_t xm_dither_16b_8b(int16_t x) {
+	static uint32_t state = 0; /* XXX: make me reentrant */
+	return (x >= 32512) ? 127 :
+		(int8_t)((x + (int16_t)(xm_rand16(&state) % 256)) / 256);
+}
+
+static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
+	uint64_t h = 14695981039346656037UL;
+	for(uint32_t i = 0; i < length; ++i) {
+		h ^= data[i];
+		h *= 1099511628211UL;
+	}
+	return h;
 }
 
 #define CALC_OFFSET(dest, orig) do { \
@@ -574,8 +512,9 @@ xm_context_t* xm_create_context_from_libxm(char* data) {
 
 /* ----- Fasttracker II .XM (XM 0104): little endian ----- */
 
-static bool xm_prescan_xm0104(const char* moddata, uint32_t moddata_length,
-                              xm_prescan_data_t* out) {
+static bool xm_prescan_xm0104(const char* restrict moddata,
+                              uint32_t moddata_length,
+                              xm_prescan_data_t* restrict out) {
 	uint32_t offset = 60; /* Skip the first header */
 
 	/* Read the module header */
@@ -788,7 +727,7 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 		NOTICE("clamping tempo (%u -> %u)", tempo, MIN_BPM-1);
 		tempo = MIN_BPM-1;
 	}
-	ctx->module.tempo = (uint8_t)tempo;
+	ctx->module.default_tempo = (uint8_t)tempo;
 	#endif
 
 	#if !HAS_HARDCODED_BPM
@@ -797,7 +736,11 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 		NOTICE("clamping bpm (%u -> %u)", bpm, MAX_BPM);
 		bpm = MAX_BPM;
 	}
-	ctx->module.bpm = (uint8_t)bpm;
+	ctx->module.default_bpm = (uint8_t)bpm;
+	#endif
+
+	#if HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME)
+	ctx->module.default_global_volume = MAX_VOLUME;
 	#endif
 
 	READ_MEMCPY(mod->pattern_table, offset + 20, PATTERN_ORDER_TABLE_LENGTH);
@@ -891,6 +834,77 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 			slot->effect_param = READ_U8(offset + j + 4);
 			j += 5;
 		}
+
+		if(slot->note == 97) {
+			slot->note = NOTE_KEY_OFF;
+		}
+
+		if(slot->effect_type > 0xF) {
+			switch(slot->effect_type) {
+			default:
+			blank_effect:
+				NOTICE("deleting effect %02X%02X",
+				       slot->effect_type,
+				       slot->effect_param);
+				slot->effect_type = 0;
+				slot->effect_param = 0;
+				break;
+			case 16:
+				slot->effect_type = EFFECT_SET_GLOBAL_VOLUME;
+				break;
+			case 17:
+				slot->effect_type = EFFECT_GLOBAL_VOLUME_SLIDE;
+				break;
+			case 20:
+				if(slot->effect_param == 0) {
+					/* Convert K00 to key off note. This is
+					   coherent with FT2 behaviour. */
+					slot->note = NOTE_KEY_OFF;
+					slot->effect_type = 0;
+				} else {
+					slot->effect_type = EFFECT_KEY_OFF;
+				}
+				break;
+			case 21:
+				slot->effect_type = EFFECT_SET_ENVELOPE_POSITION;
+				break;
+			case 25:
+				slot->effect_type = EFFECT_PANNING_SLIDE;
+				break;
+			case 27:
+				slot->effect_type = EFFECT_MULTI_RETRIG_NOTE;
+				break;
+			case 29:
+				slot->effect_type = EFFECT_TREMOR;
+				break;
+			case 33:
+				switch(slot->effect_param >> 4) {
+				case 1:
+					slot->effect_type =
+						EFFECT_EXTRA_FINE_PORTAMENTO_UP;
+					slot->effect_param &= 0xF;
+					break;
+				case 2:
+					slot->effect_type =
+						EFFECT_EXTRA_FINE_PORTAMENTO_DOWN;
+					slot->effect_param &= 0xF;
+					break;
+				default:
+					goto blank_effect;
+				}
+				break;
+			}
+		} else {
+			xm_load_mod_effect(slot);
+			if((slot->effect_type == EFFECT_SET_VIBRATO_CONTROL
+			    || slot->effect_type == EFFECT_SET_TREMOLO_CONTROL)
+			   && (slot->effect_param & 127) == WAVEFORM_RANDOM) {
+				/* FT2 quirk: random waveform is not supported,
+				   converted to square instead */
+				slot->effect_param = (slot->effect_param & 128)
+					| WAVEFORM_SQUARE;
+			}
+		}
 	}
 
 	if(k != pat->num_rows * ctx->module.num_channels) {
@@ -965,15 +979,21 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	#endif
 
 	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
-	instr->vibrato_type = READ_U8(offset + 235);
-	/* Swap around autovibrato waveforms to match xm_waveform() semantics */
-	/* FT2 values: 0 = Sine, 1 = Square, 2 = Ramp down, 3 = Ramp up */
-	/* Swap square and ramp */
-	static const uint8_t lut[] = { 0b00, 0b11, 0b11, 0b00 };
-	instr->vibrato_type ^= lut[instr->vibrato_type & 0b11];
-	/* Swap ramp types */
-	if(instr->vibrato_type & 1) {
-		instr->vibrato_type ^= 0b10;
+	switch(READ_U8(offset + 235)) {
+	case 0:
+		instr->vibrato_type = WAVEFORM_SINE;
+		break;
+	case 1:
+		instr->vibrato_type = WAVEFORM_SQUARE;
+		break;
+	case 2:
+		instr->vibrato_type = WAVEFORM_RAMP_DOWN;
+		break;
+	case 3:
+		instr->vibrato_type = WAVEFORM_RAMP_UP;
+		break;
+	default:
+		assert(0);
 	}
 	instr->vibrato_sweep = READ_U8(offset + 236);
 	instr->vibrato_depth = READ_U8(offset + 237);
@@ -1245,6 +1265,11 @@ static void xm_load_xm0104(xm_context_t* ctx,
 	uint32_t offset = xm_load_xm0104_module_header(ctx, &num_instruments,
 	                                               moddata, moddata_length);
 
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
+	__builtin_memset(ctx->module.default_channel_panning, MAX_PANNING/2,
+	                 sizeof(ctx->module.default_channel_panning));
+	#endif
+
 	/* Read pattern headers + slots */
 	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
 		offset = xm_load_xm0104_pattern(ctx, ctx->patterns + i,
@@ -1295,8 +1320,9 @@ static void xm_load_xm0104(xm_context_t* ctx,
 
 /* ----- Amiga .MOD (M.K., xCHN, etc.): big endian ------ */
 
-static bool xm_prescan_mod(const char* moddata, uint32_t moddata_length,
-                           xm_prescan_data_t* p) {
+static bool xm_prescan_mod(const char* restrict moddata,
+                           uint32_t moddata_length,
+                           xm_prescan_data_t* restrict p) {
 	assert(p->num_instruments > 0 && p->num_instruments <= MAX_INSTRUMENTS);
 	assert(p->num_channels > 0 && p->num_channels <= MAX_CHANNELS);
 
@@ -1341,9 +1367,9 @@ static bool xm_prescan_mod(const char* moddata, uint32_t moddata_length,
 	return true;
 }
 
-static void xm_load_mod(xm_context_t* ctx,
-                        const char* moddata, uint32_t moddata_length,
-                        const xm_prescan_data_t* p) {
+static void xm_load_mod(xm_context_t* restrict ctx,
+                        const char* restrict moddata, uint32_t moddata_length,
+                        const xm_prescan_data_t* restrict p) {
 	#if XM_STRINGS
 	static_assert(MODULE_NAME_LENGTH >= 21); /* +1 for NUL */
 	READ_MEMCPY(ctx->module.name, 0, 20);
@@ -1355,11 +1381,15 @@ static void xm_load_mod(xm_context_t* ctx,
 	#endif
 
 	#if !HAS_HARDCODED_TEMPO
-	ctx->module.tempo = 6;
+	ctx->module.default_tempo = 6;
 	#endif
 
 	#if !HAS_HARDCODED_BPM
-	ctx->module.bpm = 125;
+	ctx->module.default_bpm = 125;
+	#endif
+
+	#if HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME)
+	ctx->module.default_global_volume = MAX_VOLUME;
 	#endif
 
 	ctx->module.num_channels = p->num_channels;
@@ -1425,6 +1455,9 @@ static void xm_load_mod(xm_context_t* ctx,
 			                                 loop_length,
 			                                 SAMPLE_FLAG_FORWARD);
 			smp->loop_length = loop_length;
+			if(smp->loop_length > smp->length) {
+				smp->loop_length = smp->length;
+			}
 		}
 
 		offset += 30;
@@ -1449,8 +1482,15 @@ static void xm_load_mod(xm_context_t* ctx,
 	READ_MEMCPY(ctx->module.pattern_table, offset + 2, 128);
 	offset += 134;
 
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
+	/* Emulate hard panning (LRRL LRRL etc) */
+	for(uint8_t ch = 0; ch < MAX_CHANNELS; ++ch) {
+		ctx->module.default_channel_panning[ch] =
+			(((ch >> 1) ^ ch) & 1) ? 0xFF : 0x01;
+	}
+	#endif
+
 	/* Read patterns */
-	[[maybe_unused]] bool has_panning_effects = false;
 	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
 		xm_pattern_t* pat = ctx->patterns + i;
 		pat->num_rows = 64;
@@ -1472,13 +1512,6 @@ static void xm_load_mod(xm_context_t* ctx,
 				(((x & 0xF0000000) >> 24) | ((x >> 12) & 0x0F));
 			slot->effect_type = (uint8_t)((x >> 8) & 0x0F);
 			slot->effect_param = (uint8_t)(x & 0xFF);
-
-			if(slot->effect_type == 0x8
-			   || (slot->effect_type == 0xE
-			       && slot->effect_param >> 4 == 0x8)) {
-				has_panning_effects = true;
-			}
-
 			uint16_t period = (uint16_t)((x >> 16) & 0x0FFF);
 			if(period > 0) {
 				slot->note = 73;
@@ -1496,6 +1529,48 @@ static void xm_load_mod(xm_context_t* ctx,
 				    i < 11 && period < x[i];
 				    ++i, ++slot->note);
 			}
+
+			xm_load_mod_effect(slot);
+
+			if(slot->instrument && slot->note == 0) {
+				/* Ghost instruments in PT2 immediately switch
+				   to the new sample */
+				slot->note = NOTE_SWITCH;
+			}
+
+			/* PT2 has no effect memory for 1xx, 2xx, 5xx, 6xx, Axx,
+			   E1x, E2x, EAx, EBx */
+			if(slot->effect_param == 0) {
+				switch(slot->effect_type) {
+				case EFFECT_PORTAMENTO_UP:
+				case EFFECT_PORTAMENTO_DOWN:
+				case EFFECT_VOLUME_SLIDE:
+				case EFFECT_FINE_PORTAMENTO_UP:
+				case EFFECT_FINE_PORTAMENTO_DOWN:
+				case EFFECT_FINE_VOLUME_SLIDE_UP:
+				case EFFECT_FINE_VOLUME_SLIDE_DOWN:
+					slot->effect_type = 0;
+					break;
+				case EFFECT_VIBRATO_VOLUME_SLIDE:
+					slot->effect_type = EFFECT_VIBRATO;
+					break;
+				case EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE:
+					slot->effect_type =
+						EFFECT_TONE_PORTAMENTO;
+					break;
+				}
+			}
+
+			switch(slot->effect_type) {
+			case EFFECT_SET_FINETUNE:
+				/* E50 -> E58, E51 ->  E59, ..., E5F -> E57 */
+				slot->effect_param ^= 0b00001000;
+				break;
+			case EFFECT_SET_PANNING:
+				/* XXX: Convert 8xx to use channel panning */
+				slot->effect_type = EFFECT_SET_CHANNEL_PANNING;
+				break;
+			}
 		}
 	}
 
@@ -1510,62 +1585,149 @@ static void xm_load_mod(xm_context_t* ctx,
 		ctx->samples[i].index = ctx->module.samples_data_length;
 		ctx->module.samples_data_length += ctx->samples[i].length;
 	}
+}
 
-	xm_pattern_slot_t* slot = ctx->pattern_slots;
-	for(uint32_t row = 0; row < ctx->module.num_rows; ++row) {
-		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
-			#if HAS_VOLUME_COLUMN
-			/* Emulate hard panning (LRRL LRRL etc) */
-			if(!has_panning_effects && slot->instrument) {
-				slot->volume_column = (((ch >> 1) ^ ch) & 1)
-					? 0xCF : 0xC1;
+static void xm_load_mod_effect(xm_pattern_slot_t* slot) {
+	if(slot->effect_type == 0xE) {
+		switch(slot->effect_param >> 4) {
+		case 0:
+		case 0xF:
+			NOTICE("removing unsupported E%02X",
+			       slot->effect_param);
+			slot->effect_type = 0;
+			slot->effect_param = 0;
+			return;
+		case 1:
+			slot->effect_type =
+				EFFECT_FINE_PORTAMENTO_UP;
+			goto erase_high_nibble;
+		case 2:
+			slot->effect_type =
+				EFFECT_FINE_PORTAMENTO_DOWN;
+			goto erase_high_nibble;
+		case 3:
+			slot->effect_type =
+				EFFECT_SET_GLISSANDO_CONTROL;
+			slot->effect_param = (slot->effect_param > 0);
+			return;
+		case 4:
+			slot->effect_type =
+				EFFECT_SET_VIBRATO_CONTROL;
+			goto fixup_control_param;
+		case 5:
+			slot->effect_type = EFFECT_SET_FINETUNE;
+			goto erase_high_nibble;
+		case 6:
+			slot->effect_type = EFFECT_PATTERN_LOOP;
+			goto erase_high_nibble;
+		case 7:
+			slot->effect_type = EFFECT_SET_TREMOLO_CONTROL;
+		fixup_control_param:
+			uint8_t new_param;
+			switch(slot->effect_param & 3) {
+			case 0:
+				new_param = WAVEFORM_SINE;
+				break;
+			case 1:
+				new_param = WAVEFORM_RAMP_DOWN;
+				break;
+			case 2:
+				new_param = WAVEFORM_SQUARE;
+				break;
+			case 3:
+				new_param = WAVEFORM_RANDOM;
+				break;
 			}
-			#endif
-
-			if(slot->instrument && slot->note == 0) {
-				/* Ghost instruments in PT2 immediately switch
-				   to the new sample */
-				slot->note = NOTE_SWITCH;
-			}
-
-			/* Imitate ProTracker 2/3 lacking effect memory for
-			   1xx/2xx/Axy (based on the MilkyTracker docs) */
-			if(slot->effect_param == 0) {
-				if(slot->effect_type == 0x1
-				   || slot->effect_type == 0x2
-				   || slot->effect_type == 0xA) {
-					slot->effect_type = 0;
-				}
-				if(slot->effect_type == 0x5
-				   || slot->effect_type == 0x6) {
-					slot->effect_type -= 2;
-				}
-			}
-
-			/* Convert 0xy arpeggio from ProTracker 2/3 semantics to
-			   Fasttracker II semantics */
-			if(slot->effect_type == 0) {
-				/* XXX: this breaks down with spd=2 */
-				/* 0xy -> 0yx */
-				/* slot->effect_param = (uint8_t) */
-				/* 	((slot->effect_param << 4) */
-				/* 	 | (slot->effect_param >> 4)); */
-			}
-
-			/* XXX: In PT2, 9xx beyond the end of a sample will
-			   still work for looped samples */
-
-			/* Convert E5y finetune from ProTracker 2/3 semantics to
-			   Fasttracker II semantics */
-			if(slot->effect_type == 0xE
-			   && slot->effect_param >> 4 == 0x5) {
-				/* E50 -> E58, E51 ->  E59, ..., E5F -> E57 */
-				slot->effect_param ^= 0b00001000;
-			}
-
-			slot++;
+			slot->effect_param = new_param
+				| ((slot->effect_param & 4) ? 128 : 0);
+			return;
+		case 8:
+			slot->effect_type = EFFECT_SET_CHANNEL_PANNING;
+			slot->effect_param &= 0xF;
+			slot->effect_param *= 0x11;
+			return;
+		case 9:
+			slot->effect_type = EFFECT_RETRIGGER_NOTE;
+			goto erase_high_nibble;
+		case 0xA:
+			slot->effect_type = EFFECT_FINE_VOLUME_SLIDE_UP;
+			goto erase_high_nibble;
+		case 0xB:
+			slot->effect_type = EFFECT_FINE_VOLUME_SLIDE_DOWN;
+			goto erase_high_nibble;
+		case 0xC:
+			slot->effect_type = EFFECT_CUT_NOTE;
+			goto erase_high_nibble;
+		case 0xD:
+			slot->effect_type = EFFECT_DELAY_NOTE;
+			goto erase_high_nibble;
+		case 0xE:
+			slot->effect_type = EFFECT_DELAY_PATTERN;
+		erase_high_nibble:
+			slot->effect_param &= 0xF;
+			return;
 		}
+
+		assert(0);
 	}
+
+	switch(slot->effect_type) {
+	case 0:
+		slot->effect_type = EFFECT_ARPEGGIO;
+		return;
+	case 1:
+		slot->effect_type = EFFECT_PORTAMENTO_UP;
+		return;
+	case 2:
+		slot->effect_type = EFFECT_PORTAMENTO_DOWN;
+		return;
+	case 3:
+		slot->effect_type = EFFECT_TONE_PORTAMENTO;
+		return;
+	case 4:
+		slot->effect_type = EFFECT_VIBRATO;
+		return;
+	case 5:
+		slot->effect_type =
+			EFFECT_TONE_PORTAMENTO_VOLUME_SLIDE;
+		return;
+	case 6:
+		slot->effect_type = EFFECT_VIBRATO_VOLUME_SLIDE;
+		return;
+	case 7:
+		slot->effect_type = EFFECT_TREMOLO;
+		return;
+	case 8:
+		slot->effect_type = EFFECT_SET_PANNING;
+		return;
+	case 9:
+		slot->effect_type = EFFECT_SET_SAMPLE_OFFSET;
+		return;
+	case 0xA:
+		slot->effect_type = EFFECT_VOLUME_SLIDE;
+		return;
+	case 0xB:
+		slot->effect_type = EFFECT_JUMP_TO_ORDER;
+		return;
+	case 0xC:
+		slot->effect_type = EFFECT_SET_VOLUME;
+		return;
+	case 0xD:
+		slot->effect_type = EFFECT_PATTERN_BREAK;
+		/* Convert Dxx to base 16, saves doing the math in play.c */
+		slot->effect_param = (uint8_t)
+			(slot->effect_param - 6 * (slot->effect_param >> 4));
+		return;
+	case 0xF:
+		if(slot->effect_param < MIN_BPM) {
+			slot->effect_type = EFFECT_SET_TEMPO;
+		} else {
+			slot->effect_type = EFFECT_SET_BPM;
+		}
+		return;
+	}
+
+	assert(0);
 }
 
 static void xm_fixup_mod_flt8(xm_context_t* ctx) {
@@ -1592,5 +1754,756 @@ static void xm_fixup_mod_flt8(xm_context_t* ctx) {
 			                 4 * sizeof(xm_pattern_slot_t));
 		}
 		__builtin_memcpy(slots, scratch, sizeof(scratch));
+	}
+}
+
+/* ----- Scream Tracker 3 .S3M (SCRM): little endian ------ */
+
+/* Useful resources:
+   https://github.com/vlohacks/misc/blob/master/modplay/docs/FS3MDOC.TXT
+   https://wiki.multimedia.cx/index.php?title=Scream_Tracker_3_Module
+   https://moddingwiki.shikadi.net/wiki/S3M_Format
+   https://wiki.openmpt.org/Manual:_Effect_Reference#S3M_Effect_Commands
+ */
+
+static bool xm_prescan_s3m(const char* restrict moddata,
+                           uint32_t moddata_length,
+                           xm_prescan_data_t* restrict out) {
+	uint16_t pot_length = READ_U16(32);
+	out->pot_length = 0;
+	for(uint8_t i = 0; i < pot_length; ++i) {
+		uint8_t x = READ_U8(96 + i);
+		if(x == 255) break;
+		if(x == 254) continue;
+		if(out->pot_length == PATTERN_ORDER_TABLE_LENGTH) {
+			NOTICE("order table too big");
+			return false;
+		}
+		++out->pot_length;
+	}
+
+	out->num_samples = READ_U16(34);
+	if(out->num_samples > MAX_INSTRUMENTS) {
+		NOTICE("too many instruments (%u > %u)",
+		       out->num_instruments, MAX_INSTRUMENTS);
+		return false;
+	}
+
+	out->num_patterns = READ_U16(36);
+	if(out->num_patterns > MAX_PATTERNS) {
+		NOTICE("too many patterns (%u > %u)",
+		       out->num_patterns, MAX_PATTERNS);
+		return false;
+	}
+
+	out->num_instruments = (uint8_t)out->num_samples;
+	out->num_rows = out->num_patterns * 64;
+
+	uint16_t used_channels = 0; /* bit field */
+	for(uint8_t ch = 0; ch < 32; ++ ch) {
+		uint8_t x = READ_U8(64 + ch);
+		/* 16..=29: Adlib stuff (XXX: global effects might still be
+		   there, eg Axx, Txx or Vxx) */
+		/* 30..=255: unused/disabled channel */
+		if(x >= 16) continue;
+		used_channels |= (uint16_t)1 << x;
+	}
+	out->num_channels = (uint8_t)stdc_count_ones(used_channels);
+
+	out->samples_data_length = 0;
+	for(uint8_t i = 0; i < out->num_instruments; ++i) {
+		uint32_t ins_offset =
+			READ_U16(96 + pot_length + i * 2) * 16;
+		uint8_t ins_type = READ_U8(ins_offset);
+		/* Only care about PCM data */
+		if(ins_type != 1) continue;
+		uint32_t length = READ_U32(ins_offset + 16);
+		uint32_t loop_start = READ_U32(ins_offset + 20);
+		uint32_t loop_end = READ_U32(ins_offset + 24);
+		uint8_t smp_flags = READ_U8(ins_offset + 31);
+		if(smp_flags & 4) {
+			length /= 2;
+			loop_start /= 2;
+			loop_end /= 2;
+		}
+		length = TRIM_SAMPLE_LENGTH(length, loop_start,
+		                            loop_end - loop_start,
+		                            (smp_flags & 1) ?
+		                            SAMPLE_FLAG_FORWARD : 0);
+		if(length > MAX_SAMPLE_LENGTH) {
+			NOTICE("sample %u too long (%u > %u)",
+			       i, length, MAX_SAMPLE_LENGTH);
+			return false;
+		}
+		out->samples_data_length += length;
+	}
+
+	return true;
+}
+
+static void xm_load_s3m(xm_context_t* restrict ctx,
+                        const char* restrict moddata,
+                        uint32_t moddata_length,
+                        const xm_prescan_data_t* restrict p) {
+	[[maybe_unused]] uint16_t tracker_version = READ_U16(40);
+
+	#if XM_STRINGS
+	/* Module name is already NUL-terminated in S3M */
+	static_assert(MODULE_NAME_LENGTH >= 28);
+	READ_MEMCPY(ctx->module.name, 0, 27);
+	char* tn = ctx->module.trackername;
+	switch(tracker_version >> 12) {
+	case 1:
+		__builtin_memcpy(tn, "Scream Tracker ", 15);
+		tn += 15;
+		goto version;
+
+	case 2:
+		__builtin_memcpy(tn, "Imago Orpheus ", 14);
+		tn += 14;
+		goto version;
+
+	case 3:
+		__builtin_memcpy(tn, "Impulse Tracker ", 16);
+		tn += 16;
+		goto version;
+
+	case 4:
+		__builtin_memcpy(tn, "Schism Tracker", 14);
+		break;
+
+	case 5:
+		__builtin_memcpy(tn, "OpenMPT", 7);
+		break;
+
+	default:
+		break;
+
+	version:
+		*tn++ = '0' + ((tracker_version >> 8) & 0xF);
+		*tn++ = '.';
+		*tn++ = '0' + ((tracker_version >> 4) & 0xF);
+		*tn++ = '0' + (tracker_version & 0xF);
+		break;
+	}
+	#endif
+
+	#if HAS_INSTRUMENTS
+	ctx->module.num_instruments = p->num_instruments;
+	#endif
+	ctx->module.num_samples = p->num_samples;
+	ctx->module.num_patterns = p->num_patterns;
+	ctx->module.num_rows = p->num_rows;
+
+	{
+		uint8_t mod_flags = READ_U8(38);
+
+		#if HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
+		if(tracker_version == 0x1300) {
+			/* Implied ST3.00 volume slides (aka "fast slides") */
+			mod_flags |= 0b01000000;
+		}
+		ctx->module.fast_s3m_volume_slides = mod_flags & 0b01000000;
+		#endif
+
+		uint8_t ignored_flags = mod_flags
+			& (HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
+			   ? 0b10111111 : 0xFF);
+		if(ignored_flags) {
+			NOTICE("ignoring module flags %x", ignored_flags);
+		}
+	}
+
+	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
+		&& HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)
+	ctx->module.amiga_frequencies = true;
+	#endif
+
+	#if HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME)
+	ctx->module.default_global_volume = READ_U8(48);
+	if(ctx->module.default_global_volume > MAX_VOLUME) {
+		NOTICE("clamping initial global volume (%u -> %u)",
+		       ctx->module.default_global_volume, MAX_VOLUME);
+		ctx->module.default_global_volume = MAX_VOLUME;
+	}
+	#endif
+
+	#if !HAS_HARDCODED_TEMPO
+	ctx->module.default_tempo = READ_U8(49);
+	if(ctx->module.default_tempo == 0 || ctx->module.default_tempo == 255) {
+		ctx->module.default_tempo = 6; /* ST3 default at bootup */
+	}
+	#endif
+
+	#if !HAS_HARDCODED_BPM
+	ctx->module.default_bpm = READ_U8(50);
+	/* ST3 help says BPM is 0x20..0xFF, but 0x20 does not work */
+	if(ctx->module.default_bpm <= 32) {
+		ctx->module.default_bpm = 125; /* ST3 default at bootup */
+	}
+	#endif
+
+	uint8_t channel_settings[32];
+	/* XXX: be smarter about mapping L channels to 0,2,4... and R channels to
+	   1,3,5,... */
+	uint8_t channel_map[32] = {16, 16, 16, 16, 16, 16, 16, 16,
+	                           16, 16, 16, 16, 16, 16, 16, 16,
+	                           16, 16, 16, 16, 16, 16, 16, 16,
+	                           16, 16, 16, 16, 16, 16, 16, 16};
+	READ_MEMCPY(channel_settings, 64, 32);
+	for(uint8_t ch = 0; ch < 32; ++ch) {
+		if(channel_settings[ch] >= 16) continue;
+		if(channel_map[channel_settings[ch]] < 16) continue;
+		channel_map[channel_settings[ch]] = ctx->module.num_channels;
+		++ctx->module.num_channels;
+	}
+
+	ctx->module.length = p->pot_length;
+	uint16_t pot_length = READ_U16(32);
+
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
+	__builtin_memset(ctx->module.default_channel_panning + 32, 0,
+	                 MAX_CHANNELS - 32);
+
+	/* In ST3, panning 0 is hard left and 0xF is hard right. True center
+	   (0x7.80) is impossible when stereo is enabled. */
+	/* NB: There is a BUG in dosbox 0.74.3 where S80/S8F do not work on the
+	   emulated GUS. (Soundblaster also has swapped L/R channels.) */
+	if((READ_U8(51) & 128) == 0) {
+		/* Stereo bit off, use mono. In ST3 this setting has precedence
+		   over custom channel pannings. */
+		__builtin_memset(ctx->module.default_channel_panning, 0x80, 32);
+	} else if(READ_U8(53) != 252) {
+		/* ST3 default pannings: 0x3(L) / 0xC(R) */
+		#define S3M_DEFAULT_PAN(x) ((x) < 8 ? 0x33 : 0xCC)
+		for(uint8_t ch = 0; ch < 32; ++ch) {
+			ctx->module.default_channel_panning[ch] =
+				S3M_DEFAULT_PAN(channel_settings[ch]);
+		}
+	} else {
+		/* Use custom pannings */
+		READ_MEMCPY(ctx->module.default_channel_panning,
+		            96u + pot_length
+		            + 2u * (ctx->module.num_samples
+		                   + ctx->module.num_patterns),
+		            32);
+		for(uint8_t ch = 0; ch < 32; ++ch) {
+			uint8_t* pan = ctx->module.default_channel_panning + ch;
+			if((*pan & 0b00100000) == 0) {
+				/* Ignore custom value, use default */
+				*pan = S3M_DEFAULT_PAN(channel_settings[ch]);
+			} else {
+				/* Use custom value */
+				*pan &= 0xF;
+				*pan *= 0x11;
+			}
+		}
+	}
+	#endif
+
+	for(uint8_t i = 0, j = 0; i < pot_length; ++i) {
+		uint8_t x = READ_U8(96 + i);
+		if(x == 255) {
+			assert(j == p->pot_length);
+			break;
+		}
+		if(x == 254) continue;
+		ctx->module.pattern_table[j++] = x;
+	}
+
+	uint32_t offset = 96 + pot_length;
+	bool signed_samples = (READ_U16(42) == 1);
+	for(uint8_t smp = 0; smp < ctx->module.num_samples; ++smp) {
+		xm_load_s3m_instrument(ctx, smp, signed_samples,
+		                       moddata, moddata_length,
+		                       16 * READ_U16(offset));
+		offset += 2;
+	}
+
+	for(uint8_t pat = 0; pat < ctx->module.num_patterns; ++pat) {
+		xm_load_s3m_pattern(ctx, pat, channel_settings, channel_map,
+		                    moddata, moddata_length,
+		                    16 * READ_U16(offset));
+		offset += 2;
+	}
+}
+
+void xm_load_s3m_instrument(xm_context_t* restrict ctx,
+                            uint8_t idx, bool signed_smp_data,
+                            const char* restrict moddata,
+                            uint32_t moddata_length,
+                            uint32_t offset) {
+	#if XM_STRINGS
+	static_assert(INSTRUMENT_NAME_LENGTH >= 28);
+	READ_MEMCPY(ctx->instruments[idx].name, offset + 48, 27);
+	#endif
+
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+	xm_instrument_t* ins = ctx->instruments + idx;
+	ins->num_samples = 1;
+	ins->samples_index = idx;
+	#endif
+
+	if(READ_U8(offset) != 1) {
+		/* Non-PCM instument */
+		return;
+	}
+
+	uint32_t base_length = READ_U32(offset + 16);
+	uint32_t base_loop_start = READ_U32(offset + 20);
+	uint32_t base_loop_end = READ_U32(offset + 24);
+	uint8_t base_volume = READ_U8(offset + 28);
+	uint8_t base_flags = READ_U8(offset + 31);
+
+	bool is_looped = base_flags & 1;
+	bool is_stereo = base_flags & 2;
+	bool is_16bit = base_flags & 4;
+
+	if(is_stereo) {
+		NOTICE("sample %x has stereo data, this is not supported", idx);
+	}
+	if(base_flags & 0b11111000) {
+		NOTICE("ignoring sample %x flags (%x)",
+		       idx, base_flags & 0b11111000);
+	}
+
+	uint32_t base_c_frequency = READ_U32(offset + 32);
+	int16_t rel_finetune = (int16_t)
+		(log2f((float)base_c_frequency / 8363.f) * 192.f);
+	assert(rel_finetune <= 16 * INT8_MAX && rel_finetune >= 16 * INT8_MIN);
+
+	xm_sample_t* smp = ctx->samples + idx;
+
+	#if HAS_FEATURE(FEATURE_SAMPLE_RELATIVE_NOTES)
+	smp->relative_note = (int8_t)(rel_finetune >> 4);
+	#endif
+
+	#if HAS_FEATURE(FEATURE_SAMPLE_FINETUNES)
+	smp->finetune = (int8_t)(rel_finetune & 0xF);
+	#endif
+
+	smp->length = TRIM_SAMPLE_LENGTH(base_length, base_loop_start,
+	                                 base_loop_end - base_loop_start,
+	                                 is_looped ?
+	                                 SAMPLE_FLAG_FORWARD : 0);
+	if(is_looped) {
+		smp->loop_length = base_loop_end - base_loop_start;
+		if(smp->loop_length > smp->length) {
+			smp->loop_length = smp->length;
+		}
+	}
+
+	if(base_volume > MAX_VOLUME) {
+		NOTICE("clamping volume of sample %u (%u -> %u)",
+		       idx, base_volume, MAX_VOLUME);
+		base_volume = MAX_VOLUME;
+	}
+	smp->volume = (unsigned)base_volume & 0x7F;
+
+	#if HAS_SAMPLE_PANNINGS
+	smp->panning = MAX_PANNING / 2;
+	#endif
+
+	/* Now read sample data */
+	smp->index = ctx->module.samples_data_length;
+	xm_sample_point_t* out = ctx->samples_data
+		+ ctx->module.samples_data_length;
+	offset = 16 * ((((uint32_t)READ_U8(offset + 13)) << 16)
+	               + READ_U16(offset + 14));
+	if(is_16bit) {
+		smp->length /= 2;
+		smp->loop_length /= 2;
+	}
+	for(uint32_t k = 0; k < smp->length; ++k) {
+		*out++ = is_16bit
+			? SAMPLE_POINT_FROM_S16((int16_t)
+			                        (READ_U16(offset + 2*k)
+			                         + (signed_smp_data
+			                            ? 0 : INT16_MIN)))
+			: SAMPLE_POINT_FROM_S8((int8_t)
+			                       (READ_U8(offset + k)
+			                        + (signed_smp_data
+			                           ? 0 : INT8_MIN)));
+	}
+	ctx->module.samples_data_length += smp->length;
+}
+
+static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
+                                uint8_t patidx,
+                                const uint8_t* restrict channel_settings,
+                                const uint8_t* restrict channel_map,
+                                const char* restrict moddata,
+                                uint32_t moddata_length,
+                                uint32_t offset) {
+	xm_pattern_t* pat = ctx->patterns + patidx;
+	pat->num_rows = 64;
+	pat->rows_index = 64 * patidx;
+
+	xm_pattern_slot_t* slots = ctx->pattern_slots
+		+ pat->rows_index * ctx->module.num_channels;
+
+	uint32_t stop = offset + READ_U16(offset);
+	offset += 2;
+
+	uint8_t last_effect_parameters[32] = {};
+	uint16_t read_rows = 0;
+	while(offset < stop && read_rows < 64) {
+		uint8_t x = READ_U8(offset);
+		offset += 1;
+
+		if(x == 0) {
+			/* End of row */
+			slots += ctx->module.num_channels;
+			++read_rows;
+			continue;
+		}
+
+		if(channel_settings[x & 31] >= 16) {
+			/* Disabled channel, skip */
+			if(x & 32) offset += 2;
+			if(x & 64) offset += 1;
+			if(x & 128) offset += 2;
+			continue;
+		}
+
+		xm_pattern_slot_t* s = slots
+			+ channel_map[channel_settings[x & 31]];
+
+		if(x & 32) {
+			s->note = READ_U8(offset);
+			s->instrument = READ_U8(offset + 1);
+			offset += 2;
+
+			/* Fixup note semantics */
+			if(s->note == 254) {
+				s->note = NOTE_KEY_OFF;
+			} else if(s->note == 255) {
+				s->note = s->instrument ? NOTE_SWITCH : 0;
+			} else {
+				/* Unlike XM, octave is in the high nibble, note
+				   is in the low nibble */
+				s->note = (uint8_t)(1 + (s->note >> 4) * 12
+				                    + (s->note & 0xF));
+			}
+		}
+
+		if(x & 64) {
+			#if HAS_VOLUME_COLUMN
+			/* Fixup volume column semantics */
+			s->volume_column = READ_U8(offset) + 0x10;
+			#endif
+			offset += 1;
+		}
+
+		if(x & 128) {
+			s->effect_type = READ_U8(offset);
+			s->effect_param = READ_U8(offset + 1);
+			offset += 2;
+
+			if(s->effect_param) {
+				last_effect_parameters[x & 31] = s->effect_param;
+			}
+
+			/* Fixup effect semantics */
+			/* Reminder: try not to change effect_param for effects
+			   with global memory (potential side effects) */
+			switch(s->effect_type) {
+			/* No effect memory */
+			case 1:
+				s->effect_type = EFFECT_SET_TEMPO;
+				break;
+			case 2:
+				s->effect_type = EFFECT_JUMP_TO_ORDER;
+				break;
+			case 3:
+				s->effect_type = EFFECT_PATTERN_BREAK;
+				break;
+			case 20:
+				s->effect_type = EFFECT_SET_BPM;
+				if(s->effect_param <= 32) {
+					goto blank_effect;
+				}
+				break;
+			case 22:
+				if(s->effect_param <= MAX_VOLUME) {
+					s->effect_type =
+						EFFECT_SET_GLOBAL_VOLUME;
+					break;
+				} else {
+					goto blank_effect;
+				}
+			case 24:
+				/* XXX: Need more info on effect Xxx */
+				if(s->effect_param <= 0x80) {
+					s->effect_type =
+						EFFECT_SET_CHANNEL_PANNING;
+					/* Remap from 0..=0x80 to 0..=0xFF */
+					s->effect_param =
+						(s->effect_param == 0x80)
+						? 0xFF : (s->effect_param * 2);
+				} else {
+					goto blank_effect;
+				}
+				break;
+
+			/* Local effect memory */
+			case 7:
+				s->effect_type = EFFECT_TONE_PORTAMENTO;
+				break;
+			case 8:
+				s->effect_type = EFFECT_VIBRATO;
+				break;
+			case 15:
+				s->effect_type = EFFECT_SET_SAMPLE_OFFSET;
+				break;
+			case 21:
+				/* Shared memory with regular vibrato */
+				s->effect_type = EFFECT_FINE_VIBRATO;
+				break;
+
+			/* Global effect memory; do not touch s->effect_param,
+			   as any change can have global side effects. */
+			case 4:
+				s->effect_type = EFFECT_S3M_VOLUME_SLIDE;
+				break;
+			case 11:
+				s->effect_type =
+					EFFECT_S3M_VIBRATO_VOLUME_SLIDE;
+				break;
+			case 12:
+				s->effect_type =
+					EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE;
+				break;
+			case 5:
+				s->effect_type = EFFECT_S3M_PORTAMENTO_DOWN;
+				break;
+			case 6:
+				s->effect_type = EFFECT_S3M_PORTAMENTO_UP;
+				break;
+			case 9:
+				s->effect_type = EFFECT_S3M_TREMOR;
+				break;
+			case 10:
+				s->effect_type = EFFECT_S3M_ARPEGGIO;
+				break;
+			case 17:
+				s->effect_type = EFFECT_S3M_MULTI_RETRIG_NOTE;
+				/* Convert Q0y to Q8y, as FT2 behaviour is to
+				   reuse last x value when x=0 */
+				if(s->effect_param >> 4 == 0) {
+					s->effect_param |= 0x80;
+				}
+				break;
+			case 18:
+				s->effect_type = EFFECT_S3M_TREMOLO;
+				break;
+
+			case 19: /* XXX: effect memory logic is not a perfect
+			            workaround */
+				if(s->effect_param == 0) {
+					s->effect_param =
+						last_effect_parameters[x & 31];
+					if(s->effect_param == 0) {
+						goto blank_effect;
+					} else {
+						NOTICE("conversion from S00 to S%02X in pattern %x might be inaccurate", s->effect_param, patidx);
+					}
+				}
+				switch(s->effect_param >> 4) {
+				case 1:
+					s->effect_type = EFFECT_SET_GLISSANDO_CONTROL;
+					s->effect_param = (s->effect_param > 0);
+					break;
+
+				case 2:
+					s->effect_type = EFFECT_SET_FINETUNE;
+					goto erase_high_nibble;
+
+				case 3:
+					s->effect_type = EFFECT_SET_VIBRATO_CONTROL;
+					goto fixup_control_param;
+
+				case 4:
+					s->effect_type = EFFECT_SET_TREMOLO_CONTROL;
+				fixup_control_param:
+					switch(s->effect_param & 3) {
+					case 0:
+						s->effect_param = WAVEFORM_SINE;
+						break;
+					case 1:
+						s->effect_param =
+							WAVEFORM_RAMP_DOWN;
+						break;
+					case 2:
+						s->effect_param =
+							WAVEFORM_SQUARE;
+						break;
+					case 3:
+						s->effect_param =
+							WAVEFORM_RANDOM;
+						break;
+					}
+					break;
+
+				case 8:
+					s->effect_type =
+						EFFECT_SET_CHANNEL_PANNING;
+					s->effect_param &= 0xF;
+					s->effect_param *= 0x11;
+					break;
+
+				case 0xA: /* XXX: contradicting info on SAy
+				             (stereo control) */
+					s->effect_type =
+						EFFECT_SET_CHANNEL_PANNING;
+					bool left_ch =
+						channel_settings[x & 31] < 8;
+					switch(s->effect_param & 0xF) {
+					case 0:
+					case 2:
+						/* Normal panning */
+						s->effect_param =
+							left_ch ? 0 : 0xFF;
+						break;
+					case 1:
+					case 3:
+						/* Reversed panning */
+						s->effect_param =
+							left_ch ? 0xFF : 0;
+						break;
+					case 4:
+					case 5:
+					case 6:
+					case 7:
+						/* Center panning */
+						s->effect_param = 0x80;
+						break;
+					default:
+						/* No effect */
+						goto blank_effect;
+					}
+					break;
+
+				case 0xB: /* XXX: effect memory is global (NOT
+				             per channel) */
+					s->effect_type = EFFECT_PATTERN_LOOP;
+					goto erase_high_nibble;
+
+				static_assert(EFFECT_CUT_NOTE == (32|0xC));
+				static_assert(EFFECT_DELAY_NOTE == (32|0xD));
+				static_assert(EFFECT_DELAY_PATTERN == (32|0xE));
+				case 0xC:
+				case 0xD:
+				case 0xE:
+					s->effect_type = 32
+						| (s->effect_param >> 4);
+					goto erase_high_nibble;
+
+				erase_high_nibble:
+					s->effect_param &= 0xF;
+					break;
+
+				default:
+					goto blank_effect;
+				}
+				break;
+
+			default: /* Trim unsupported effect */
+			blank_effect:
+				if(s->effect_param) {
+					/* XXX: test this behaviour in ST3 */
+					NOTICE("converting effect %c(%02X)%02X "
+					       "in pattern %x to nop",
+					       s->effect_type + 'A' - 1,
+					       s->effect_type,
+					       s->effect_param,
+					       patidx);
+					/* Keep the param for global memory */
+					s->effect_type = EFFECT_NOP;
+				} else {
+					s->effect_param = 0;
+				}
+				break;
+			}
+		}
+	}
+	if(offset != stop || read_rows != 64) {
+		NOTICE("dodgey pattern %X has incorrect packed size", patidx);
+	}
+
+	/* Now that the entire pattern is loaded, fixup pattern loops if
+	   possible (S3M pattern loops use *global* memory, not per channel; end
+	   of a pattern loop also sets loop origin to the next row) */
+	/* XXX: figure out multiple SBx on same row (ST3 infinitely loops?) */
+	slots = ctx->pattern_slots + pat->rows_index * ctx->module.num_channels;
+	xm_pattern_slot_t* s = slots;
+	uint8_t loops[65][3] = {}; /* start row, end row, loop iterations */
+	uint8_t n = 0;
+	for(uint8_t row = 0; row < 64; ++row) {
+		uint8_t loop_param = 0;
+		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+			if(s->effect_type == EFFECT_PATTERN_LOOP) {
+				loop_param = 128 | s->effect_param;
+				s->effect_type = 0;
+				s->effect_param = 0;
+			}
+			++s;
+		}
+		if(loop_param == 128) {
+			/* SB0: just mark start of current loop */
+			loops[n][0] = row;
+		} else if(loop_param & 128) {
+			/* SBy, y>0: mark end of current loop and start of next
+			 loop */
+			loops[n][1] = row;
+			loops[n][2] = loop_param & 127;
+			loops[++n][0] = row + 1;
+		}
+	}
+	for(uint8_t i = 0; i < 64; ++i) {
+		if(loops[i][2] == 0) continue;
+		if(loops[i][0] == loops[i][1]) {
+			/* Repeat a single row */
+			s = slots + loops[i][0] * ctx->module.num_channels;
+			uint8_t ch = 0;
+			while(ch < ctx->module.num_channels) {
+				if(s->effect_type == 0
+				   && s->effect_param == 0) {
+					s->effect_type = EFFECT_ROW_LOOP;
+					s->effect_param = loops[i][2];
+					break;
+				}
+				++s;
+				++ch;
+			}
+			assert(ch < ctx->module.num_channels);
+			continue;
+		}
+
+		/* Repeat multiple rows */
+		assert(loops[i][0] < loops[i][1]);
+		assert(loops[i][1] < 64);
+
+		uint8_t ch = 0;
+		while(ch < ctx->module.num_channels) {
+			xm_pattern_slot_t* s_start = slots
+				+ loops[i][0] * ctx->module.num_channels + ch;
+			xm_pattern_slot_t* s_end = slots
+				+ loops[i][1] * ctx->module.num_channels + ch;
+			if(s_start->effect_type == 0
+			   && s_start->effect_param == 0
+			   && s_end->effect_type == 0
+			   && s_end->effect_param == 0) {
+				s_start->effect_type = EFFECT_PATTERN_LOOP;
+				s_end->effect_type = EFFECT_PATTERN_LOOP;
+				s_end->effect_param = loops[i][2];
+				break;
+			}
+			++ch;
+		}
+		if(ch == ctx->module.num_channels) {
+			NOTICE("inaccurate loop fixup in pattern %x"
+			       " (no space left)", patidx);
+		}
 	}
 }

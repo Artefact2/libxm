@@ -11,6 +11,7 @@
 #include <string.h>
 #include <stdckdint.h>
 #include <stddef.h>
+#include <stdbit.h>
 
 #define POINTER_SIZE (UINTPTR_MAX == UINT64_MAX ? 8 : 4)
 
@@ -50,10 +51,6 @@ static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
                "XM_LIBXM_DELTA_SAMPLES cannot be used "
                "with XM_SAMPLE_TYPE=float");
 
-static_assert(XM_PANNING_TYPE >= 0 && XM_PANNING_TYPE <= 8,
-              "Invalid value of XM_PANNING_TYPE");
-#define HAS_PANNING (XM_PANNING_TYPE == 8)
-
 static_assert(XM_LOOPING_TYPE >= 0 && XM_LOOPING_TYPE <= 2,
               "Invalid value of XM_LOOPING_TYPE");
 static_assert(XM_LOOPING_TYPE != 1 || !HAS_EFFECT(0xB),
@@ -67,7 +64,8 @@ static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
 #define WAVEFORM_SINE 0
 #define WAVEFORM_RAMP_DOWN 1
 #define WAVEFORM_SQUARE 2
-#define WAVEFORM_RAMP_UP 3
+#define WAVEFORM_RANDOM 3
+#define WAVEFORM_RAMP_UP 4
 
 #define FEATURE_PINGPONG_LOOPS 0
 #define FEATURE_NOTE_KEY_OFF 1
@@ -79,25 +77,29 @@ static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
 #define FEATURE_AUTOVIBRATO 7
 #define FEATURE_LINEAR_FREQUENCIES 8
 #define FEATURE_AMIGA_FREQUENCIES 9
-#define FEATURE_WAVEFORM_SINE (12|WAVEFORM_SINE)
-#define FEATURE_WAVEFORM_RAMP_DOWN (12|WAVEFORM_RAMP_DOWN)
-#define FEATURE_WAVEFORM_SQUARE (12|WAVEFORM_SQUARE)
-#define FEATURE_WAVEFORM_RAMP_UP (12|WAVEFORM_RAMP_UP)
+#define FEATURE_ACCURATE_PITCH_SLIDE_CLAMP 10
+#define FEATURE_ACCURATE_PITCH_SLIDE_CUT 11
+#define FEATURE_WAVEFORM_SINE 12
+#define FEATURE_WAVEFORM_RAMP_DOWN 13
+#define FEATURE_WAVEFORM_SQUARE 14
+#define FEATURE_WAVEFORM_RAMP_UP 15
 #define FEATURE_ACCURATE_SAMPLE_OFFSET_EFFECT 16
 #define FEATURE_ACCURATE_ARPEGGIO_OVERFLOW 17
 #define FEATURE_ACCURATE_ARPEGGIO_GLISSANDO 18
 #define FEATURE_INVALID_INSTRUMENTS 19
 #define FEATURE_INVALID_SAMPLES 20
 #define FEATURE_INVALID_NOTES 21
-#define FEATURE_CLAMP_PERIODS 22
+#define FEATURE_WAVEFORM_RANDOM 22
 #define FEATURE_SAMPLE_RELATIVE_NOTES 23
 #define FEATURE_SAMPLE_FINETUNES 24
 #define FEATURE_SAMPLE_PANNINGS 25
-
+#define FEATURE_DEFAULT_GLOBAL_VOLUME 26
 #define FEATURE_VARIABLE_TEMPO 27 /* 27..32 (5 bits) */
 #define FEATURE_VARIABLE_BPM 32 /* 32..40 (8 bits) */
 #define HAS_HARDCODED_TEMPO ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_TEMPO) & 31)
 #define HAS_HARDCODED_BPM ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_BPM) & 255)
+#define FEATURE_DEFAULT_CHANNEL_PANNINGS 40
+#define FEATURE_WAVEFORM_CONTINUE 41
 
 static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
               || HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES),
@@ -119,30 +121,50 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define EFFECT_JUMP_TO_ORDER 0xB
 #define EFFECT_SET_VOLUME 0xC
 #define EFFECT_PATTERN_BREAK 0xD
-#define EFFECT_SET_TEMPO 0xE /* Not vanilla XM */
+#define EFFECT_SET_TEMPO 0xE /* Remapped from vanilla XM */
 #define EFFECT_SET_BPM 0xF
-#define EFFECT_SET_GLOBAL_VOLUME 16
-#define EFFECT_GLOBAL_VOLUME_SLIDE 17
-#define EFFECT_EXTRA_FINE_PORTAMENTO_UP 18 /* Not vanilla XM */
-#define EFFECT_EXTRA_FINE_PORTAMENTO_DOWN 19 /* Not vanilla XM */
-#define EFFECT_KEY_OFF 20
-#define EFFECT_SET_ENVELOPE_POSITION 21
-#define EFFECT_PANNING_SLIDE 25
-#define EFFECT_MULTI_RETRIG_NOTE 27
-#define EFFECT_TREMOR 29
-#define EFFECT_FINE_PORTAMENTO_UP (32|1) /* Not vanilla XM */
-#define EFFECT_FINE_PORTAMENTO_DOWN (32|2) /* Not vanilla XM */
-#define EFFECT_SET_GLISSANDO_CONTROL (32|3) /* Not vanilla XM */
-#define EFFECT_SET_VIBRATO_CONTROL (32|4) /* Not vanilla XM */
-#define EFFECT_SET_FINETUNE (32|5) /* Not vanilla XM */
-#define EFFECT_PATTERN_LOOP (32|6) /* Not vanilla XM */
-#define EFFECT_SET_TREMOLO_CONTROL (32|7) /* Not vanilla XM */
-#define EFFECT_RETRIGGER_NOTE (32|9) /* Not vanilla XM */
-#define EFFECT_FINE_VOLUME_SLIDE_UP (32|0xA) /* Not vanilla XM */
-#define EFFECT_FINE_VOLUME_SLIDE_DOWN (32|0xB) /* Not vanilla XM */
-#define EFFECT_CUT_NOTE (32|0xC) /* Not vanilla XM */
-#define EFFECT_DELAY_NOTE (32|0xD) /* Not vanilla XM */
-#define EFFECT_DELAY_PATTERN (32|0xE) /* Not vanilla XM */
+#define EFFECT_SET_GLOBAL_VOLUME 0x10
+#define EFFECT_GLOBAL_VOLUME_SLIDE 0x11
+#define EFFECT_EXTRA_FINE_PORTAMENTO_UP 0x12 /* Remapped vanilla XM */
+#define EFFECT_EXTRA_FINE_PORTAMENTO_DOWN 0x13 /* Remapped vanilla XM */
+#define EFFECT_KEY_OFF 0x14
+#define EFFECT_SET_ENVELOPE_POSITION 0x15
+#define EFFECT_FINE_VIBRATO 0x16 /* Not vanilla XM. Behaves like regular vibrato
+                                    at quarter depth, sharing its effect memory.
+                                    Used for S3M compatibility. */
+#define EFFECT_S3M_PORTAMENTO_UP 0x17 /* Not vanilla XM. For S3M compat. */
+#define EFFECT_S3M_PORTAMENTO_DOWN 0x18 /* Not vanilla XM. For S3M compat. */
+#define EFFECT_PANNING_SLIDE 0x19
+#define EFFECT_S3M_VIBRATO_VOLUME_SLIDE 0x1A /* Not vanilla XM */
+#define EFFECT_MULTI_RETRIG_NOTE 0x1B
+#define EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE 0x1C /* Not vanilla XM */
+#define EFFECT_TREMOR 0x1D
+#define EFFECT_ROW_LOOP 0x1E /* Not vanilla XM. Behaves exactly like combined
+                              E60 and E6y in the same slot. Used for S3M
+                              compatibility. */
+#define EFFECT_S3M_VOLUME_SLIDE 0x1F /* Not vanilla XM */
+#define EFFECT_S3M_MULTI_RETRIG_NOTE 0x20 /* Not vanilla XM (uses global memory) */
+#define EFFECT_FINE_PORTAMENTO_UP 0x21 /* Remapped from vanilla XM */
+#define EFFECT_FINE_PORTAMENTO_DOWN 0x22 /* Remapped from vanilla XM */
+#define EFFECT_SET_GLISSANDO_CONTROL 0x23 /* Remapped vanilla XM */
+#define EFFECT_SET_VIBRATO_CONTROL 0x24 /* Remapped from vanilla XM */
+#define EFFECT_SET_FINETUNE 0x25 /* Remapped from vanilla XM */
+#define EFFECT_PATTERN_LOOP 0x26 /* Remapped from vanilla XM */
+#define EFFECT_SET_TREMOLO_CONTROL 0x27 /* Remapped from vanilla XM */
+#define EFFECT_SET_CHANNEL_PANNING 0x28 /* Not vanilla XM */
+#define EFFECT_RETRIGGER_NOTE 0x29 /* Remapped from vanilla XM */
+#define EFFECT_FINE_VOLUME_SLIDE_UP 0x2A /* Remapped from vanilla XM */
+#define EFFECT_FINE_VOLUME_SLIDE_DOWN 0x2B /* Remapped from vanilla XM */
+#define EFFECT_CUT_NOTE 0x2C /* Remapped from vanilla XM */
+#define EFFECT_DELAY_NOTE 0x2D /* Remapped from vanilla XM */
+#define EFFECT_DELAY_PATTERN 0x2E /* Remapped from vanilla XM */
+#define EFFECT_S3M_TREMOLO 0x2F /* Not vanilla XM (uses global memory) */
+#define EFFECT_S3M_ARPEGGIO 0x30 /* Not vanilla XM (uses global memory) */
+#define EFFECT_S3M_TREMOR 0x31 /* Not vanilla XM (uses global memory, also runs
+                                  on tick 0) */
+/* 0x32..=0x3F unused */
+#define EFFECT_NOP 0xFF /* Not vanilla XM. Does nothing but still sets global
+                           memory. */
 
 #define VOLUME_EFFECT_SLIDE_DOWN 6
 #define VOLUME_EFFECT_SLIDE_UP 7
@@ -158,8 +180,8 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 /* These are the lengths we store in the context, including the terminating
    NUL, not necessarily the lengths of strings in loaded formats. */
 #define SAMPLE_NAME_LENGTH 24
-#define INSTRUMENT_NAME_LENGTH 24
-#define MODULE_NAME_LENGTH 24
+#define INSTRUMENT_NAME_LENGTH 32
+#define MODULE_NAME_LENGTH 32
 #define TRACKER_NAME_LENGTH 24
 
 #define PATTERN_ORDER_TABLE_LENGTH 256
@@ -202,10 +224,10 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define AMPLIFICATION .25f
 
 /* Granularity of sample count for ctx->remaining_samples_in_tick, for precise
-   timings of ticks. Worst case rounding is 1 frame (1/ctx->rate second worth of
-   audio) error every TICK_SUBSAMPLES ticks. A tick is at least 0.01s long (255
-   BPM), so at 44100 Hz the error is 1/44100 second every 81.92 seconds, or
-   about 0.00003%. */
+   timings of ticks. Worst case rounding is 1 frame (1/ctx->current_sample_rate
+   second worth of audio) error every TICK_SUBSAMPLES ticks. A tick is at least
+   0.01s long (255 BPM), so at 44100 Hz the error is 1/44100 second every 81.92
+   seconds, or about 0.00003%. */
 #define TICK_SUBSAMPLES (1<<13)
 
 /* Granularity of ch->step and ch->sample_position, for precise pitching of
@@ -262,7 +284,17 @@ struct xm_sample_s {
 	uint8_t volume;
 	#endif
 
-	#define HAS_SAMPLE_PANNINGS (XM_PANNING_TYPE == 8 \
+	#define HAS_PANNING (XM_PANNING_TYPE == 8 && ( \
+		HAS_FEATURE(FEATURE_PANNING_ENVELOPES) \
+		|| HAS_FEATURE(FEATURE_SAMPLE_PANNINGS) \
+		|| HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS) \
+		|| HAS_EFFECT(EFFECT_PANNING_SLIDE) \
+		|| HAS_EFFECT(EFFECT_SET_PANNING) \
+		|| HAS_EFFECT(EFFECT_SET_CHANNEL_PANNING) \
+		|| HAS_VOLUME_EFFECT(VOLUME_EFFECT_SET_PANNING) \
+		|| HAS_VOLUME_EFFECT(VOLUME_EFFECT_PANNING_SLIDE_LEFT) \
+		|| HAS_VOLUME_EFFECT(VOLUME_EFFECT_PANNING_SLIDE_RIGHT)))
+	#define HAS_SAMPLE_PANNINGS (HAS_PANNING \
 	                             && HAS_FEATURE(FEATURE_SAMPLE_PANNINGS))
 	#if HAS_SAMPLE_PANNINGS
 	#define PANNING(smp) ((smp)->panning)
@@ -409,13 +441,6 @@ struct xm_module_s {
 	uint16_t num_patterns;
 	uint16_t num_samples;
 
-	#if XM_SAMPLE_RATE == 0
-	#define SAMPLE_RATE(mod) ((mod)->rate)
-	uint16_t rate; /* Output sample rate, typically 44100 or 48000 */
-	#else
-	#define SAMPLE_RATE(mod) ((uint16_t)XM_SAMPLE_RATE)
-	#endif
-
 	uint8_t num_channels;
 
 	#if HAS_INSTRUMENTS
@@ -448,21 +473,38 @@ struct xm_module_s {
 	#define MAX_LOOP_COUNT(mod) 0
 	#endif
 
+	/* DEFAULT_...(): These are the values stored in the loaded file, not
+	   changed by any effects like Gxx, Fxx, etc. Without these, it's
+	   impossible to properly implement xm_reset_context(). */
+
 	#if HAS_HARDCODED_TEMPO
-	#define MODULE_TEMPO(mod) ((uint8_t)HAS_HARDCODED_TEMPO)
+	#define DEFAULT_TEMPO(mod) ((uint8_t)HAS_HARDCODED_TEMPO)
 	#else
-	/* These are the values stored in the loaded file, not changed by any
-	   Fxx effect. Without these, it's impossible to properly implement
-	   xm_reset_context(). */
-	#define MODULE_TEMPO(mod) ((mod)->tempo)
-	uint8_t tempo; /* 0..MIN_BPM */
+	#define DEFAULT_TEMPO(mod) ((mod)->default_tempo)
+	uint8_t default_tempo; /* 0..MIN_BPM */
 	#endif
 
 	#if HAS_HARDCODED_BPM
-	#define MODULE_BPM(mod) ((uint8_t)HAS_HARDCODED_BPM)
+	#define DEFAULT_BPM(mod) ((uint8_t)HAS_HARDCODED_BPM)
 	#else
-	#define MODULE_BPM(mod) ((mod)->bpm)
-	uint8_t bpm; /* MIN_BPM..=MAX_BPM */
+	#define DEFAULT_BPM(mod) ((mod)->default_bpm)
+	uint8_t default_bpm; /* MIN_BPM..=MAX_BPM */
+	#endif
+
+	#if HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME)
+	#define DEFAULT_GLOBAL_VOLUME(mod) ((mod)->default_global_volume)
+	uint8_t default_global_volume; /* 0..=MAX_VOLUME */
+	#else
+	#define DEFAULT_GLOBAL_VOLUME(mod) MAX_VOLUME
+	#endif
+
+	static_assert(MAX_CHANNELS % 8 == 7);
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
+	uint8_t default_channel_panning[MAX_CHANNELS];
+	#define DEFAULT_CHANNEL_PANNING(mod, i) \
+		((mod)->default_channel_panning[i])
+	#else
+	#define DEFAULT_CHANNEL_PANNING(mod, i) (MAX_PANNING/2)
 	#endif
 
 	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
@@ -475,6 +517,13 @@ struct xm_module_s {
 	#define AMIGA_FREQUENCIES(mod) false
 	#endif
 
+	#if HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
+	#define FAST_S3M_VOLUME_SLIDES(mod) ((mod)->fast_s3m_volume_slides)
+	bool fast_s3m_volume_slides;
+	#else
+	#define FAST_S3M_VOLUME_SLIDES(mod) false
+	#endif
+
 	#if XM_STRINGS
 	static_assert(MODULE_NAME_LENGTH % 8 == 0);
 	static_assert(TRACKER_NAME_LENGTH % 8 == 0);
@@ -482,15 +531,18 @@ struct xm_module_s {
 	char trackername[TRACKER_NAME_LENGTH];
 	#endif
 
-	#define MODULE_PADDING (1 \
+	#define MODULE_PADDING (2 \
 		+ !(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
 		    && HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)) \
 		+ !HAS_INSTRUMENTS \
 		+ (XM_LOOPING_TYPE != 2) \
 		+ (XM_LOOPING_TYPE == 1) \
-		+ 2*(XM_SAMPLE_RATE != 0) \
 		+ (HAS_HARDCODED_TEMPO > 0) \
-		+ (HAS_HARDCODED_BPM > 0))
+		+ (HAS_HARDCODED_BPM > 0) \
+		+ !HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME) \
+		+ !HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE) \
+		+ MAX_CHANNELS*!(HAS_PANNING \
+		    && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)))
 	#if MODULE_PADDING % POINTER_SIZE
 	char __pad[MODULE_PADDING % POINTER_SIZE];
 	#endif
@@ -511,7 +563,8 @@ struct xm_channel_context_s {
 	xm_pattern_slot_t* current;
 
 	#if XM_TIMING_FUNCTIONS
-	uint32_t latest_trigger; /* In generated samples (1/ctx->rate secs) */
+	uint32_t latest_trigger; /* In generated samples
+	                            (1/ctx->current_sample_rate secs) */
 	#endif
 
 	uint32_t sample_position; /* In microsteps */
@@ -570,8 +623,11 @@ struct xm_channel_context_s {
 
 	uint8_t volume; /* 0..=MAX_VOLUME */
 
+
 	#define HAS_VOLUME_OFFSET (HAS_EFFECT(EFFECT_TREMOLO) \
-	                           || HAS_EFFECT(EFFECT_TREMOR))
+	                           || HAS_EFFECT(EFFECT_S3M_TREMOLO) \
+	                           || HAS_EFFECT(EFFECT_TREMOR) \
+	                           || HAS_EFFECT(EFFECT_S3M_TREMOR))
 	#if HAS_VOLUME_OFFSET
 	#define VOLUME_OFFSET(ch) ((ch)->volume_offset)
 	#define RESET_VOLUME_OFFSET(ch) (ch)->volume_offset = 0
@@ -585,6 +641,13 @@ struct xm_channel_context_s {
 
 	#if HAS_PANNING
 	uint8_t panning; /* 0..MAX_PANNING  */
+	#endif
+
+	#if HAS_PANNING && HAS_EFFECT(EFFECT_SET_CHANNEL_PANNING)
+	#define BASE_PANNING(ctx, i) ((ctx)->channels[i].base_panning)
+	uint8_t base_panning;
+	#else
+	#define BASE_PANNING(ctx, i) DEFAULT_CHANNEL_PANNING(&ctx->module, i)
 	#endif
 
 	uint8_t orig_note; /* Last valid note seen in a slot. Could be 0. */
@@ -645,8 +708,9 @@ struct xm_channel_context_s {
 	uint8_t extra_fine_portamento_down_param;
 	#endif
 
-	#define HAS_GLISSANDO_CONTROL ( \
-		(HAS_EFFECT(EFFECT_ARPEGGIO) \
+	#define HAS_ARPEGGIO (HAS_EFFECT(EFFECT_ARPEGGIO) \
+		              || HAS_EFFECT(EFFECT_S3M_ARPEGGIO))
+	#define HAS_GLISSANDO_CONTROL ((HAS_ARPEGGIO \
 		    && HAS_FEATURE(FEATURE_ACCURATE_ARPEGGIO_GLISSANDO)) \
 		|| (HAS_TONE_PORTAMENTO \
 		    && HAS_EFFECT(EFFECT_SET_GLISSANDO_CONTROL)))
@@ -661,10 +725,16 @@ struct xm_channel_context_s {
 
 	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE)
 	uint8_t multi_retrig_param;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
+		|| HAS_EFFECT(EFFECT_S3M_MULTI_RETRIG_NOTE)
 	uint8_t multi_retrig_ticks;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_PATTERN_LOOP)
+	#define HAS_LOOPS (HAS_EFFECT(EFFECT_PATTERN_LOOP) \
+	                   || HAS_EFFECT(EFFECT_ROW_LOOP))
+	#if HAS_LOOPS
 	uint8_t pattern_loop_origin; /* Where to restart a E6y loop */
 	uint8_t pattern_loop_count; /* How many loop passes have been done */
 	#endif
@@ -685,10 +755,14 @@ struct xm_channel_context_s {
 
 	#if HAS_EFFECT(EFFECT_TREMOLO)
 	uint8_t tremolo_param;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_TREMOLO) || HAS_EFFECT(EFFECT_S3M_TREMOLO)
 	uint8_t tremolo_ticks;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_TREMOLO) && HAS_EFFECT(EFFECT_SET_TREMOLO_CONTROL)
+	#if (HAS_EFFECT(EFFECT_TREMOLO) || HAS_EFFECT(EFFECT_S3M_TREMOLO)) \
+		&& HAS_EFFECT(EFFECT_SET_TREMOLO_CONTROL)
 	#define TREMOLO_CONTROL_PARAM(ch) ((ch)->tremolo_control_param)
 	uint8_t tremolo_control_param;
 	#else
@@ -696,10 +770,13 @@ struct xm_channel_context_s {
 	#endif
 
 	#define HAS_VIBRATO (HAS_EFFECT(EFFECT_VIBRATO) \
+		|| HAS_EFFECT(EFFECT_FINE_VIBRATO) \
 		|| HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
 	#define HAS_VIBRATO_RESET ((HAS_EFFECT(EFFECT_VIBRATO) \
-	                            || HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)) \
-	                           && HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
+	                        || HAS_EFFECT(EFFECT_FINE_VIBRATO) \
+	                        || HAS_EFFECT(EFFECT_S3M_VIBRATO_VOLUME_SLIDE) \
+	                        || HAS_EFFECT(EFFECT_VIBRATO_VOLUME_SLIDE)) \
+	                     && HAS_VOLUME_EFFECT(VOLUME_EFFECT_VIBRATO))
 	#if HAS_VIBRATO
 	#define VIBRATO_OFFSET(ch) ((ch)->vibrato_offset)
 	uint8_t vibrato_param;
@@ -732,13 +809,13 @@ struct xm_channel_context_s {
 	#define AUTOVIBRATO_OFFSET(ch) 0
 	#endif
 
-	#define HAS_ARPEGGIO_RESET (HAS_EFFECT(EFFECT_ARPEGGIO) \
+	#define HAS_ARPEGGIO_RESET (HAS_ARPEGGIO \
 		&& HAS_FEATURE(FEATURE_ACCURATE_ARPEGGIO_GLISSANDO))
 	#if HAS_ARPEGGIO_RESET
 	bool should_reset_arpeggio;
 	#endif
 
-	#if HAS_EFFECT(EFFECT_ARPEGGIO)
+	#if HAS_ARPEGGIO
 	#define ARP_NOTE_OFFSET(ch) ((ch)->arp_note_offset)
 	uint8_t arp_note_offset; /* in full semitones */
 	#else
@@ -747,8 +824,24 @@ struct xm_channel_context_s {
 
 	#if HAS_EFFECT(EFFECT_TREMOR)
 	uint8_t tremor_param;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_TREMOR) || HAS_EFFECT(EFFECT_S3M_TREMOR)
 	uint8_t tremor_ticks; /* Decrements from max 16 */
 	bool tremor_on;
+	#endif
+
+	#define HAS_GLOBAL_EFFECT_MEMORY (HAS_EFFECT(EFFECT_S3M_PORTAMENTO_UP) \
+	            || HAS_EFFECT(EFFECT_S3M_PORTAMENTO_DOWN) \
+	            || HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE) \
+	            || HAS_EFFECT(EFFECT_S3M_VIBRATO_VOLUME_SLIDE) \
+	            || HAS_EFFECT(EFFECT_S3M_TONE_PORTAMENTO_VOLUME_SLIDE) \
+	            || HAS_EFFECT(EFFECT_S3M_TREMOR) \
+	            || HAS_EFFECT(EFFECT_S3M_MULTI_RETRIG_NOTE) \
+	            || HAS_EFFECT(EFFECT_S3M_ARPEGGIO) \
+	            || HAS_EFFECT(EFFECT_S3M_TREMOLO))
+	#if HAS_GLOBAL_EFFECT_MEMORY
+	uint8_t effect_param;
 	#endif
 
 	#if HAS_SUSTAIN
@@ -765,19 +858,26 @@ struct xm_channel_context_s {
 	#define CHANNEL_MUTED(ch) false
 	#endif
 
-	#define CHANNEL_CONTEXT_PADDING (4 \
+	#define CHANNEL_CONTEXT_PADDING (2 \
 		+ 4*!XM_TIMING_FUNCTIONS \
-		+ 2*!HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
-		+ 3*!HAS_EFFECT(EFFECT_TREMOR) \
-		+ !HAS_EFFECT(EFFECT_ARPEGGIO) \
+		+ !HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
+		+ !(HAS_EFFECT(EFFECT_MULTI_RETRIG_NOTE) \
+		       || HAS_EFFECT(EFFECT_S3M_MULTI_RETRIG_NOTE)) \
+		+ !HAS_EFFECT(EFFECT_TREMOR) \
+		+ 2*!(HAS_EFFECT(EFFECT_TREMOR) \
+		       || HAS_EFFECT(EFFECT_S3M_TREMOR)) \
+		+ !HAS_ARPEGGIO \
 		+ !HAS_ARPEGGIO_RESET \
 		+ !HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE) \
 		+ !HAS_EFFECT(EFFECT_PORTAMENTO_UP) \
 		+ !HAS_EFFECT(EFFECT_PORTAMENTO_DOWN) \
-		+ 2*!HAS_EFFECT(EFFECT_TREMOLO) \
+		+ !HAS_EFFECT(EFFECT_TREMOLO) \
+		+ !(HAS_EFFECT(EFFECT_TREMOLO) \
+		       || HAS_EFFECT(EFFECT_S3M_TREMOLO)) \
 		+ !(HAS_EFFECT(EFFECT_TREMOLO) \
 		       && HAS_EFFECT(EFFECT_SET_TREMOLO_CONTROL)) \
 		+ !HAS_VOLUME_OFFSET \
+		+ !HAS_GLOBAL_EFFECT_MEMORY \
 		+ !HAS_VOLUME_SLIDE \
 		+ 3*!HAS_VIBRATO \
 		+ !(HAS_VIBRATO && HAS_VIBRATO_RESET) \
@@ -787,7 +887,7 @@ struct xm_channel_context_s {
 		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_UP) \
 		+ !HAS_EFFECT(EFFECT_EXTRA_FINE_PORTAMENTO_DOWN) \
 		+ !(HAS_PANNING && HAS_EFFECT(EFFECT_PANNING_SLIDE)) \
-		+ 2*!HAS_EFFECT(EFFECT_PATTERN_LOOP) \
+		+ 2*!HAS_LOOPS \
 		+ !HAS_EFFECT(EFFECT_SET_SAMPLE_OFFSET) \
 		+ !HAS_SAMPLE_OFFSET_INVALID \
 		+ !HAS_EFFECT(EFFECT_FINE_VOLUME_SLIDE_UP) \
@@ -801,6 +901,7 @@ struct xm_channel_context_s {
 		+ !HAS_SUSTAIN \
 		+ !XM_MUTING_FUNCTIONS \
 		+ !HAS_PANNING \
+		+ !(HAS_PANNING && HAS_EFFECT(EFFECT_SET_CHANNEL_PANNING)) \
 		+ !HAS_FINETUNES)
 	#if CHANNEL_CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CHANNEL_CONTEXT_PADDING % POINTER_SIZE];
@@ -836,6 +937,14 @@ struct xm_context_s {
 	uint32_t generated_samples;
 	#endif
 
+	#if XM_SAMPLE_RATE == 0
+	#define CURRENT_SAMPLE_RATE(ctx) ((ctx)->current_sample_rate)
+	uint16_t current_sample_rate; /* Output sample rate, typically 44100 or
+	                                 48000 */
+	#else
+	#define CURRENT_SAMPLE_RATE(ctx) ((uint16_t)XM_SAMPLE_RATE)
+	#endif
+
 	uint16_t current_table_index; /* 0..(module.length) */
 	uint8_t current_tick; /* Typically 0..(ctx->tempo) */
 	uint8_t current_row;
@@ -851,10 +960,10 @@ struct xm_context_s {
 	#define HAS_GLOBAL_VOLUME (HAS_EFFECT(EFFECT_SET_GLOBAL_VOLUME) \
 	                           || HAS_EFFECT(EFFECT_GLOBAL_VOLUME_SLIDE))
 	#if HAS_GLOBAL_VOLUME
-	#define GLOBAL_VOLUME(ctx) ((ctx)->global_volume)
+	#define CURRENT_GLOBAL_VOLUME(ctx) ((ctx)->global_volume)
 	uint8_t global_volume; /* 0..=MAX_VOLUME */
 	#else
-	#define GLOBAL_VOLUME(ctx) MAX_VOLUME
+	#define CURRENT_GLOBAL_VOLUME(ctx) DEFAULT_GLOBAL_VOLUME(&ctx->module)
 	#endif
 
 	#if HAS_HARDCODED_TEMPO
@@ -863,14 +972,14 @@ struct xm_context_s {
 	#define CURRENT_TEMPO(ctx) ((ctx)->current_tempo)
 	uint8_t current_tempo; /* 0..MIN_BPM */
 	#else
-	#define CURRENT_TEMPO(ctx) MODULE_TEMPO(&ctx->module)
+	#define CURRENT_TEMPO(ctx) DEFAULT_TEMPO(&ctx->module)
 	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_BPM)
 	#define CURRENT_BPM(ctx) ((ctx)->current_bpm)
 	uint8_t current_bpm; /* MIN_BPM..=MAX_BPM */
 	#else
-	#define CURRENT_BPM(ctx) MODULE_BPM(&ctx->module)
+	#define CURRENT_BPM(ctx) DEFAULT_BPM(&ctx->module)
 	#endif
 
 	#if HAS_EFFECT(EFFECT_PATTERN_BREAK)
@@ -881,7 +990,7 @@ struct xm_context_s {
 	#endif
 
 	#define HAS_POSITION_JUMP (HAS_EFFECT(EFFECT_JUMP_TO_ORDER) \
-	                           || HAS_EFFECT(EFFECT_PATTERN_LOOP))
+	                           || HAS_LOOPS)
 	#if HAS_POSITION_JUMP
 	#define POSITION_JUMP(ctx) ((ctx)->position_jump)
 	bool position_jump;
@@ -906,7 +1015,7 @@ struct xm_context_s {
 	#define LOOP_COUNT(ctx) 0
 	#endif
 
-	#define CONTEXT_PADDING (2 \
+	#define CONTEXT_PADDING (0 \
 		+ 4*!XM_TIMING_FUNCTIONS \
 		+ !HAS_GLOBAL_VOLUME \
 		+ 2*!HAS_POSITION_JUMP \
@@ -915,7 +1024,8 @@ struct xm_context_s {
 		+ 2*!HAS_EFFECT(EFFECT_DELAY_PATTERN) \
 		+ !HAS_EFFECT(EFFECT_SET_TEMPO) \
 		+ !HAS_EFFECT(EFFECT_SET_BPM) \
-		+ (XM_LOOPING_TYPE != 2))
+		+ (XM_LOOPING_TYPE != 2) \
+		+ 2*(XM_SAMPLE_RATE != 0))
 	#if CONTEXT_PADDING % POINTER_SIZE
 	char __pad[CONTEXT_PADDING % POINTER_SIZE];
 	#endif
@@ -923,4 +1033,6 @@ struct xm_context_s {
 
 /* ----- Internal functions ----- */
 
+uint16_t xm_rand16(uint32_t*) __attribute__((nonnull)) __attribute__((visibility("hidden")));
 void xm_tick(xm_context_t*) __attribute__((nonnull)) __attribute__((visibility("hidden")));
+void xm_print_pattern(xm_context_t*, uint8_t) __attribute((nonnull)) __attribute__((visibility("hidden")));

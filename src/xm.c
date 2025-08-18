@@ -10,6 +10,11 @@
 
 
 
+uint16_t xm_rand16(uint32_t* state) {
+	/* https://arxiv.org/abs/2001.05304 */
+	return (uint16_t)(*state = *state * 0xD9F5 + 1);
+}
+
 void xm_set_max_loop_count([[maybe_unused]] xm_context_t* context,
                            [[maybe_unused]] uint8_t loopcnt) {
 	#if XM_LOOPING_TYPE == 2
@@ -234,7 +239,7 @@ bool xm_is_channel_active(const xm_context_t* ctx, uint8_t chn) {
 float xm_get_frequency_of_channel(const xm_context_t* ctx, uint8_t chn) {
 	assert(chn >= 1 && chn <= ctx->module.num_channels);
 	return (float)ctx->channels[chn - 1].step
-		* (float)SAMPLE_RATE(&ctx->module) / (float)SAMPLE_MICROSTEPS;
+		* (float)CURRENT_SAMPLE_RATE(ctx) / (float)SAMPLE_MICROSTEPS;
 }
 
 float xm_get_volume_of_channel(const xm_context_t* ctx, uint8_t chn) {
@@ -276,6 +281,13 @@ void xm_reset_context(xm_context_t* ctx) {
 	__builtin_memset(ctx->channels, 0, sizeof(xm_channel_context_t)
 	                                     * ctx->module.num_channels);
 
+	#if HAS_PANNING && HAS_EFFECT(EFFECT_SET_CHANNEL_PANNING)
+	for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+		ctx->channels[ch].base_panning =
+			DEFAULT_CHANNEL_PANNING(&ctx->module, ch);
+	}
+	#endif
+
 	#if XM_LOOPING_TYPE == 2
 	__builtin_memset(ctx->row_loop_count, 0, MAX_ROWS_PER_PATTERN
 	                                           * ctx->module.length);
@@ -288,15 +300,15 @@ void xm_reset_context(xm_context_t* ctx) {
 	                   - offsetof(xm_context_t, remaining_samples_in_tick));
 
 	#if HAS_GLOBAL_VOLUME
-	ctx->global_volume = MAX_VOLUME;
+	ctx->global_volume = DEFAULT_GLOBAL_VOLUME(&ctx->module);
 	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_TEMPO)
-	ctx->current_tempo = ctx->module.tempo;
+	ctx->current_tempo = DEFAULT_TEMPO(&ctx->module);
 	#endif
 
 	#if HAS_EFFECT(EFFECT_SET_BPM)
-	ctx->current_bpm = ctx->module.bpm;
+	ctx->current_bpm = DEFAULT_BPM(&ctx->module);
 	#endif
 
 	#if XM_TIMING_FUNCTIONS
@@ -317,10 +329,68 @@ void xm_reset_context(xm_context_t* ctx) {
 void xm_set_sample_rate([[maybe_unused]] xm_context_t* ctx,
                         [[maybe_unused]] uint16_t rate) {
 	#if XM_SAMPLE_RATE == 0
-	ctx->module.rate = rate;
+	ctx->current_sample_rate = rate;
 	#endif
 }
 
 uint16_t xm_get_sample_rate([[maybe_unused]] const xm_context_t* ctx) {
-	return SAMPLE_RATE(&ctx->module);
+	return CURRENT_SAMPLE_RATE(ctx);
+}
+
+/* For debugging */
+void xm_print_pattern([[maybe_unused]] xm_context_t* ctx,
+                      [[maybe_unused]] uint8_t pat) {
+	#if XM_VERBOSE
+	fprintf(stderr, "+-%02X-+", pat);
+	for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+		fprintf(stderr, "---- CH %02d -----+", ch + 1);
+	}
+	fprintf(stderr, "\n");
+	for(uint8_t row = 0; row < 64; ++row) {
+		fprintf(stderr, "| %02X | ", row);
+		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+			xm_pattern_slot_t* s = ctx->pattern_slots
+				+ (ctx->patterns[pat].rows_index + row)
+				  * ctx->module.num_channels
+				+ ch;
+
+			if(s->note == NOTE_KEY_OFF) {
+				fprintf(stderr, "OFF ");
+			} else if(s->note == NOTE_SWITCH) {
+				fprintf(stderr, "... ");
+			} else if(s->note) {
+				static const char* const notes[] = {
+					"C-", "C#", "D-", "D#", "E-", "F-",
+					"F#", "G-", "G#", "A-", "A#", "B-" };
+				fprintf(stderr, "%s%u ",
+				        notes[(s->note - 1) % 12],
+				        (s->note - 1) / 12);
+			} else {
+				fprintf(stderr, "... ");
+			}
+			if(s->instrument) {
+				fprintf(stderr, "%02X ", s->instrument);
+			} else {
+				fprintf(stderr, ".. ");
+			}
+			if(VOLUME_COLUMN(s)) {
+				fprintf(stderr, "%02X ", VOLUME_COLUMN(s));
+			} else {
+				fprintf(stderr, ".. ");
+			}
+			if(s->effect_type || s->effect_param) {
+				fprintf(stderr, "%02X%02X | ", s->effect_type,
+				       s->effect_param);
+			} else {
+				fprintf(stderr, ".... | ");
+			}
+		}
+		fprintf(stderr, "\n");
+	}
+	fprintf(stderr, "+----+");
+	for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+		fprintf(stderr, "----------------+");
+	}
+	fprintf(stderr, "\n");
+	#endif
 }

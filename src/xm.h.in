@@ -454,10 +454,10 @@ __attribute__((nonnull));
 
 
 /** Reset a context. This essentially seeks back to the first row of the first
- * pattern in the POT, and resets most of the effect's internal memory.
+ * pattern in the POT, and resets all internal state to their default values.
  *
  * In essence, this is like reloading the context from stratch, but is much
- * faster. However, some fields like tempo/BPM are not reset. */
+ * faster. */
 void xm_reset_context(xm_context_t*);
 
 
