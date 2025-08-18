@@ -22,7 +22,7 @@ static void append_str(char* restrict, uint16_t*, const char* restrict);
 static void append_u16(char*, uint16_t*, uint16_t);
 static void append_u64(char*, uint16_t*, uint64_t);
 
-static uint8_t FEATURE_WAVEFORM(uint8_t);
+[[maybe_unused]] static uint8_t FEATURE_WAVEFORM(uint8_t);
 static void analyze_note_trigger(xm_context_t*, xm_channel_context_t*, uint64_t*);
 
 /* ----- Function definitions ----- */
@@ -157,7 +157,7 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			<< FEATURE_DEFAULT_GLOBAL_VOLUME;
 	}
 
-	for(uint8_t i = 0; i < MAX_CHANNELS; ++i) {
+	for(uint8_t i = 0; i < NUM_CHANNELS(&ctx->module); ++i) {
 		if(DEFAULT_CHANNEL_PANNING(&ctx->module, i) != MAX_PANNING/2) {
 			used_features |= (uint64_t)1
 				<< FEATURE_DEFAULT_CHANNEL_PANNINGS;
@@ -181,7 +181,7 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 		}
 
 		xm_channel_context_t* ch = ctx->channels;
-		for(uint8_t i = 0; i < ctx->module.num_channels; ++i, ++ch) {
+		for(uint8_t i = 0; i < NUM_CHANNELS(&ctx->module); ++i, ++ch) {
 			/* XXX */
 			assert(ch->current->effect_type < 64
 			       || ch->current->effect_type == EFFECT_NOP);
@@ -337,7 +337,7 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 	}
 
 	if(panning_type == 0) {
-		#define PANNING_EQ(x, y) ((x) >= ctx->module.num_channels \
+		#define PANNING_EQ(x, y) ((x) >= NUM_CHANNELS(&ctx->module) \
 		                          || pannings[x] == -1 \
 		                          || pannings[x] == (y))
 		if(PANNING_EQ(0, 0x80) && PANNING_EQ(1, 0x80)
@@ -376,6 +376,10 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 		static_assert(MAX_BPM == 255);
 		used_features |= (uint64_t)255 << FEATURE_VARIABLE_BPM;
 	}
+
+	static_assert(MAX_CHANNELS == 255);
+	used_features |= (uint64_t)((~NUM_CHANNELS(&ctx->module)) & 255)
+		<< FEATURE_VARIABLE_CHANNEL_COUNT;
 
 	append_str(out, &off, " -DXM_DISABLED_EFFECTS=0x");
 	append_u64(out, &off, (uint64_t)(~used_effects));

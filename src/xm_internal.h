@@ -94,12 +94,15 @@ static_assert(XM_SAMPLE_RATE >= 0 && XM_SAMPLE_RATE <= UINT16_MAX,
 #define FEATURE_SAMPLE_FINETUNES 24
 #define FEATURE_SAMPLE_PANNINGS 25
 #define FEATURE_DEFAULT_GLOBAL_VOLUME 26
-#define FEATURE_VARIABLE_TEMPO 27 /* 27..32 (5 bits) */
-#define FEATURE_VARIABLE_BPM 32 /* 32..40 (8 bits) */
+#define FEATURE_DEFAULT_CHANNEL_PANNINGS 27
+#define FEATURE_WAVEFORM_CONTINUE 28
+
+#define FEATURE_VARIABLE_TEMPO 43 /* 43..48 (5 bits) */
+#define FEATURE_VARIABLE_BPM 48 /* 48..56 (8 bits) */
+#define FEATURE_VARIABLE_CHANNEL_COUNT 56 /* 56..64 (8 bits) */
 #define HAS_HARDCODED_TEMPO ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_TEMPO) & 31)
 #define HAS_HARDCODED_BPM ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_BPM) & 255)
-#define FEATURE_DEFAULT_CHANNEL_PANNINGS 40
-#define FEATURE_WAVEFORM_CONTINUE 41
+#define HAS_HARDCODED_CHANNEL_COUNT ((XM_DISABLED_FEATURES >> FEATURE_VARIABLE_CHANNEL_COUNT) & 255)
 
 static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
               || HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES),
@@ -441,7 +444,12 @@ struct xm_module_s {
 	uint16_t num_patterns;
 	uint16_t num_samples;
 
+	#if HAS_HARDCODED_CHANNEL_COUNT
+	#define NUM_CHANNELS(mod) ((uint8_t)HAS_HARDCODED_CHANNEL_COUNT)
+	#else
+	#define NUM_CHANNELS(mod) ((mod)->num_channels)
 	uint8_t num_channels;
+	#endif
 
 	#if HAS_INSTRUMENTS
 	#define NUM_INSTRUMENTS(mod) ((mod)->num_instruments)
@@ -498,9 +506,12 @@ struct xm_module_s {
 	#define DEFAULT_GLOBAL_VOLUME(mod) MAX_VOLUME
 	#endif
 
-	static_assert(MAX_CHANNELS % 8 == 7);
 	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
-	uint8_t default_channel_panning[MAX_CHANNELS];
+	#define X (HAS_HARDCODED_CHANNEL_COUNT ? \
+		HAS_HARDCODED_CHANNEL_COUNT : MAX_CHANNELS)
+	uint8_t default_channel_panning[((X + 7) / 8) * 8]; /* pad to multiple
+	                                                       of 8 */
+	#undef X
 	#define DEFAULT_CHANNEL_PANNING(mod, i) \
 		((mod)->default_channel_panning[i])
 	#else
@@ -531,18 +542,17 @@ struct xm_module_s {
 	char trackername[TRACKER_NAME_LENGTH];
 	#endif
 
-	#define MODULE_PADDING (2 \
+	#define MODULE_PADDING (1 \
 		+ !(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
 		    && HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)) \
 		+ !HAS_INSTRUMENTS \
 		+ (XM_LOOPING_TYPE != 2) \
 		+ (XM_LOOPING_TYPE == 1) \
+		+ (HAS_HARDCODED_CHANNEL_COUNT > 0) \
 		+ (HAS_HARDCODED_TEMPO > 0) \
 		+ (HAS_HARDCODED_BPM > 0) \
 		+ !HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME) \
-		+ !HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE) \
-		+ MAX_CHANNELS*!(HAS_PANNING \
-		    && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)))
+		+ !HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE))
 	#if MODULE_PADDING % POINTER_SIZE
 	char __pad[MODULE_PADDING % POINTER_SIZE];
 	#endif

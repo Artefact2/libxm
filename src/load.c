@@ -198,6 +198,14 @@ bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
 	return false;
 
  end:
+	#if HAS_HARDCODED_CHANNEL_COUNT
+	if(out->num_channels != HAS_HARDCODED_CHANNEL_COUNT) {
+		NOTICE("unsupported number of channels (expected %u, has %u)",
+		       HAS_HARDCODED_CHANNEL_COUNT, out->num_channels);
+		return false;
+	}
+	#endif
+
 	uint32_t sz = sizeof(xm_context_t);
 	if(ckd_add(&sz, sz, sizeof(xm_pattern_t) * out->num_patterns)
 	   || ckd_add(&sz, sz, sizeof(xm_pattern_slot_t)
@@ -302,7 +310,7 @@ xm_context_t* xm_create_context(char* restrict mempool,
 		assert(0);
 	}
 
-	assert(ctx->module.num_channels == p->num_channels);
+	assert(NUM_CHANNELS(&ctx->module) == p->num_channels);
 	assert(ctx->module.length == p->pot_length);
 	assert(ctx->module.num_patterns == p->num_patterns);
 	assert(ctx->module.num_rows == p->num_rows);
@@ -318,7 +326,7 @@ xm_context_t* xm_create_context(char* restrict mempool,
 
 static void xm_fixup_common(xm_context_t* ctx) {
 	xm_pattern_slot_t* slot = ctx->pattern_slots;
-	for(uint32_t i = ctx->module.num_rows * ctx->module.num_channels;
+	for(uint32_t i = ctx->module.num_rows * NUM_CHANNELS(&ctx->module);
 	    i; --i, ++slot) {
 		if(slot->effect_type == EFFECT_JUMP_TO_ORDER
 		   && slot->effect_param >= ctx->module.length) {
@@ -391,7 +399,7 @@ uint32_t xm_size_for_context(const xm_prescan_data_t* p) {
 uint32_t xm_context_size(const xm_context_t* ctx) {
 	return (uint32_t)
 		(sizeof(xm_context_t)
-		 + sizeof(xm_channel_context_t) * ctx->module.num_channels
+		 + sizeof(xm_channel_context_t) * NUM_CHANNELS(&ctx->module)
 		 #if HAS_INSTRUMENTS
 		 + sizeof(xm_instrument_t) * ctx->module.num_instruments
 		 #endif
@@ -399,7 +407,7 @@ uint32_t xm_context_size(const xm_context_t* ctx) {
 		 + sizeof(xm_pattern_t) * ctx->module.num_patterns
 		 + sizeof(xm_sample_point_t) * ctx->module.samples_data_length
 		 + sizeof(xm_pattern_slot_t) * ctx->module.num_rows
-		                             * ctx->module.num_channels
+		                             * NUM_CHANNELS(&ctx->module)
 		 #if XM_LOOPING_TYPE == 2
 		 + sizeof(uint8_t) * ctx->module.length * MAX_ROWS_PER_PATTERN
 		 #endif
@@ -433,7 +441,7 @@ static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
 void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
 	/* Reset internal pointers and playback position to 0 (normally not
 	   needed with correct usage of this function) */
-	for(uint16_t i = 0; i < ctx->module.num_channels; ++i) {
+	for(uint16_t i = 0; i < NUM_CHANNELS(&ctx->module); ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 		#if HAS_INSTRUMENTS
 		ch->instrument = 0;
@@ -697,9 +705,12 @@ static uint32_t xm_load_xm0104_module_header(xm_context_t* ctx,
 	mod->restart_position = (uint8_t)restart_position;
 	#endif
 
+	#if !HAS_HARDCODED_CHANNEL_COUNT
 	/* Prescan already checked MAX_CHANNELS */
 	static_assert(MAX_CHANNELS <= UINT8_MAX);
 	mod->num_channels = READ_U8(offset + 8);
+	#endif
+
 	mod->num_patterns = READ_U16(offset + 10);
 	assert(mod->num_patterns <= MAX_PATTERNS);
 
@@ -760,7 +771,7 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 	pat->rows_index = (uint16_t)ctx->module.num_rows;
 	ctx->module.num_rows += pat->num_rows;
 	xm_pattern_slot_t* slots = ctx->pattern_slots
-		+ pat->rows_index * ctx->module.num_channels;
+		+ pat->rows_index * NUM_CHANNELS(&ctx->module);
 
 	uint8_t packing_type = READ_U8(offset + 4);
 	if(packing_type != 0) {
@@ -907,8 +918,12 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 		}
 	}
 
-	if(k != pat->num_rows * ctx->module.num_channels) {
-		NOTICE("incomplete packed pattern data for pattern %ld, expected %u slots, got %u", pat - ctx->patterns, pat->num_rows * ctx->module.num_channels, k);
+	if(k != pat->num_rows * NUM_CHANNELS(&ctx->module)) {
+		NOTICE("incomplete packed pattern data for pattern %ld, "
+		       "expected %u slots, got %u",
+		       pat - ctx->patterns,
+		       pat->num_rows * NUM_CHANNELS(&ctx->module),
+		       k);
 	}
 	return offset + packed_patterndata_size;
 }
@@ -1267,7 +1282,7 @@ static void xm_load_xm0104(xm_context_t* ctx,
 
 	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
 	__builtin_memset(ctx->module.default_channel_panning, MAX_PANNING/2,
-	                 sizeof(ctx->module.default_channel_panning));
+	                 NUM_CHANNELS(&ctx->module));
 	#endif
 
 	/* Read pattern headers + slots */
@@ -1392,7 +1407,10 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 	ctx->module.default_global_volume = MAX_VOLUME;
 	#endif
 
+	#if !HAS_HARDCODED_CHANNEL_COUNT
 	ctx->module.num_channels = p->num_channels;
+	#endif
+
 	ctx->module.num_patterns = p->num_patterns;
 	ctx->module.num_rows = p->num_rows;
 	ctx->module.num_samples = p->num_samples;
@@ -1484,7 +1502,7 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 
 	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
 	/* Emulate hard panning (LRRL LRRL etc) */
-	for(uint8_t ch = 0; ch < MAX_CHANNELS; ++ch) {
+	for(uint8_t ch = 0; ch < p->num_channels; ++ch) {
 		ctx->module.default_channel_panning[ch] =
 			(((ch >> 1) ^ ch) & 1) ? 0xFF : 0x01;
 	}
@@ -1496,9 +1514,9 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 		pat->num_rows = 64;
 		pat->rows_index = 64 * i;
 
-		for(uint16_t j = 0; j < ctx->module.num_channels * pat->num_rows; ++j) {
+		for(uint16_t j = 0; j < NUM_CHANNELS(&ctx->module) * pat->num_rows; ++j) {
 			xm_pattern_slot_t* slot = ctx->pattern_slots
-				+ pat->rows_index * ctx->module.num_channels
+				+ pat->rows_index * NUM_CHANNELS(&ctx->module)
 				+ j;
 			/* 0bSSSSppppppppppppSSSSeeeePPPPPPPP
 			     ^ upper nibble of sample number
@@ -1731,10 +1749,12 @@ static void xm_load_mod_effect(xm_pattern_slot_t* slot) {
 }
 
 static void xm_fixup_mod_flt8(xm_context_t* ctx) {
+	assert(NUM_CHANNELS(&ctx->module) == 8);
+
 	for(uint8_t i = 0; i < ctx->module.num_patterns; ++i) {
 		xm_pattern_t* pat = ctx->patterns + i;
 		xm_pattern_slot_t* slots = ctx->pattern_slots
-			+ pat->rows_index * ctx->module.num_channels;
+			+ pat->rows_index * 8;
 		assert(pat->num_rows == 64);
 
 		/* ch1 ch2 ch3 ch4 ch1 ch2 ch3 ch4
@@ -1943,28 +1963,35 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 	}
 	#endif
 
+	/* 0..32 -> channel type (0..=7 = Left PCM, 8..=15 = Right PCM, 16..=255
+	   = Unsupported AdLib / Disabled channel) */
 	uint8_t channel_settings[32];
-	/* XXX: be smarter about mapping L channels to 0,2,4... and R channels to
-	   1,3,5,... */
-	uint8_t channel_map[32] = {16, 16, 16, 16, 16, 16, 16, 16,
-	                           16, 16, 16, 16, 16, 16, 16, 16,
-	                           16, 16, 16, 16, 16, 16, 16, 16,
+	/* Channel type -> libxm channel index */
+	uint8_t channel_map[16] = {16, 16, 16, 16, 16, 16, 16, 16,
 	                           16, 16, 16, 16, 16, 16, 16, 16};
+	uint8_t num_channels = 0;
 	READ_MEMCPY(channel_settings, 64, 32);
 	for(uint8_t ch = 0; ch < 32; ++ch) {
 		if(channel_settings[ch] >= 16) continue;
-		if(channel_map[channel_settings[ch]] < 16) continue;
-		channel_map[channel_settings[ch]] = ctx->module.num_channels;
-		++ctx->module.num_channels;
+		if(channel_map[channel_settings[ch]] < 16) {
+			NOTICE("multiple channels assigned to PCM%d, "
+			       "expect broken playback", channel_settings[ch]);
+			continue;
+		}
+		channel_map[channel_settings[ch]] = num_channels;
+		++num_channels;
 	}
+
+	#if !HAS_HARDCODED_CHANNEL_COUNT
+	ctx->module.num_channels = num_channels;
+	#else
+	assert(num_channels == NUM_CHANNELS(&ctx->module));
+	#endif
 
 	ctx->module.length = p->pot_length;
 	uint16_t pot_length = READ_U16(32);
 
 	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
-	__builtin_memset(ctx->module.default_channel_panning + 32, 0,
-	                 MAX_CHANNELS - 32);
-
 	/* In ST3, panning 0 is hard left and 0xF is hard right. True center
 	   (0x7.80) is impossible when stereo is enabled. */
 	/* NB: There is a BUG in dosbox 0.74.3 where S80/S8F do not work on the
@@ -1972,13 +1999,15 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 	if((READ_U8(51) & 128) == 0) {
 		/* Stereo bit off, use mono. In ST3 this setting has precedence
 		   over custom channel pannings. */
-		__builtin_memset(ctx->module.default_channel_panning, 0x80, 32);
+		__builtin_memset(ctx->module.default_channel_panning,
+		                 MAX_PANNING / 2, num_channels);
 	} else if(READ_U8(53) != 252) {
 		/* ST3 default pannings: 0x3(L) / 0xC(R) */
 		#define S3M_DEFAULT_PAN(x) ((x) < 8 ? 0x33 : 0xCC)
 		for(uint8_t ch = 0; ch < 32; ++ch) {
-			ctx->module.default_channel_panning[ch] =
-				S3M_DEFAULT_PAN(channel_settings[ch]);
+			uint8_t x = channel_settings[ch];
+			ctx->module.default_channel_panning[channel_map[x]]
+				= S3M_DEFAULT_PAN(x);
 		}
 	} else {
 		/* Use custom pannings */
@@ -1988,7 +2017,8 @@ static void xm_load_s3m(xm_context_t* restrict ctx,
 		                   + ctx->module.num_patterns),
 		            32);
 		for(uint8_t ch = 0; ch < 32; ++ch) {
-			uint8_t* pan = ctx->module.default_channel_panning + ch;
+			uint8_t* pan = ctx->module.default_channel_panning
+				+ channel_map[channel_settings[ch]];
 			if((*pan & 0b00100000) == 0) {
 				/* Ignore custom value, use default */
 				*pan = S3M_DEFAULT_PAN(channel_settings[ch]);
@@ -2140,7 +2170,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 	pat->rows_index = 64 * patidx;
 
 	xm_pattern_slot_t* slots = ctx->pattern_slots
-		+ pat->rows_index * ctx->module.num_channels;
+		+ pat->rows_index * NUM_CHANNELS(&ctx->module);
 
 	uint32_t stop = offset + READ_U16(offset);
 	offset += 2;
@@ -2153,7 +2183,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 
 		if(x == 0) {
 			/* End of row */
-			slots += ctx->module.num_channels;
+			slots += NUM_CHANNELS(&ctx->module);
 			++read_rows;
 			continue;
 		}
@@ -2435,13 +2465,14 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 	   possible (S3M pattern loops use *global* memory, not per channel; end
 	   of a pattern loop also sets loop origin to the next row) */
 	/* XXX: figure out multiple SBx on same row (ST3 infinitely loops?) */
-	slots = ctx->pattern_slots + pat->rows_index * ctx->module.num_channels;
+	slots = ctx->pattern_slots
+		+ pat->rows_index * NUM_CHANNELS(&ctx->module);
 	xm_pattern_slot_t* s = slots;
 	uint8_t loops[65][3] = {}; /* start row, end row, loop iterations */
 	uint8_t n = 0;
 	for(uint8_t row = 0; row < 64; ++row) {
 		uint8_t loop_param = 0;
-		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+		for(uint8_t ch = 0; ch < NUM_CHANNELS(&ctx->module); ++ch) {
 			if(s->effect_type == EFFECT_PATTERN_LOOP) {
 				loop_param = 128 | s->effect_param;
 				s->effect_type = 0;
@@ -2464,9 +2495,9 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 		if(loops[i][2] == 0) continue;
 		if(loops[i][0] == loops[i][1]) {
 			/* Repeat a single row */
-			s = slots + loops[i][0] * ctx->module.num_channels;
+			s = slots + loops[i][0] * NUM_CHANNELS(&ctx->module);
 			uint8_t ch = 0;
-			while(ch < ctx->module.num_channels) {
+			while(ch < NUM_CHANNELS(&ctx->module)) {
 				if(s->effect_type == 0
 				   && s->effect_param == 0) {
 					s->effect_type = EFFECT_ROW_LOOP;
@@ -2476,7 +2507,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 				++s;
 				++ch;
 			}
-			assert(ch < ctx->module.num_channels);
+			assert(ch < NUM_CHANNELS(&ctx->module));
 			continue;
 		}
 
@@ -2485,11 +2516,11 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 		assert(loops[i][1] < 64);
 
 		uint8_t ch = 0;
-		while(ch < ctx->module.num_channels) {
+		while(ch < NUM_CHANNELS(&ctx->module)) {
 			xm_pattern_slot_t* s_start = slots
-				+ loops[i][0] * ctx->module.num_channels + ch;
+				+ loops[i][0] * NUM_CHANNELS(&ctx->module) + ch;
 			xm_pattern_slot_t* s_end = slots
-				+ loops[i][1] * ctx->module.num_channels + ch;
+				+ loops[i][1] * NUM_CHANNELS(&ctx->module) + ch;
 			if(s_start->effect_type == 0
 			   && s_start->effect_param == 0
 			   && s_end->effect_type == 0
@@ -2501,7 +2532,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			}
 			++ch;
 		}
-		if(ch == ctx->module.num_channels) {
+		if(ch == NUM_CHANNELS(&ctx->module)) {
 			NOTICE("inaccurate loop fixup in pattern %x"
 			       " (no space left)", patidx);
 		}

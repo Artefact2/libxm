@@ -37,9 +37,10 @@ void xm_seek(xm_context_t* ctx, uint8_t pot, uint8_t row, uint8_t tick) {
 
 
 
-bool xm_mute_channel(xm_context_t* ctx, uint8_t channel,
+bool xm_mute_channel([[maybe_unused]] xm_context_t* ctx,
+                     uint8_t channel,
                      [[maybe_unused]] bool mute) {
-	assert(channel <= ctx->module.num_channels);
+	assert(channel <= NUM_CHANNELS(&ctx->module));
 
 	#if XM_MUTING_FUNCTIONS
 	bool old = ctx->channels[channel - 1].muted;
@@ -118,8 +119,8 @@ const char* xm_get_sample_name([[maybe_unused]] const xm_context_t* ctx,
 
 
 
-uint8_t xm_get_number_of_channels(const xm_context_t* ctx) {
-	return ctx->module.num_channels;
+uint8_t xm_get_number_of_channels([[maybe_unused]] const xm_context_t* ctx) {
+	return NUM_CHANNELS(&ctx->module);
 }
 
 uint16_t xm_get_module_length(const xm_context_t* ctx) {
@@ -218,32 +219,32 @@ uint32_t xm_get_latest_trigger_of_sample(const xm_context_t* ctx,
 	#endif
 }
 
-uint32_t xm_get_latest_trigger_of_channel(const xm_context_t* ctx,
+uint32_t xm_get_latest_trigger_of_channel([[maybe_unused]] const xm_context_t* c,
                                           uint8_t chn) {
-	assert(chn >= 1 && chn <= ctx->module.num_channels);
+	assert(chn >= 1 && chn <= NUM_CHANNELS(&c->module));
 
 	#if XM_TIMING_FUNCTIONS
-	return ctx->channels[chn - 1].latest_trigger;
+	return c->channels[chn - 1].latest_trigger;
 	#else
 	return 0;
 	#endif
 }
 
 bool xm_is_channel_active(const xm_context_t* ctx, uint8_t chn) {
-	assert(chn >= 1 && chn <= ctx->module.num_channels);
+	assert(chn >= 1 && chn <= NUM_CHANNELS(&ctx->module));
 	const xm_channel_context_t* ch = ctx->channels + (chn - 1);
 	return ch->sample != NULL
 		&& (ch->actual_volume[0] + ch->actual_volume[1]) > 0.001f;
 }
 
 float xm_get_frequency_of_channel(const xm_context_t* ctx, uint8_t chn) {
-	assert(chn >= 1 && chn <= ctx->module.num_channels);
+	assert(chn >= 1 && chn <= NUM_CHANNELS(&ctx->module));
 	return (float)ctx->channels[chn - 1].step
 		* (float)CURRENT_SAMPLE_RATE(ctx) / (float)SAMPLE_MICROSTEPS;
 }
 
 float xm_get_volume_of_channel(const xm_context_t* ctx, uint8_t chn) {
-	assert(chn >= 1 && chn <= ctx->module.num_channels);
+	assert(chn >= 1 && chn <= NUM_CHANNELS(&ctx->module));
 
 	/* Instead of duplicating the panning and volume formulas, just
 	   reciprocate the panning math from cached computed volumes */
@@ -253,7 +254,7 @@ float xm_get_volume_of_channel(const xm_context_t* ctx, uint8_t chn) {
 }
 
 float xm_get_panning_of_channel(const xm_context_t* ctx, uint8_t chn) {
-	assert(chn >= 1 && chn <= ctx->module.num_channels);
+	assert(chn >= 1 && chn <= NUM_CHANNELS(&ctx->module));
 
 	float x = ctx->channels[chn-1].actual_volume[0];
 	float y = ctx->channels[chn-1].actual_volume[1];
@@ -263,7 +264,7 @@ float xm_get_panning_of_channel(const xm_context_t* ctx, uint8_t chn) {
 }
 
 uint8_t xm_get_instrument_of_channel(const xm_context_t* ctx, uint8_t chn) {
-	assert(chn >= 1 && chn <= ctx->module.num_channels);
+	assert(chn >= 1 && chn <= NUM_CHANNELS(&ctx->module));
 	const xm_channel_context_t* ch = ctx->channels + (chn - 1);
 
 	#if HAS_INSTRUMENTS
@@ -279,10 +280,10 @@ uint8_t xm_get_instrument_of_channel(const xm_context_t* ctx, uint8_t chn) {
 
 void xm_reset_context(xm_context_t* ctx) {
 	__builtin_memset(ctx->channels, 0, sizeof(xm_channel_context_t)
-	                                     * ctx->module.num_channels);
+	                                     * NUM_CHANNELS(&ctx->module));
 
 	#if HAS_PANNING && HAS_EFFECT(EFFECT_SET_CHANNEL_PANNING)
-	for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+	for(uint8_t ch = 0; ch < NUM_CHANNELS(&ctx->module); ++ch) {
 		ctx->channels[ch].base_panning =
 			DEFAULT_CHANNEL_PANNING(&ctx->module, ch);
 	}
@@ -342,16 +343,16 @@ void xm_print_pattern([[maybe_unused]] xm_context_t* ctx,
                       [[maybe_unused]] uint8_t pat) {
 	#if XM_VERBOSE
 	fprintf(stderr, "+-%02X-+", pat);
-	for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+	for(uint8_t ch = 0; ch < NUM_CHANNELS(&ctx->module); ++ch) {
 		fprintf(stderr, "---- CH %02d -----+", ch + 1);
 	}
 	fprintf(stderr, "\n");
 	for(uint8_t row = 0; row < 64; ++row) {
 		fprintf(stderr, "| %02X | ", row);
-		for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+		for(uint8_t ch = 0; ch < NUM_CHANNELS(&ctx->module); ++ch) {
 			xm_pattern_slot_t* s = ctx->pattern_slots
 				+ (ctx->patterns[pat].rows_index + row)
-				  * ctx->module.num_channels
+				  * NUM_CHANNELS(&ctx->module)
 				+ ch;
 
 			if(s->note == NOTE_KEY_OFF) {
@@ -388,7 +389,7 @@ void xm_print_pattern([[maybe_unused]] xm_context_t* ctx,
 		fprintf(stderr, "\n");
 	}
 	fprintf(stderr, "+----+");
-	for(uint8_t ch = 0; ch < ctx->module.num_channels; ++ch) {
+	for(uint8_t ch = 0; ch < NUM_CHANNELS(&ctx->module); ++ch) {
 		fprintf(stderr, "----------------+");
 	}
 	fprintf(stderr, "\n");

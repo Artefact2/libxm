@@ -1220,13 +1220,13 @@ static void xm_row(xm_context_t* ctx) {
 
 	xm_pattern_t* cur = ctx->patterns
 		+ ctx->module.pattern_table[ctx->current_table_index];
-	xm_pattern_slot_t* s = ctx->pattern_slots + ctx->module.num_channels
+	xm_pattern_slot_t* s = ctx->pattern_slots + NUM_CHANNELS(&ctx->module)
 		* (cur->rows_index + ctx->current_row);
 	xm_channel_context_t* ch = ctx->channels;
 	bool in_a_loop = false;
 
 	/* Read notes… */
-	for(uint8_t i = 0; i < ctx->module.num_channels; ++i, ++ch, ++s) {
+	for(uint8_t i = 0; i < NUM_CHANNELS(&ctx->module); ++i, ++ch, ++s) {
 		ch->current = s;
 
 		if(!HAS_EFFECT(EFFECT_DELAY_NOTE)
@@ -1390,7 +1390,7 @@ void xm_tick(xm_context_t* ctx) {
 	}
 	#endif
 
-	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
+	for(uint8_t i = 0; i < NUM_CHANNELS(&ctx->module); ++i) {
 		xm_channel_context_t* ch = ctx->channels + i;
 
 		xm_tick_envelopes(ch);
@@ -1960,7 +1960,7 @@ static void xm_sample_unmixed(xm_context_t* ctx, float* out_lr) {
 		xm_tick(ctx);
 	}
 
-	for(uint8_t i = 0; i < ctx->module.num_channels; ++i, out_lr += 2) {
+	for(uint8_t i = 0; i < NUM_CHANNELS(&ctx->module); ++i, out_lr += 2) {
 		__builtin_memset(out_lr, 0, 2 * sizeof(float));
 		xm_next_of_channel(ctx, ctx->channels + i,
 		                   out_lr, out_lr + 1);
@@ -1978,14 +1978,14 @@ static void xm_sample(xm_context_t* ctx, float* out_left, float* out_right) {
 		xm_tick(ctx);
 	}
 
-	for(uint8_t i = 0; i < ctx->module.num_channels; ++i) {
+	for(uint8_t i = 0; i < NUM_CHANNELS(&ctx->module); ++i) {
 		xm_next_of_channel(ctx, ctx->channels + i, out_left, out_right);
 	}
 
-	assert(*out_left <= ctx->module.num_channels);
-	assert(*out_left >= -ctx->module.num_channels);
-	assert(*out_right <= ctx->module.num_channels);
-	assert(*out_right >= -ctx->module.num_channels);
+	assert(*out_left <= NUM_CHANNELS(&ctx->module));
+	assert(*out_left >= -NUM_CHANNELS(&ctx->module));
+	assert(*out_right <= NUM_CHANNELS(&ctx->module));
+	assert(*out_right >= -NUM_CHANNELS(&ctx->module));
 }
 
 void xm_generate_samples(xm_context_t* ctx,
@@ -2020,7 +2020,7 @@ void xm_generate_samples_unmixed(xm_context_t* ctx,
 	ctx->generated_samples += numsamples;
 	#endif
 	for(uint16_t i = 0; i < numsamples;
-	    ++i, out += ctx->module.num_channels * 2) {
+	    ++i, out += NUM_CHANNELS(&ctx->module) * 2) {
 		xm_sample_unmixed(ctx, out);
 	}
 }
