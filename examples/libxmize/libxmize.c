@@ -29,9 +29,9 @@ static void zero_waveforms(xm_context_t* ctx) {
 
 __attribute__((noreturn))
 int main(int argc, char** argv) {
-	if(argc < 2) {
+	if(argc < 3) {
 		fprintf(stderr,
-		        "Usage: %s [--zero-all-waveforms] [--analyze] <in.xm>\n",
+		        "Usage: %s [--zero-all-waveforms] analyze|save|dump <in.xm|in.mod|in.s3m>\n",
 		        argv[0]);
 		exit(1);
 	}
@@ -75,37 +75,53 @@ int main(int argc, char** argv) {
 	}
 
 	uint32_t ctx_size = xm_size_for_context(p);
-	char* buf = malloc(2 * ctx_size);
-	char* libxmized = buf + ctx_size;
+	char* buf = malloc(ctx_size);
+	if(buf == NULL) {
+		perror("malloc");
+		exit(1);
+	}
 
 	xm_context_t* ctx = xm_create_context(buf, p, xmdata,
 	                                      (uint32_t)in_length);
+	free(xmdata);
 
-	for(int i = 1; i < argc - 1; ++i) {
+	for(int i = 1; i < argc - 2; ++i) {
 		if(!strcmp("--zero-all-waveforms", argv[i])) {
 			zero_waveforms(ctx);
-		} else if(!strcmp("--analyze", argv[i])) {
-			char* analyze_out =
-				malloc((size_t)XM_ANALYZE_OUTPUT_SIZE);
-			if(analyze_out == NULL) {
-				perror("malloc");
-				exit(1);
-			}
-			xm_analyze(ctx, analyze_out);
-			fprintf(stdout, "%s\n", analyze_out);
-			exit(0);
 		} else {
-			fprintf(stderr, "unknown command-line argument: %s", argv[i]);
+			fprintf(stderr, "unknown command-line argument: %s\n",
+			        argv[i]);
 			exit(1);
 		}
 	}
 
-	xm_context_to_libxm(ctx, libxmized);
-
-	if(!fwrite(libxmized, ctx_size, 1, stdout)) {
-		perror("fwrite");
-		exit(1);
+	char* action = argv[argc - 2];
+	if(!strcmp("analyze", action)) {
+		char* analyze_out = malloc((size_t)XM_ANALYZE_OUTPUT_SIZE);
+		if(analyze_out == NULL) {
+			perror("malloc");
+			exit(1);
+		}
+		xm_analyze(ctx, analyze_out);
+		fprintf(stdout, "%s\n", analyze_out);
+		exit(0);
+	} else if(!strcmp("save", action)) {
+		/* TODO */
+	} else if(!strcmp("dump", action)) {
+		char* dump = malloc(xm_dump_size(ctx));
+		if(dump == NULL) {
+			perror("malloc");
+			exit(1);
+		}
+		xm_dump_context(ctx, dump);
+		if(!fwrite(dump, ctx_size, 1, stdout)) {
+			perror("fwrite");
+			exit(1);
+		}
+		exit(0);
 	}
 
-	exit(0);
+	fprintf(stderr, "unknown action %s, expected analyze, save or dump\n",
+	        action);
+	exit(1);
 }

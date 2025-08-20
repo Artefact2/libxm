@@ -12,7 +12,7 @@ foreach(X XM_VERBOSE XM_LINEAR_INTERPOLATION
 endforeach()
 set(XM_DISABLED_EFFECTS "0xFFFFFFFFFFFF42E1" CACHE STRING "" FORCE)
 set(XM_DISABLED_VOLUME_EFFECTS "0xEC00" CACHE STRING "" FORCE)
-set(XM_DISABLED_FEATURES "0xFFFFFFFFFFBFEE8C" CACHE STRING "" FORCE)
+set(XM_DISABLED_FEATURES "0x180017FFFD7FEE8C" CACHE STRING "" FORCE)
 set(XM_LOOPING_TYPE "0" CACHE STRING "" FORCE)
 set(XM_SAMPLE_TYPE "int16_t" CACHE STRING "" FORCE)
 set(XM_SAMPLE_RATE "48000" CACHE STRING "" FORCE)
@@ -21,7 +21,7 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory(../libxmize libxmize_build)
 
 add_custom_command(OUTPUT mus.libxm
-	COMMAND libxmize --zero-all-waveforms
+	COMMAND libxmize --zero-all-waveforms dump
 		${CMAKE_CURRENT_SOURCE_DIR}/mus.xm > mus.libxm
 	DEPENDS libxmize mus.xm)
 set_source_files_properties(xmprocdemo.c

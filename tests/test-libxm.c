@@ -123,10 +123,10 @@ static int pat0_pat1_eq(xm_context_t* ctx0) {
 	}
 
 	/* Copy the context */
-	char* buf = malloc(xm_context_size(ctx0));
+	char* buf = malloc(xm_dump_size(ctx0));
 	if(buf == NULL) return 1;
-	xm_context_to_libxm(ctx0, buf);
-	xm_context_t* ctx1 = xm_create_context_from_libxm(buf);
+	xm_dump_context(ctx0, buf);
+	xm_context_t* ctx1 = xm_restore_context(buf);
 	xm_seek(ctx1, 1, 0, 0);
 
 	float frames0[128], frames1[128];

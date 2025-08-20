@@ -317,7 +317,7 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	assert(NUM_INSTRUMENTS(&ctx->module) == p->num_instruments);
 	assert(ctx->module.num_samples == p->num_samples);
 	assert(ctx->module.samples_data_length == p->samples_data_length);
-	assert(xm_context_size(ctx) == ctx_size);
+	assert(xm_dump_size(ctx) == ctx_size);
 
 	xm_fixup_common(ctx);
 	xm_reset_context(ctx);
@@ -396,7 +396,7 @@ uint32_t xm_size_for_context(const xm_prescan_data_t* p) {
 	return p->context_size;
 }
 
-uint32_t xm_context_size(const xm_context_t* ctx) {
+uint32_t xm_dump_size(const xm_context_t* ctx) {
 	return (uint32_t)
 		(sizeof(xm_context_t)
 		 + sizeof(xm_channel_context_t) * NUM_CHANNELS(&ctx->module)
@@ -438,7 +438,7 @@ static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
 		(dest) = (void*)((intptr_t)(dest) + (intptr_t)(orig)); \
 	} while(0)
 
-void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
+void xm_dump_context(xm_context_t* restrict ctx, char* restrict out) {
 	/* Reset internal pointers and playback position to 0 (normally not
 	   needed with correct usage of this function) */
 	for(uint16_t i = 0; i < NUM_CHANNELS(&ctx->module); ++i) {
@@ -457,7 +457,7 @@ void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
 
 	/* (*) Everything done after this should be deterministically
 	   reversible */
-	uint32_t ctx_size = xm_context_size(ctx);
+	uint32_t ctx_size = xm_dump_size(ctx);
 	[[maybe_unused]] uint64_t old_hash = xm_fnv1a((void*)ctx, ctx_size);
 
 	#if XM_LIBXM_DELTA_SAMPLES
@@ -484,16 +484,16 @@ void xm_context_to_libxm(xm_context_t* restrict ctx, char* restrict out) {
 	__builtin_memcpy(out, ctx, ctx_size);
 
 	/* Restore the context back to the state marked (*) */
-	ctx = xm_create_context_from_libxm((void*)ctx);
+	ctx = xm_restore_context((void*)ctx);
 
 	assert(xm_fnv1a((void*)ctx, ctx_size) == old_hash);
 }
 
-xm_context_t* xm_create_context_from_libxm(char* data) {
+xm_context_t* xm_restore_context(char* data) {
 	ASSERT_ALIGNED(data, xm_context_t);
 	xm_context_t* ctx = (void*)data;
 
-	/* Reverse steps of xm_context_to_libxm() */
+	/* Reverse steps of xm_dump_context() */
 	APPLY_OFFSET(ctx->patterns, ctx);
 	APPLY_OFFSET(ctx->pattern_slots, ctx);
 

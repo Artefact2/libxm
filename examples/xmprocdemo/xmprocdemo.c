@@ -76,7 +76,7 @@ int main() {
 
 	if(fork()) {
 		/* parent */
-		ctx = xm_create_context_from_libxm((char*)libxm_data);
+		ctx = xm_restore_context((char*)libxm_data);
 		gen_waveforms();
 
 		xm_set_max_loop_count(ctx, 1);

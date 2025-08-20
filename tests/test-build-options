@@ -27,7 +27,7 @@ if($argc === 3 && $argv[1] === '--') {
 	passthru('make -sC '.escapeshellarg($build), $ret);
 	if($ret !== 0) die(1);
 	passthru(escapeshellcmd($build.'/libxmize')
-	         .' examples/xmprocdemo/mus.xm'
+	         .' dump examples/xmprocdemo/mus.xm'
 	         .' >'.escapeshellarg($build.'/mus.libxm')
 	         , $ret);
 	passthru(escapeshellcmd($build.'/libxmtoau')
