@@ -282,7 +282,7 @@ __attribute__((nonnull));
  * @note Sample numbers go from 0 to xm_get_number_of_samples(...)-1.
  *
  * @returns pointer to a string, or NULL on invalid inputs */
-const char* xm_get_sample_name(const xm_context_t*, uint8_t i, uint8_t s)
+const char* xm_get_sample_name(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((returns_nonnull))
 __attribute__((nonnull));
@@ -318,12 +318,8 @@ uint8_t xm_get_number_of_instruments(const xm_context_t*)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
-/** Get the number of samples of an instrument.
- *
- * @note Instrument numbers go from 1 to
- * xm_get_number_of_instruments(...).
- */
-uint8_t xm_get_number_of_samples(const xm_context_t*, uint8_t)
+/** Get the number of samples in the entire module. */
+uint16_t xm_get_number_of_samples(const xm_context_t*)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 
@@ -332,16 +328,13 @@ __attribute__((nonnull));
  * This buffer can be read from or written to, at any time, but the
  * length cannot change.
  *
- * @note Instrument numbers go from 1 to
- * xm_get_number_of_instruments(...).
- *
- * @note Sample numbers go from 0 to
- * xm_get_nubmer_of_samples(...,instr)-1.
+ * @note Sample numbers go from 0 to xm_get_number_of_samples(...)-1.
  *
  * @returns pointer to sample data, or NULL on error
  */
-xm_sample_point_t* xm_get_sample_waveform(xm_context_t*, uint8_t instr,
-                                uint8_t sample, uint32_t* out_length)
+xm_sample_point_t* xm_get_sample_waveform(xm_context_t*,
+                                          uint16_t sample,
+                                          uint32_t* out_length)
 __attribute__((warn_unused_result))
 __attribute__((returns_nonnull))
 __attribute__((nonnull));
@@ -389,11 +382,9 @@ __attribute__((nonnull));
  * @note Instrument numbers go from 1 to
  * xm_get_number_of_instruments(...).
  *
- * @note Sample numbers go from 0 to
- * xm_get_nubmer_of_samples(...,instr)-1.
+ * @note Sample numbers go from 0 to xm_get_nubmer_of_samples(...)-1.
  */
-uint32_t xm_get_latest_trigger_of_sample(const xm_context_t*, uint8_t instr,
-                                         uint8_t sample)
+uint32_t xm_get_latest_trigger_of_sample(const xm_context_t*, uint16_t)
 __attribute__((warn_unused_result))
 __attribute__((nonnull));
 

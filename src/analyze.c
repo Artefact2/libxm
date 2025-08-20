@@ -90,18 +90,23 @@ static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
 	}
 
 	[[maybe_unused]] xm_sample_t* smp;
-
 	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	xm_instrument_t* inst = ctx->instruments + ch->next_instrument - 1;
-
-	if(inst->sample_of_notes[ch->orig_note - 1] >= inst->num_samples) {
+	if(inst->sample_of_notes[ch->orig_note - 1] >= ctx->module.num_samples) {
 		*used_features |= (uint64_t)1 << FEATURE_INVALID_SAMPLES;
 		return;
 	}
-	smp = ctx->samples + inst->samples_index
-		+ inst->sample_of_notes[ch->orig_note - 1];
+	smp = ctx->samples + inst->sample_of_notes[ch->orig_note - 1];
 
-	if(inst->sample_of_notes[ch->orig_note - 1]) {
+	/* Find sample with lowest index (assumes this is the first/only loaded
+	   sample when FEATURE_MULTISAMPLE_INSTRUMENTS is off) */
+	uint16_t fs = UINT16_MAX;
+	for(uint8_t j = 0; j < MAX_NOTE; ++j) {
+		if(fs > inst->sample_of_notes[j]) {
+			fs = inst->sample_of_notes[j];
+		}
+	}
+	if(inst->sample_of_notes[ch->orig_note-1] != fs) {
 		*used_features |= (uint64_t)1 << FEATURE_MULTISAMPLE_INSTRUMENTS;
 	}
 

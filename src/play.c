@@ -1074,7 +1074,6 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 
 	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	new_sample = ctx->samples
-		+ ch->instrument->samples_index
 		+ ch->instrument->sample_of_notes[ch->orig_note - 1];
 	#else
 	new_sample = ctx->samples + ch->next_instrument - 1;
@@ -1083,7 +1082,7 @@ static void xm_trigger_note(xm_context_t* ctx, xm_channel_context_t* ch) {
 	#if HAS_FEATURE(FEATURE_INVALID_SAMPLES) \
 		&& HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	if(ch->instrument->sample_of_notes[ch->orig_note - 1]
-	   >= ch->instrument->num_samples) {
+	   >= ctx->module.num_samples) {
 		#if HAS_INSTRUMENTS
 		ch->instrument = NULL;
 		#endif

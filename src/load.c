@@ -65,11 +65,11 @@
 
 #define SAMPLE_POINT_FROM_S8(v) \
 	_Generic((xm_sample_point_t){}, int8_t: (v), int16_t: ((v) * 256), \
-	         float: (float)(v) / (float)INT8_MAX)
+	         float: (float)(v) / 128.f)
 
 #define SAMPLE_POINT_FROM_S16(v) \
 	_Generic((xm_sample_point_t){}, int8_t: xm_dither_16b_8b(v), \
-		int16_t: (v), float: (float)(v) / (float)INT16_MAX)
+		int16_t: (v), float: (float)(v) / 32768.f)
 
 struct xm_prescan_data_s {
 	uint32_t context_size;
@@ -200,7 +200,7 @@ bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
  end:
 	#if HAS_HARDCODED_CHANNEL_COUNT
 	if(out->num_channels != HAS_HARDCODED_CHANNEL_COUNT) {
-		NOTICE("unsupported number of channels (expected %u, has %u)",
+		NOTICE("unsupported number of channels (expected %llu, has %u)",
 		       HAS_HARDCODED_CHANNEL_COUNT, out->num_channels);
 		return false;
 	}
@@ -396,6 +396,12 @@ uint32_t xm_size_for_context(const xm_prescan_data_t* p) {
 	return p->context_size;
 }
 
+static int8_t xm_dither_16b_8b(int16_t x) {
+	static uint32_t state = 0; /* XXX: make me reentrant */
+	return (x >= 32512) ? 127 :
+		(int8_t)((x + (int16_t)(xm_rand16(&state) % 256)) / 256);
+}
+
 uint32_t xm_dump_size(const xm_context_t* ctx) {
 	return (uint32_t)
 		(sizeof(xm_context_t)
@@ -412,13 +418,6 @@ uint32_t xm_dump_size(const xm_context_t* ctx) {
 		 + sizeof(uint8_t) * ctx->module.length * MAX_ROWS_PER_PATTERN
 		 #endif
 		 );
-}
-
-
-static int8_t xm_dither_16b_8b(int16_t x) {
-	static uint32_t state = 0; /* XXX: make me reentrant */
-	return (x >= 32512) ? 127 :
-		(int8_t)((x + (int16_t)(xm_rand16(&state) % 256)) / 256);
 }
 
 static uint64_t xm_fnv1a(const unsigned char* data, uint32_t length) {
@@ -605,14 +604,13 @@ static bool xm_prescan_xm0104(const char* restrict moddata,
 	/* Read instrument headers */
 	for(uint16_t i = 0; i < out->num_instruments; ++i) {
 		uint16_t num_samples = READ_U16(offset + 27);
-		if(num_samples > MAX_SAMPLES_PER_INSTRUMENT) {
-			NOTICE("instrument %u has too many samples (%u > %u)",
-			       i + 1, num_samples, MAX_SAMPLES_PER_INSTRUMENT);
+		uint32_t inst_samples_bytes = 0;
+		if(ckd_add(&out->num_samples, out->num_samples,
+		           HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+		             ? num_samples : 1)) {
+			NOTICE("too many samples");
 			return false;
 		}
-		uint32_t inst_samples_bytes = 0;
-		out->num_samples += HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
-			? num_samples : 1;
 
 		/* Notice that, even if there's a "sample header size" in the
 		   instrument header, that value seems ignored, and might even
@@ -953,11 +951,13 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 		NOTICE("ignoring non-zero instrument type %d", type);
 	}
 
-	/* Prescan already checked MAX_SAMPLES_PER_INSTRUMENT */
-	static_assert(MAX_SAMPLES_PER_INSTRUMENT <= UINT8_MAX);
-	uint8_t num_samples = READ_U8(offset + 27);
+	uint16_t num_samples = READ_U8(offset + 27);
 	if(num_samples == 0) {
-		#if !HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+		#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+		for(uint8_t j = 0; j < MAX_NOTE; ++j) {
+			instr->sample_of_notes[j] = UINT16_MAX;
+		}
+		#else
 		ctx->module.num_samples += 1;
 		#endif
 		return offset + ins_header_size;
@@ -966,7 +966,14 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	/* Read extra header properties */
 
 	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
-	READ_MEMCPY(instr->sample_of_notes, offset + 33, MAX_NOTE);
+	for(uint8_t j = 0; j < MAX_NOTE; ++j) {
+		instr->sample_of_notes[j] = READ_U8(offset + 33 + j);
+		if(instr->sample_of_notes[j] >= num_samples) {
+			instr->sample_of_notes[j] = UINT16_MAX;
+		} else {
+			instr->sample_of_notes[j] += ctx->module.num_samples;
+		}
+	}
 	#endif
 
 	#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
@@ -1025,9 +1032,8 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	/* Read sample headers */
 	uint16_t samples_index = ctx->module.num_samples;
 	[[maybe_unused]] uint32_t extra_samples_size = 0;
+
 	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
-	instr->samples_index = samples_index;
-	instr->num_samples = num_samples;
 	ctx->module.num_samples += num_samples;
 	#else
 	ctx->module.num_samples += 1;
@@ -1429,8 +1435,9 @@ static void xm_load_mod(xm_context_t* restrict ctx,
 		#endif
 
 		#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
-		ins->num_samples = 1;
-		ins->samples_index = i;
+		for(uint8_t j = 0; j < MAX_NOTE; ++j) {
+			ins->sample_of_notes[j] = i;
+		}
 		#endif
 
 		xm_sample_t* smp = ctx->samples + i;
@@ -2069,9 +2076,9 @@ void xm_load_s3m_instrument(xm_context_t* restrict ctx,
 	#endif
 
 	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
-	xm_instrument_t* ins = ctx->instruments + idx;
-	ins->num_samples = 1;
-	ins->samples_index = idx;
+	for(uint8_t i = 0; i < MAX_NOTE; ++i) {
+		ctx->instruments[idx].sample_of_notes[i] = idx;
+	}
 	#endif
 
 	if(READ_U8(offset) != 1) {

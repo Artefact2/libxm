@@ -35,16 +35,16 @@ static void gen_waveforms(void) {
 	                                       float: -1.f);
 
 	/* Square, large duty, half volume */
-	buf = xm_get_sample_waveform(ctx, 1, 0, &len);
+	buf = xm_get_sample_waveform(ctx, 0, &len);
 	for(i = 0x40; i < len; ++i) buf[i] = MAX;
 
 	/* Square, small duty */
-	buf = xm_get_sample_waveform(ctx, 4, 0, &len);
+	buf = xm_get_sample_waveform(ctx, 3, &len);
 	for(i = 0; i < 0x30; ++i) buf[i] = MAX;
 	for(; i < len; ++i) buf[i] = MIN;
 
 	/* Ramp */
-	buf = xm_get_sample_waveform(ctx, 2, 0, &len);
+	buf = xm_get_sample_waveform(ctx, 1, &len);
 	for(i = 0; i < len; ++i)
 		buf[i] = _Generic((xm_sample_point_t){},
 		                  int8_t: (int8_t)
@@ -58,7 +58,7 @@ static void gen_waveforms(void) {
 	/* XXX: Drum */
 
 	/* Noise (simple linear congruence generator) */
-	buf = xm_get_sample_waveform(ctx, 8, 0, &len);
+	buf = xm_get_sample_waveform(ctx, 6, &len);
 	uint32_t next = 1;
 	for(i = 0; i < len; ++i) {
 		next = next * 214013 + 2531011;

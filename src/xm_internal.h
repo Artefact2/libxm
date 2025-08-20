@@ -202,7 +202,6 @@ static_assert(HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES)
 #define MAX_PATTERNS 256
 #define MAX_INSTRUMENTS UINT8_MAX
 #define MAX_CHANNELS UINT8_MAX
-#define MAX_SAMPLES_PER_INSTRUMENT UINT8_MAX
 
 /* Not the original key off (97), this is the value used by libxm once a ctx
    has been loaded */
@@ -364,17 +363,11 @@ struct xm_instrument_s {
 
 	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
 	static_assert(MAX_NOTE % 2 == 0);
-	uint8_t sample_of_notes[MAX_NOTE];
-	/* ctx->samples[index..(index+num_samples)] */
-	uint16_t samples_index;
+	uint16_t sample_of_notes[MAX_NOTE];
 	#endif
 
 	#if HAS_FADEOUT_VOLUME
 	uint16_t volume_fadeout;
-	#endif
-
-	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
-	uint8_t num_samples;
 	#endif
 
 	#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
@@ -396,10 +389,10 @@ struct xm_instrument_s {
 	char name[INSTRUMENT_NAME_LENGTH];
 	#endif
 
-	#define INSTRUMENT_PADDING (2 \
+	#define INSTRUMENT_PADDING (1 \
 		+ 4*!HAS_FEATURE(FEATURE_AUTOVIBRATO) \
 		+ 2*!HAS_FADEOUT_VOLUME \
-		+ (MAX_NOTE + 3)*!HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS) \
+		+ 2*MAX_NOTE*!HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS) \
 		+ !XM_MUTING_FUNCTIONS)
 	#if INSTRUMENT_PADDING % 4
 	char __pad[INSTRUMENT_PADDING % 4];

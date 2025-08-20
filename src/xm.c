@@ -85,16 +85,9 @@ const char* xm_get_instrument_name(const xm_context_t* ctx, uint8_t i) {
 	#endif
 }
 
-const char* xm_get_sample_name(const xm_context_t* ctx, uint8_t i, uint8_t s) {
-	assert(i >= 1 && i <= NUM_INSTRUMENTS(&ctx->module));
-
-	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
-	assert(s < ctx->instruments[i-1].num_samples);
-	return ctx->samples[ctx->instruments[i-1].samples_index + s].name;
-	#else
-	assert(s == 0);
-	return ctx->samples[i-1].name;
-	#endif
+const char* xm_get_sample_name(const xm_context_t* ctx, uint16_t s) {
+	assert(s <= ctx->module.num_samples);
+	return ctx->samples[s].name;
 }
 #else
 const char* xm_get_module_name([[maybe_unused]] const xm_context_t* ctx) {
@@ -111,8 +104,7 @@ const char* xm_get_instrument_name([[maybe_unused]] const xm_context_t* ctx,
 }
 
 const char* xm_get_sample_name([[maybe_unused]] const xm_context_t* ctx,
-                               [[maybe_unused]] uint8_t i,
-                               [[maybe_unused]] uint8_t s) {
+                               [[maybe_unused]] uint16_t s) {
 	return "";
 }
 #endif
@@ -139,30 +131,14 @@ uint8_t xm_get_number_of_instruments(const xm_context_t* ctx) {
 	return NUM_INSTRUMENTS(&ctx->module);
 }
 
-uint8_t xm_get_number_of_samples(const xm_context_t* ctx, uint8_t i) {
-	assert(i >= 1 && i <= NUM_INSTRUMENTS(&ctx->module));
-
-	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
-	return ctx->instruments[i-1].num_samples;
-	#else
-	return 1;
-	#endif
+uint16_t xm_get_number_of_samples(const xm_context_t* ctx) {
+	return ctx->module.num_samples;
 }
 
 xm_sample_point_t* xm_get_sample_waveform(xm_context_t* ctx,
-                                          uint8_t instrument,
-                                          uint8_t sample, uint32_t* length) {
-	assert(instrument > 0 && instrument <= NUM_INSTRUMENTS(&ctx->module));
-
-	xm_sample_t* s;
-	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
-	assert(sample < ctx->instruments[instrument-1].num_samples);
-	s = ctx->samples + ctx->instruments[instrument-1].samples_index + sample;
-	#else
-	assert(sample == 0);
-	s = ctx->samples + instrument - 1;
-	#endif
-
+                                          uint16_t sample, uint32_t* length) {
+	assert(sample <= ctx->module.num_samples);
+	xm_sample_t* s = ctx->samples + sample;
 	*length = s->length;
 	return ctx->samples_data + s->index;
 }
@@ -202,18 +178,11 @@ uint32_t xm_get_latest_trigger_of_instrument(const xm_context_t* ctx,
 }
 
 uint32_t xm_get_latest_trigger_of_sample(const xm_context_t* ctx,
-                                         uint8_t instr,
-                                         [[maybe_unused]] uint8_t sample) {
-	assert(instr >= 1 && instr <= NUM_INSTRUMENTS(&ctx->module));
+                                         uint16_t s) {
+	assert(s <= ctx->module.num_samples);
 
 	#if XM_TIMING_FUNCTIONS
-	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
-	assert(sample < ctx->instruments[instr-1].num_samples);
-	return ctx->samples[ctx->instruments[instr-1].samples_index + sample].latest_trigger;
-	#else
-	assert(sample == 0);
-	return ctx->samples[instr-1].latest_trigger;
-	#endif
+	return ctx->samples[s].latest_trigger;
 	#else
 	return 0;
 	#endif
