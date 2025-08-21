@@ -97,19 +97,6 @@ static void analyze_note_trigger(xm_context_t* ctx, xm_channel_context_t* ch,
 		return;
 	}
 	smp = ctx->samples + inst->sample_of_notes[ch->orig_note - 1];
-
-	/* Find sample with lowest index (assumes this is the first/only loaded
-	   sample when FEATURE_MULTISAMPLE_INSTRUMENTS is off) */
-	uint16_t fs = UINT16_MAX;
-	for(uint8_t j = 0; j < MAX_NOTE; ++j) {
-		if(fs > inst->sample_of_notes[j]) {
-			fs = inst->sample_of_notes[j];
-		}
-	}
-	if(inst->sample_of_notes[ch->orig_note-1] != fs) {
-		*used_features |= (uint64_t)1 << FEATURE_MULTISAMPLE_INSTRUMENTS;
-	}
-
 	#else
 	smp = ctx->samples + ch->next_instrument - 1;
 	#endif
@@ -169,6 +156,19 @@ void xm_analyze(xm_context_t* restrict ctx, char* restrict out) {
 			break;
 		}
 	}
+
+	#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+	for(uint8_t i = 0; i < NUM_INSTRUMENTS(&ctx->module); ++i) {
+		for(uint8_t j = 0; j < MAX_NOTE; ++j) {
+			if(ctx->instruments[i].sample_of_notes[j] != i) {
+				used_features |= (uint64_t)1
+					<< FEATURE_MULTISAMPLE_INSTRUMENTS;
+				goto break2;
+			}
+		}
+	}
+ break2:
+	#endif
 
 	while(XM_LOOPING_TYPE != 0 && LOOP_COUNT(ctx) == 0) {
 		xm_tick(ctx);

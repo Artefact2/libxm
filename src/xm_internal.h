@@ -922,7 +922,13 @@ struct xm_context_s {
 	#endif
 
 	xm_sample_t* samples;
+
+	#define SAMPLE_DATA(ctx, idx) _Generic((xm_sample_point_t){}, \
+			int8_t: (float)(ctx)->samples_data[idx] / 128.f, \
+			int16_t: (float)(ctx)->samples_data[idx] / 32768.f, \
+			float: (ctx)->samples_data[idx])
 	xm_sample_point_t* samples_data;
+
 	xm_channel_context_t* channels;
 
 	#if XM_LOOPING_TYPE == 2

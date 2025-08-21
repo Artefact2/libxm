@@ -9,7 +9,7 @@
 #include "common.h"
 #include <string.h>
 
-/* Load module in path, then dumb unmixed (2 floats per channel per frame) audio
+/* Load module in path, then dump unmixed (2 floats per channel per frame) audio
    frames to standard output. */
 static void generate_unmixed_f32ne(const char* path) {
 	xm_context_t* ctx = load_module(path);

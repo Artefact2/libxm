@@ -75,6 +75,7 @@ struct xm_prescan_data_s {
 	uint32_t context_size;
 	static_assert(MAX_PATTERNS * MAX_ROWS_PER_PATTERN <= 0xFFFFFF);
 	enum:uint8_t {
+		XM_FORMAT_XMIF,
 		XM_FORMAT_XM0104,
 		XM_FORMAT_MOD,
 		XM_FORMAT_MOD_FLT8, /* FLT8 requires special logic for its
@@ -96,6 +97,9 @@ const uint8_t XM_PRESCAN_DATA_SIZE = sizeof(xm_prescan_data_t);
 static int8_t xm_dither_16b_8b(int16_t);
 static uint64_t xm_fnv1a(const unsigned char*, uint32_t) __attribute__((const));
 static void xm_fixup_common(xm_context_t*);
+
+static bool xm_prescan_xmif(const char*, uint32_t, xm_prescan_data_t*);
+static void xm_load_xmif(xm_context_t*, const char*, uint32_t);
 
 static bool xm_prescan_xm0104(const char*, uint32_t, xm_prescan_data_t*);
 static void xm_load_xm0104(xm_context_t*, const char*, uint32_t);
@@ -122,6 +126,15 @@ static void xm_load_s3m_pattern(xm_context_t*, uint8_t, const uint8_t*, const ui
 
 bool xm_prescan_module(const char* restrict moddata, uint32_t moddata_length,
                        xm_prescan_data_t* restrict out) {
+	if(moddata_length >= 10 && memcmp("LIBXMIF\xFF", moddata + 2, 8) == 0) {
+		out->format = XM_FORMAT_XMIF;
+		if(xm_prescan_xmif(moddata, moddata_length, out)) {
+			goto end;
+		} else {
+			return false;
+		}
+	}
+
 	if(moddata_length >= 60
 	   && memcmp("Extended Module: ", moddata, 17) == 0
 	   && moddata[37] == 0x1A
@@ -289,6 +302,10 @@ xm_context_t* xm_create_context(char* restrict mempool,
 	assert(mempool - (char*)ctx == ctx_size);
 
 	switch(p->format) {
+	case XM_FORMAT_XMIF:
+		xm_load_xmif(ctx, moddata, moddata_length);
+		break;
+
 	case XM_FORMAT_XM0104:
 		xm_load_xm0104(ctx, moddata, moddata_length);
 		break;
@@ -401,6 +418,8 @@ static int8_t xm_dither_16b_8b(int16_t x) {
 	return (x >= 32512) ? 127 :
 		(int8_t)((x + (int16_t)(xm_rand16(&state) % 256)) / 256);
 }
+
+/* ----- Libxm dump, native endian ----- */
 
 uint32_t xm_dump_size(const xm_context_t* ctx) {
 	return (uint32_t)
@@ -515,6 +534,418 @@ xm_context_t* xm_restore_context(char* data) {
 	#endif
 
 	return ctx;
+}
+
+/* ----- Libxm interchange format: little endian ----- */
+
+/* Read module header:
+
+   0x00: u8, header size (in 8 byte blocks)
+   0x01: u8, format version (0: bump when breaking forward compat)
+   0x02: u8[8], 'LIBXMIF', '\xFF'
+   0x0A: u16, number of pattern orders
+   0x0C: u32, number of rows
+   0x10: u32, number of sample frames
+   0x14: u16, number of patterns
+   0x16: u16, number of samples
+   0x18: u8, number of instruments
+   0x19: u8, number of channels
+   0x1A: u8, restart position in POT
+   0x1B: u8, default tempo
+   0x1C: u8, default BPM
+   0x1D: u8, default global volume
+   0x1E: u16, module flags (bit 0: amiga frequencies,
+                            bit 1: fast ST3 volume slides)
+   0x20: u8, pattern stride (in 8 byte blocks)
+   0x21: u8, pattern slot stride (in 8 byte blocks)
+   0x22: u8, instrument stride (in 8 byte blocks)
+   0x23: u8, sample stride (in 8 byte blocks)
+   0x40: u8[256], default channel pannings
+
+   Forward $(header size)*8 bytes, then read patterns:
+
+   0x00: u16, rows index
+   0x02: u16, number of rows
+
+   Forward $(pattern stride)*8 bytes to the next pattern until $(number of
+   patterns) records are read, then read pattern slots:
+
+   0x00: u8, note
+   0x01: u8, instrument
+   0x02: u8, volume column
+   0x03: u8, effect type
+   0x04: u8, effect parameter
+
+   Forward $(pattern slot stride)*8 bytes to the next pattern slot until $(number
+   of channels) * $(number of rows) records are read, then read instruments:
+
+   0x00: (u16+u16)[12], volume envelope points (frame, value)
+   0x30: u8[4], volume envelope (used points, sustain, loop start, loop end)
+   0x34: panning envelope (same structure)
+   0x68: u16, volume fadeout
+   0x6A: u8[4], autovibrato (waveform, sweep, depth, rate)
+   0x70: u16[96], sample indices of any triggerable note
+
+   Forward $(instrument stride)*8 bytes to the next instrument until $(number of
+   instruments) records are read, then read samples:
+
+   0x00: u32, index of sample frames
+   0x04: u32, sample length in frames
+   0x08: u32, loop length
+   0x0C: u8, sample flags (bit 0: ping pong loop)
+   0x0D: u8, base volume
+   0x0E: u8, base panning
+   0x0F: s8, finetune
+   0x10: s8, relative note
+
+   Forward $(sample stride)*8 bytes to the next sample until $(number of samples)
+   records are read, then read sample frames:
+
+   0x00: f32, sample frame (mono, -1..1)
+
+   Forward 4 bytes to the next sample frame until $(number of sample frames)
+   records are read, then read pattern order table:
+
+   0x00: u16, pattern index
+
+   Forward 2 bytes to the next order until $(number of pattern orders) records
+   are read.
+   */
+
+static bool xm_prescan_xmif(const char* restrict moddata,
+                            uint32_t moddata_length,
+                            xm_prescan_data_t* restrict out) {
+	if(READ_U8(1) > 0) {
+		NOTICE("version too new");
+		return false;
+	}
+
+	uint32_t num_rows = READ_U32(0x0C);
+	if(num_rows >= 0x1000000) {
+		NOTICE("too many rows");
+		return false;
+	}
+
+	out->num_rows = num_rows & 0xFFFFFF;
+	out->samples_data_length = READ_U32(0x10);
+	out->num_patterns = READ_U16(0x14);
+	out->num_samples = READ_U16(0x16);
+	out->pot_length = READ_U16(0x0A);
+	out->num_channels = READ_U8(0x19);
+	out->num_instruments = READ_U8(0x18);
+	return true;
+}
+
+static void xm_load_xmif(xm_context_t* restrict ctx,
+                         const char* restrict moddata,
+                         uint32_t moddata_length) {
+	uint32_t offset = READ_U8(0) << 3;
+	uint16_t pattern_sz = READ_U8(0x20) << 3,
+		pattern_slot_sz = READ_U8(0x21) << 3,
+		instrument_sz = READ_U8(0x22) << 3,
+		sample_sz = READ_U8(0x23) << 3;
+
+	ctx->module.length = READ_U16(0x0A);
+	ctx->module.num_rows = READ_U32(0x0C);
+	ctx->module.samples_data_length = READ_U32(0x10);
+	ctx->module.num_patterns = READ_U16(0x14);
+	ctx->module.num_samples = READ_U16(0x16);
+
+	#if !HAS_HARDCODED_CHANNEL_COUNT
+	ctx->module.num_channels = READ_U8(0x19);
+	#endif
+
+	ctx->module.restart_position = READ_U8(0x1A);
+
+	#if !HAS_HARDCODED_TEMPO
+	ctx->module.default_tempo = READ_U8(0x1B);
+	#endif
+
+	#if !HAS_HARDCODED_BPM
+	ctx->module.default_bpm = READ_U8(0x1C);
+	#endif
+
+	#if HAS_FEATURE(FEATURE_DEFAULT_GLOBAL_VOLUME)
+	ctx->module.default_global_volume = READ_U8(0x1D);
+	#endif
+
+	#if HAS_FEATURE(FEATURE_LINEAR_FREQUENCIES) \
+		&& HAS_FEATURE(FEATURE_AMIGA_FREQUENCIES)
+	ctx->module.amiga_frequencies = (READ_U16(0x1E) & 1) > 0;
+	#endif
+
+	#if HAS_EFFECT(EFFECT_S3M_VOLUME_SLIDE)
+	ctx->module.fast_s3m_volume_slides = (READ_U16(0x1E) & 2) > 0;
+	#endif
+
+	#if HAS_PANNING && HAS_FEATURE(FEATURE_DEFAULT_CHANNEL_PANNINGS)
+	for(uint8_t i = 0; i < NUM_CHANNELS(&ctx->module); ++i) {
+		ctx->module.default_channel_panning[i] = READ_U8(0x40 + i);
+	}
+	#endif
+
+	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
+		ctx->patterns[i].rows_index = READ_U16(offset);
+		ctx->patterns[i].num_rows = READ_U16(offset + 0x02);
+		offset += pattern_sz;
+	}
+
+	xm_pattern_slot_t* s = ctx->pattern_slots;
+	for(uint32_t i = 0; i < ctx->module.num_rows; ++i) {
+		for(uint8_t j = 0; j < NUM_CHANNELS(&ctx->module); ++j) {
+			s->note = READ_U8(offset);
+			s->instrument = READ_U8(offset + 0x01);
+			#if HAS_VOLUME_COLUMN
+			s->volume_column = READ_U8(offset + 0x02);
+			#endif
+			s->effect_type = READ_U8(offset + 0x03);
+			s->effect_param = READ_U8(offset + 0x04);
+			s += 1;
+			offset += pattern_slot_sz;
+		}
+	}
+
+	#if HAS_INSTRUMENTS
+	ctx->module.num_instruments = READ_U8(0x18);
+	for(uint8_t i = 0; i < ctx->module.num_instruments; ++i) {
+		xm_envelope_t* envs[] = {
+			#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
+			&(ctx->instruments[i].volume_envelope),
+			#else
+			0,
+			#endif
+			#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
+			&(ctx->instruments[i].panning_envelope),
+			#else
+			0,
+			#endif
+		};
+		for(uint8_t j = 0; j < 2; ++j) {
+			if(envs[j] == 0) continue;
+			static_assert(MAX_ENVELOPE_POINTS >= 12);
+			for(uint8_t k = 0; k < 12; ++k) {
+				envs[j]->points[k].frame
+					= READ_U16(offset + 0x34*j + 0x04*k);
+				envs[j]->points[k].value
+					= (uint8_t)READ_U16(offset + 0x34*j
+					                    + 0x04*k + 0x02);
+			}
+			envs[j]->num_points = READ_U8(offset + 0x34*j + 0x30);
+			envs[j]->sustain_point = READ_U8(offset + 0x34*j + 0x31);
+			envs[j]->loop_start_point
+				= READ_U8(offset + 0x34*j + 0x32);
+			envs[j]->loop_end_point
+				= READ_U8(offset + 0x34*j + 0x33);
+		}
+		#if HAS_FADEOUT_VOLUME
+		ctx->instruments[i].volume_fadeout = READ_U16(offset + 0x68);
+		#endif
+		#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
+		ctx->instruments[i].vibrato_type = READ_U8(offset + 0x6A);
+		ctx->instruments[i].vibrato_sweep = READ_U8(offset + 0x6B);
+		ctx->instruments[i].vibrato_depth = READ_U8(offset + 0x6C);
+		ctx->instruments[i].vibrato_rate = READ_U8(offset + 0x6D);
+		#endif
+		#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+		static_assert(MAX_NOTE == 96);
+		for(uint8_t j = 0; j < MAX_NOTE; ++j) {
+			ctx->instruments[i].sample_of_notes[j]
+				= READ_U16(offset + 0x70 + 2*j);
+		}
+		#endif
+		offset += instrument_sz;
+	}
+	#else
+	offset += instrument_sz * READ_U8(0x18);
+	#endif
+
+	for(uint16_t i = 0; i < ctx->module.num_samples; ++i) {
+		ctx->samples[i].index = READ_U32(offset);
+		ctx->samples[i].length = READ_U32(offset + 0x04);
+		ctx->samples[i].loop_length = READ_U32(offset + 0x08);
+		#if HAS_FEATURE(FEATURE_PINGPONG_LOOPS)
+		ctx->samples[i].ping_pong = (READ_U8(offset + 0x0C) & 1) > 0;
+		#endif
+		ctx->samples[i].volume = (unsigned)READ_U8(offset + 0x0D) & 0x7F;
+		#if HAS_SAMPLE_PANNINGS
+		ctx->samples[i].panning = READ_U8(offset + 0x0E);
+		#endif
+		#if HAS_FEATURE(FEATURE_SAMPLE_FINETUNES)
+		ctx->samples[i].finetune = (int8_t)READ_U8(offset + 0x0F);
+		#endif
+		#if HAS_FEATURE(FEATURE_SAMPLE_RELATIVE_NOTES)
+		ctx->samples[i].relative_note = (int8_t)READ_U8(offset + 0x10);
+		#endif
+		offset += sample_sz;
+	}
+
+	for(uint32_t i = 0; i < ctx->module.samples_data_length; ++i) {
+		uint32_t x = READ_U32(offset);
+		__builtin_memcpy(ctx->samples_data + i, &x, 4);
+		offset += 4;
+	}
+
+	for(uint16_t i = 0; i < PATTERN_ORDER_TABLE_LENGTH
+		    && i < ctx->module.length; ++i) {
+		ctx->module.pattern_table[i] = (uint8_t)READ_U16(offset);
+		offset += 2;
+	}
+}
+
+#define XMIF_HEADER_SZ 0x140
+#define XMIF_PATTERN_SZ 0x08
+#define XMIF_PATTERN_SLOT_SZ 0x08
+#define XMIF_INSTRUMENT_SZ 0x130
+#define XMIF_SAMPLE_SZ 0x18
+static_assert(XMIF_HEADER_SZ % 8 == 0
+              && XMIF_PATTERN_SZ % 8 == 0
+              && XMIF_PATTERN_SLOT_SZ % 8 == 0
+              && XMIF_INSTRUMENT_SZ % 8 == 0
+              && XMIF_SAMPLE_SZ % 8 == 0);
+
+uint32_t xm_save_size(const xm_context_t* ctx) {
+	uint32_t sz, slots_sz, samples_sz;
+	assert(!ckd_add(&sz, XMIF_HEADER_SZ,
+	                ctx->module.num_patterns * XMIF_PATTERN_SZ));
+	assert(!ckd_mul(&slots_sz, ctx->module.num_rows,
+	                XMIF_PATTERN_SLOT_SZ * NUM_CHANNELS(&ctx->module)));
+	assert(!ckd_add(&sz, sz, slots_sz));
+	assert(!ckd_add(&sz, sz,
+	                NUM_INSTRUMENTS(&ctx->module) * XMIF_INSTRUMENT_SZ));
+	assert(!ckd_add(&sz, sz, ctx->module.num_samples * XMIF_SAMPLE_SZ));
+	assert(!ckd_mul(&samples_sz, ctx->module.samples_data_length, 4));
+	assert(!ckd_add(&sz, sz, samples_sz));
+	assert(!ckd_add(&sz, sz, ctx->module.length * 2));
+	return sz;
+}
+
+static_assert(sizeof(float) == 4);
+#define WRITE_U8(buf, val) *(uint8_t*)(buf) = (uint8_t)(val)
+#define WRITE_U16(buf, val) do { WRITE_U8(buf, val); \
+		WRITE_U8((buf) + 1, (val) >> 8); } while(0)
+#define WRITE_U32(buf, val) do { WRITE_U16(buf, val); \
+		WRITE_U16((buf) + 2, (val) >> 16); } while(0)
+#define WRITE_F32(buf, val) do { _Float32 x = (val); uint32_t y; \
+		__builtin_memcpy(&y, &x, 4); \
+		WRITE_U32(buf, y); } while(0)
+
+void xm_save_context(const xm_context_t* restrict ctx, char* restrict out) {
+	__builtin_memset(out, 0, xm_save_size(ctx));
+
+	WRITE_U8(out, XMIF_HEADER_SZ / 8);
+	WRITE_U8(out + 0x01, 0); /* version */
+	__builtin_memcpy(out + 0x02, "LIBXMIF\xFF", 8); /* magic */
+	WRITE_U16(out + 0x0A, ctx->module.length);
+	WRITE_U32(out + 0x0C, ctx->module.num_rows);
+	WRITE_U32(out + 0x10, ctx->module.samples_data_length);
+	WRITE_U16(out + 0x14, ctx->module.num_patterns);
+	WRITE_U16(out + 0x16, ctx->module.num_samples);
+	WRITE_U8(out + 0x18, NUM_INSTRUMENTS(&ctx->module));
+	WRITE_U8(out + 0x19, NUM_CHANNELS(&ctx->module));
+	WRITE_U8(out + 0x1A, ctx->module.restart_position);
+	WRITE_U8(out + 0x1B, DEFAULT_TEMPO(&ctx->module));
+	WRITE_U8(out + 0x1C, DEFAULT_BPM(&ctx->module));
+	WRITE_U8(out + 0x1D, DEFAULT_GLOBAL_VOLUME(&ctx->module));
+	WRITE_U16(out + 0x1E, AMIGA_FREQUENCIES(&ctx->module)
+	          | (FAST_S3M_VOLUME_SLIDES(&ctx->module) << 1));
+	WRITE_U8(out + 0x20, XMIF_PATTERN_SZ / 8);
+	WRITE_U8(out + 0x21, XMIF_PATTERN_SLOT_SZ / 8);
+	WRITE_U8(out + 0x22, XMIF_INSTRUMENT_SZ / 8);
+	WRITE_U8(out + 0x23, XMIF_SAMPLE_SZ / 8);
+	for(uint8_t i = 0; i < NUM_CHANNELS(&ctx->module); ++i) {
+		WRITE_U8(out + 0x40 + i,
+		         DEFAULT_CHANNEL_PANNING(&ctx->module, i));
+	}
+	out += XMIF_HEADER_SZ;
+
+	for(uint16_t i = 0; i < ctx->module.num_patterns; ++i) {
+		WRITE_U16(out, ctx->patterns[i].rows_index);
+		WRITE_U16(out + 0x02, ctx->patterns[i].num_rows);
+		out += XMIF_PATTERN_SZ;
+	}
+
+	xm_pattern_slot_t* s = ctx->pattern_slots;
+	for(uint32_t i = 0; i < ctx->module.num_rows; ++i) {
+		for(uint8_t j = 0; j < NUM_CHANNELS(&ctx->module); ++j) {
+			WRITE_U8(out, s->note);
+			WRITE_U8(out + 0x01, s->instrument);
+			WRITE_U8(out + 0x02, VOLUME_COLUMN(s));
+			WRITE_U8(out + 0x03, s->effect_type);
+			WRITE_U8(out + 0x04, s->effect_param);
+			s += 1;
+			out += XMIF_PATTERN_SLOT_SZ;
+		}
+	}
+
+	for(uint8_t i = 0; i < NUM_INSTRUMENTS(&ctx->module); ++i) {
+		xm_envelope_t* envs[] = {
+			#if HAS_FEATURE(FEATURE_VOLUME_ENVELOPES)
+			&(ctx->instruments[i].volume_envelope),
+			#else
+			0,
+			#endif
+			#if HAS_FEATURE(FEATURE_PANNING_ENVELOPES)
+			&(ctx->instruments[i].panning_envelope),
+			#else
+			0,
+			#endif
+		};
+		for(uint8_t j = 0; j < 2; ++j) {
+			if(envs[j] == 0) continue;
+			static_assert(MAX_ENVELOPE_POINTS >= 12);
+			for(uint8_t k = 0; k < 12; ++k) {
+				WRITE_U16(out + 0x34*j + 0x04*k,
+				          envs[j]->points[k].frame);
+				WRITE_U16(out + 0x34*j + 0x04*k + 0x02,
+				          envs[j]->points[k].value);
+			}
+			WRITE_U8(out + 0x34*j + 0x30, envs[j]->num_points);
+			WRITE_U8(out + 0x34*j + 0x31, envs[j]->sustain_point);
+			WRITE_U8(out + 0x34*j + 0x32, envs[j]->loop_start_point);
+			WRITE_U8(out + 0x34*j + 0x33, envs[j]->loop_end_point);
+		}
+		#if HAS_FADEOUT_VOLUME
+		WRITE_U16(out + 0x68, ctx->instruments[i].volume_fadeout);
+		#endif
+		#if HAS_FEATURE(FEATURE_AUTOVIBRATO)
+		WRITE_U8(out + 0x6A, ctx->instruments[i].vibrato_type);
+		WRITE_U8(out + 0x6B, ctx->instruments[i].vibrato_sweep);
+		WRITE_U8(out + 0x6C, ctx->instruments[i].vibrato_depth);
+		WRITE_U8(out + 0x6D, ctx->instruments[i].vibrato_rate);
+		#endif
+		for(uint8_t j = 0; j < MAX_NOTE; ++j) {
+			uint16_t smp_index;
+			#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
+			smp_index = ctx->instruments[i].sample_of_notes[j];
+			#else
+			smp_index = i;
+			#endif
+			WRITE_U16(out + 0x70 + 2*j, smp_index);
+		}
+		out += XMIF_INSTRUMENT_SZ;
+	}
+
+	for(uint16_t i = 0; i < ctx->module.num_samples; ++i) {
+		WRITE_U32(out, ctx->samples[i].index);
+		WRITE_U32(out + 0x04, ctx->samples[i].length);
+		WRITE_U32(out + 0x08, ctx->samples[i].loop_length);
+		WRITE_U8(out + 0x0C, PING_PONG(ctx->samples + i));
+		WRITE_U8(out + 0x0D, ctx->samples[i].volume);
+		WRITE_U8(out + 0x0E, PANNING(ctx->samples + i));
+		WRITE_U8(out + 0x0F, FINETUNE(ctx->samples + i));
+		WRITE_U8(out + 0x10, RELATIVE_NOTE(ctx->samples + i));
+		out += XMIF_SAMPLE_SZ;
+	}
+
+	for(uint32_t i = 0; i < ctx->module.samples_data_length; ++i) {
+		WRITE_F32(out, SAMPLE_DATA(ctx, i));
+		out += 4;
+	}
+
+	for(uint16_t i = 0; i < ctx->module.length; ++i) {
+		WRITE_U16(out, ctx->module.pattern_table[i]);
+		out += 2;
+	}
 }
 
 /* ----- Fasttracker II .XM (XM 0104): little endian ----- */
@@ -954,9 +1385,8 @@ static uint32_t xm_load_xm0104_instrument(xm_context_t* ctx,
 	uint16_t num_samples = READ_U8(offset + 27);
 	if(num_samples == 0) {
 		#if HAS_FEATURE(FEATURE_MULTISAMPLE_INSTRUMENTS)
-		for(uint8_t j = 0; j < MAX_NOTE; ++j) {
-			instr->sample_of_notes[j] = UINT16_MAX;
-		}
+		__builtin_memset(instr->sample_of_notes, 0xFF,
+		                 sizeof(instr->sample_of_notes));
 		#else
 		ctx->module.num_samples += 1;
 		#endif

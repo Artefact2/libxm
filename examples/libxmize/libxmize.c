@@ -102,7 +102,18 @@ int main(int argc, char** argv) {
 		fprintf(stdout, "%s\n", analyze_out);
 		exit(0);
 	} else if(!strcmp("save", action)) {
-		/* TODO */
+		size_t sz = xm_save_size(ctx);
+		char* out = malloc(sz);
+		if(out == NULL) {
+			perror("malloc");
+			exit(1);
+		}
+		xm_save_context(ctx, out);
+		if(!fwrite(out, sz, 1, stdout)) {
+			perror("fwrite");
+			exit(1);
+		}
+		exit(0);
 	} else if(!strcmp("dump", action)) {
 		char* dump = malloc(xm_dump_size(ctx));
 		if(dump == NULL) {

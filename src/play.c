@@ -1836,10 +1836,7 @@ static float xm_sample_at(const xm_context_t* ctx,
                           const xm_sample_t* sample, uint32_t k) {
 	assert(k < sample->length);
 	assert(sample->index + k < ctx->module.samples_data_length);
-	return _Generic((xm_sample_point_t){},
-	                int8_t: (float)ctx->samples_data[sample->index + k] / (float)INT8_MAX,
-	                int16_t: (float)ctx->samples_data[sample->index + k] / (float)INT16_MAX,
-	                float: ctx->samples_data[sample->index + k]);
+	return SAMPLE_DATA(ctx, sample->index + k);
 }
 
 /* XXX: rename me or merge with xm_next_of_channel */
