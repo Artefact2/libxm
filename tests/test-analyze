@@ -37,7 +37,7 @@ if($ret !== 0) die($ret);
 /* XXX: can be parallelized */
 for($i = 1; $i < $argc; ++$i) {
 	$cmflags = shell_exec(escapeshellcmd($tmp.'/full/test-analyze-helper')
-	                      .' --analyze '.escapeshellarg($argv[$i]));
+	                      .' analyze '.escapeshellarg($argv[$i]));
 
 	passthru('cmake '.COMMON_FLAGS.' '.trim($cmflags)
 	         .' -S '.escapeshellarg(__DIR__.'/../tests')
@@ -49,11 +49,11 @@ for($i = 1; $i < $argc; ++$i) {
 	         ' test-analyze-helper', $ret);
 	if($ret !== 0) die($ret);
 
-	passthru(escapeshellcmd($tmp.'/full/test-analyze-helper')
+	passthru(escapeshellcmd($tmp.'/full/test-analyze-helper').' compare'
 	         .' <('.escapeshellcmd($tmp.'/full/test-analyze-helper')
-	               .' '.escapeshellarg($argv[$i]).')'
+	               .' play '.escapeshellarg($argv[$i]).')'
 	         .' <('.escapeshellcmd($tmp.'/'.$i.'/test-analyze-helper')
-	               .' '.escapeshellarg($argv[$i]).')',
+	               .' play2 '.escapeshellarg($argv[$i]).')',
 	         $ret);
 
 	echo "\e[1m";

@@ -11,8 +11,33 @@
 
 /* Load module in path, then dump unmixed (2 floats per channel per frame) audio
    frames to standard output. */
-static void generate_unmixed_f32ne(const char* path) {
+static void generate_unmixed_f32ne(const char* path, bool recreate) {
 	xm_context_t* ctx = load_module(path);
+
+	if(recreate) {
+		uint32_t saved_sz = xm_save_size(ctx);
+		char* saved = malloc((size_t)saved_sz);
+		if(saved == NULL) {
+			perror("malloc");
+			exit(1);
+		}
+		xm_save_context(ctx, saved);
+		free(ctx);
+
+		xm_prescan_data_t* p = malloc((size_t)XM_PRESCAN_DATA_SIZE);
+		if(!xm_prescan_module(saved, saved_sz, p)) {
+			exit(1);
+		}
+		char* buf = malloc((size_t)xm_size_for_context(p));
+		if(buf == NULL) {
+			perror("malloc");
+			exit(1);
+		}
+		ctx = xm_create_context(buf, p, saved, saved_sz);
+		free(p);
+		free(saved);
+	}
+
 	xm_set_sample_rate(ctx, 44100);
 
 	if(xm_get_number_of_channels(ctx) * 2 > 4096) {
@@ -69,31 +94,41 @@ static int compare_f32ne_streams(const char* path1, const char* path2) {
 }
 
 int main(int argc, char** argv) {
-	if(argc == 2) {
-		generate_unmixed_f32ne(argv[1]);
-	} else if(argc == 3) {
-		if(strcmp(argv[1], "--analyze") == 0) {
-			char* analyze_out =
-				malloc((size_t)XM_ANALYZE_OUTPUT_SIZE);
-			if(analyze_out == NULL) {
-				perror("malloc");
-				return 1;
-			}
-			xm_context_t* ctx = load_module(argv[2]);
-			xm_analyze(ctx, analyze_out);
-			fprintf(stdout, "%s\n", analyze_out);
-		} else {
-			return compare_f32ne_streams(argv[1], argv[2]);
-		}
-	} else {
+	if(argc < 2) {
+	usage:
 		fprintf(stderr,
 		        "Usage: \n"
-		        "\t%s --analyze foo.xm\n"
-		        "\t%s <(build-generic/%s foo.xm)"
-		        " <(build-analyzed/%s foo.xm)\n",
+		        "\t%s analyze foo.xm\n"
+		        "\t%s compare <(build-generic/%s play foo.xm)"
+		        " <(build-analyzed/%s play foo.xm)\n",
 		        argv[0], argv[0], argv[0], argv[0]);
 		return 1;
 	}
 
-	return 0;
+	if(!strcmp(argv[1], "analyze")) {
+		if(argc != 3) goto usage;
+
+		char* analyze_out = malloc((size_t)XM_ANALYZE_OUTPUT_SIZE);
+		if(analyze_out == NULL) {
+			perror("malloc");
+			return 1;
+		}
+		xm_context_t* ctx = load_module(argv[2]);
+		xm_analyze(ctx, analyze_out);
+		fprintf(stdout, "%s\n", analyze_out);
+		return 0;
+	}
+
+	if(!strcmp(argv[1], "compare")) {
+		if(argc != 4) goto usage;
+		return compare_f32ne_streams(argv[2], argv[3]);
+	}
+
+	if(!strcmp(argv[1], "play") || !strcmp(argv[1], "play2")) {
+		if(argc != 3) goto usage;
+		generate_unmixed_f32ne(argv[2], !strcmp(argv[1], "play2"));
+		return 0;
+	}
+
+	goto usage;
 }
