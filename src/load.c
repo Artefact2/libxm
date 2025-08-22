@@ -71,6 +71,25 @@
 	_Generic((xm_sample_point_t){}, int8_t: xm_dither_16b_8b(v), \
 		int16_t: (v), float: (float)(v) / 32768.f)
 
+#define SAMPLE_POINT_FROM_F32(v) \
+	_Generic((xm_sample_point_t){}, \
+	         int8_t: xm_dither_16b_8b((int16_t)((v) * 32768.f)), \
+	         int16_t: ((int16_t)((v) * 32768.f)), \
+	         float: (v))
+
+/* Type punning helpers */
+static uint32_t F32_TO_U32(_Float32 x) {
+	uint32_t y;
+	__builtin_memcpy(&y, &x, 4);
+	return y;
+}
+
+static _Float32 U32_TO_F32(uint32_t x) {
+	_Float32 y;
+	__builtin_memcpy(&y, &x, 4);
+	return y;
+}
+
 struct xm_prescan_data_s {
 	uint32_t context_size;
 	static_assert(MAX_PATTERNS * MAX_ROWS_PER_PATTERN <= 0xFFFFFF);
@@ -479,8 +498,11 @@ void xm_dump_context(xm_context_t* restrict ctx, char* restrict out) {
 	[[maybe_unused]] uint64_t old_hash = xm_fnv1a((void*)ctx, ctx_size);
 
 	#if XM_LIBXM_DELTA_SAMPLES
-	for(uint32_t i = ctx->module.samples_data_length - 1; i > 0; --i) {
-		ctx->samples_data[i] -= ctx->samples_data[i-1];
+	/* Do nothing for floats, in practice this doesn't help */
+	if(_Generic((xm_sample_point_t){}, float: false, default: true)) {
+		for(uint32_t i = ctx->module.samples_data_length-1; i > 0; --i) {
+			ctx->samples_data[i] -= ctx->samples_data[i-1];
+		}
 	}
 	#endif
 
@@ -528,8 +550,10 @@ xm_context_t* xm_restore_context(char* data) {
 	#endif
 
 	#if XM_LIBXM_DELTA_SAMPLES
-	for(uint32_t i = 1; i < ctx->module.samples_data_length; ++i) {
-		ctx->samples_data[i] += ctx->samples_data[i-1];
+	if(_Generic((xm_sample_point_t){}, float: false, default: true)) {
+		for(uint32_t i = 1; i < ctx->module.samples_data_length; ++i) {
+			ctx->samples_data[i] += ctx->samples_data[i-1];
+		}
 	}
 	#endif
 
@@ -756,7 +780,7 @@ static void xm_load_xmif(xm_context_t* restrict ctx,
 		offset += instrument_sz;
 	}
 	#else
-	offset += instrument_sz * READ_U8(0x18);
+	offset += (uint32_t)instrument_sz * READ_U8(0x18);
 	#endif
 
 	for(uint16_t i = 0; i < ctx->module.num_samples; ++i) {
@@ -780,8 +804,8 @@ static void xm_load_xmif(xm_context_t* restrict ctx,
 	}
 
 	for(uint32_t i = 0; i < ctx->module.samples_data_length; ++i) {
-		uint32_t x = READ_U32(offset);
-		__builtin_memcpy(ctx->samples_data + i, &x, 4);
+		ctx->samples_data[i] =
+			SAMPLE_POINT_FROM_F32(U32_TO_F32(READ_U32(offset)));
 		offset += 4;
 	}
 
@@ -825,9 +849,6 @@ static_assert(sizeof(float) == 4);
 		WRITE_U8((buf) + 1, (val) >> 8); } while(0)
 #define WRITE_U32(buf, val) do { WRITE_U16(buf, val); \
 		WRITE_U16((buf) + 2, (val) >> 16); } while(0)
-#define WRITE_F32(buf, val) do { _Float32 x = (val); uint32_t y; \
-		__builtin_memcpy(&y, &x, 4); \
-		WRITE_U32(buf, y); } while(0)
 
 void xm_save_context(const xm_context_t* restrict ctx, char* restrict out) {
 	__builtin_memset(out, 0, xm_save_size(ctx));
@@ -938,7 +959,7 @@ void xm_save_context(const xm_context_t* restrict ctx, char* restrict out) {
 	}
 
 	for(uint32_t i = 0; i < ctx->module.samples_data_length; ++i) {
-		WRITE_F32(out, SAMPLE_DATA(ctx, i));
+		WRITE_U32(out, F32_TO_U32(SAMPLE_DATA(ctx, i)));
 		out += 4;
 	}
 

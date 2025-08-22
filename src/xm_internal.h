@@ -45,12 +45,6 @@ static_assert(_Generic((xm_sample_point_t){},
                         int8_t: true, int16_t: true, float: true,
                         default: false),
                "Unsupported value of XM_SAMPLE_TYPE");
-static_assert(!(XM_LIBXM_DELTA_SAMPLES && _Generic((xm_sample_point_t){},
-                                                    float: true,
-                                                    default: false)),
-               "XM_LIBXM_DELTA_SAMPLES cannot be used "
-               "with XM_SAMPLE_TYPE=float");
-
 static_assert(XM_LOOPING_TYPE >= 0 && XM_LOOPING_TYPE <= 2,
               "Invalid value of XM_LOOPING_TYPE");
 static_assert(XM_LOOPING_TYPE != 1 || !HAS_EFFECT(0xB),
