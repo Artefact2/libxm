@@ -679,7 +679,9 @@ static void xm_load_xmif(xm_context_t* restrict ctx,
 	ctx->module.num_channels = READ_U8(0x19);
 	#endif
 
+	#if XM_LOOPING_TYPE != 1
 	ctx->module.restart_position = READ_U8(0x1A);
+	#endif
 
 	#if !HAS_HARDCODED_TEMPO
 	ctx->module.default_tempo = READ_U8(0x1B);
@@ -863,7 +865,9 @@ void xm_save_context(const xm_context_t* restrict ctx, char* restrict out) {
 	WRITE_U16(out + 0x16, ctx->module.num_samples);
 	WRITE_U8(out + 0x18, NUM_INSTRUMENTS(&ctx->module));
 	WRITE_U8(out + 0x19, NUM_CHANNELS(&ctx->module));
+	#if XM_LOOPING_TYPE != 1
 	WRITE_U8(out + 0x1A, ctx->module.restart_position);
+	#endif
 	WRITE_U8(out + 0x1B, DEFAULT_TEMPO(&ctx->module));
 	WRITE_U8(out + 0x1C, DEFAULT_BPM(&ctx->module));
 	WRITE_U8(out + 0x1D, DEFAULT_GLOBAL_VOLUME(&ctx->module));
