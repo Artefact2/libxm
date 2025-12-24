@@ -2705,6 +2705,9 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 			/* No effect memory */
 			case 1:
 				s->effect_type = EFFECT_SET_TEMPO;
+				if(s->effect_param == 0) {
+					goto blank_effect;
+				}
 				break;
 			case 2:
 				s->effect_type = EFFECT_JUMP_TO_ORDER;
@@ -2915,7 +2918,7 @@ static void xm_load_s3m_pattern(xm_context_t* restrict ctx,
 					/* Keep the param for global memory */
 					s->effect_type = EFFECT_NOP;
 				} else {
-					s->effect_param = 0;
+					s->effect_type = 0;
 				}
 				break;
 			}
