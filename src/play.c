@@ -174,7 +174,7 @@ static int8_t xm_waveform([[maybe_unused]] uint8_t waveform,
 			90, 98, 106, 112, 118, 122, 125, 127,
 		};
 		uint8_t idx = step & 0x10 ? 0xF - (step & 0xF) : (step & 0xF);
-		return (step < 0x20) ? -sin_lut[idx] : sin_lut[idx];
+		return (int8_t)((step < 0x20) ? -sin_lut[idx] : sin_lut[idx]);
 	#endif
 
 	#if HAS_FEATURE(FEATURE_WAVEFORM_SQUARE)

@@ -663,11 +663,11 @@ static bool xm_prescan_xmif(const char* restrict moddata,
 static void xm_load_xmif(xm_context_t* restrict ctx,
                          const char* restrict moddata,
                          uint32_t moddata_length) {
-	uint32_t offset = READ_U8(0) << 3;
-	uint16_t pattern_sz = READ_U8(0x20) << 3,
-		pattern_slot_sz = READ_U8(0x21) << 3,
-		instrument_sz = READ_U8(0x22) << 3,
-		sample_sz = READ_U8(0x23) << 3;
+	uint32_t offset = (uint32_t)(READ_U8(0) << 3);
+	uint16_t pattern_sz = (uint16_t)(READ_U8(0x20) << 3),
+		pattern_slot_sz = (uint16_t)(READ_U8(0x21) << 3),
+		instrument_sz = (uint16_t)(READ_U8(0x22) << 3),
+		sample_sz = (uint16_t)(READ_U8(0x23) << 3);
 
 	ctx->module.length = READ_U16(0x0A);
 	ctx->module.num_rows = READ_U32(0x0C);
