@@ -366,7 +366,9 @@ static void xm_fixup_common(xm_context_t* ctx) {
 	    i; --i, ++slot) {
 		if(slot->effect_type == EFFECT_JUMP_TO_ORDER
 		   && slot->effect_param >= ctx->module.length) {
-			/* Convert invalid Bxx to B00 */
+			/* Tricky to handle correctly, FT2 will jump back to
+			   where playback was *started*, which is not always
+			   order 0 */
 			slot->effect_param = 0;
 		}
 
@@ -413,7 +415,7 @@ static void xm_fixup_common(xm_context_t* ctx) {
 			   let the user decide if they want to continue, based
 			   on max_loop_count. */
 			slot->effect_type = EFFECT_JUMP_TO_ORDER;
-			slot->effect_param = ctx->module.restart_position;
+			slot->effect_param = RESTART_POSITION(&ctx->module);
 			#endif
 		}
 

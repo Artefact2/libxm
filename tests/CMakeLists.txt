@@ -60,6 +60,8 @@ add_test(NAME test_pitch_slides_s3m COMMAND test-libxm
 	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/pitch-slides.s3m)
 add_test(NAME test_pitch_slides_amiga COMMAND test-libxm
 	channelpairs_pitcheq ${CMAKE_SOURCE_DIR}/pitch-slides-amiga.xm)
+add_test(NAME test_position_jump COMMAND test-libxm
+	pat0_pat1_eq ${CMAKE_SOURCE_DIR}/position-jump.xm)
 add_test(NAME test_protracker_quirks COMMAND test-libxm
 	channelpairs_lreqrl ${CMAKE_SOURCE_DIR}/protracker-quirks.mod)
 add_test(NAME test_retrigger_effect COMMAND test-libxm

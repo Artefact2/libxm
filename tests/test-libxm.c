@@ -116,9 +116,8 @@ static int channelpairs_pitcheq(xm_context_t* ctx) {
 }
 
 static int pat0_pat1_eq(xm_context_t* ctx0) {
-	if(xm_get_module_length(ctx0) != 2) {
-		fprintf(stderr, "This method requires 2 patterns "
-		        "with a pattern order table length of 2\n");
+	if(xm_get_module_length(ctx0) < 2) {
+		fprintf(stderr, "This method requires at least 2 entries in the order table\n");
 		return 1;
 	}
 

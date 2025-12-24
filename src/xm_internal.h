@@ -454,8 +454,10 @@ struct xm_module_s {
 				(ctx)->current_table_index = \
 					(ctx)->module.restart_position; \
 			} while(0)
+	#define RESTART_POSITION(mod) ((mod)->restart_position)
 	uint8_t restart_position;
 	#else
+	#define RESTART_POSITION(mod) 0
 	#define MAYBE_RESTART_POT(ctx) do {} while(0)
 	#endif
 
