@@ -420,7 +420,7 @@ static void xm_fixup_common(xm_context_t* ctx) {
 		}
 
 		#if HAS_VOLUME_COLUMN
-		if((slot->volume_column >> 8) == VOLUME_EFFECT_VIBRATO_SPEED
+		if((slot->volume_column >> 4) == VOLUME_EFFECT_VIBRATO_SPEED
 		   && (slot->volume_column & 0xF) == 0) {
 			/* Delete S0, it does nothing and saves a check in
 			   play.c. */
