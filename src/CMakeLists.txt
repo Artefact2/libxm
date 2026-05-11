@@ -3,6 +3,8 @@ project(libxm LANGUAGES C)
 set(CMAKE_C_STANDARD 23)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
+include(CheckIncludeFile)
+
 add_library(xm_common INTERFACE)
 if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang)$")
 	target_compile_options(xm_common INTERFACE
@@ -28,6 +30,13 @@ set_target_properties(xm PROPERTIES SOVERSION 11)
 find_library(MATH_LIBRARY m REQUIRED)
 target_include_directories(xm SYSTEM PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(xm PRIVATE xm_common ${MATH_LIBRARY})
+
+# Check if stdbit.h is available
+check_include_file(stdbit.h HAVE_STDBIT_H)
+
+if (NOT HAVE_STDBIT_H)
+	target_include_directories(xm SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/compat)
+endif()
 
 function(option_and_define name description default_value)
 	option(${name} ${description} ${default_value})
