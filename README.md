@@ -41,6 +41,15 @@ In particular,
   loading code. This function is meant for sizecoding, the use case being
   statically embedding *known* modules in games, demos, intros and such.
 
+Reporting a vulnerability
+=========================
+
+Libxm is not used or packaged downstream in ways where vulnerabilities matter:
+in demos, intros or games there is no loading of arbitrary user-supplied module
+data at runtime.
+
+Report vulnerabilities like you would report any other logic bug.
+
 Building
 ========
 
