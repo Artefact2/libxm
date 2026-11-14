@@ -1252,8 +1252,10 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 	assert(ctx->module.num_rows <= UINT16_MAX);
 	pat->rows_index = (uint16_t)ctx->module.num_rows;
 	ctx->module.num_rows += pat->num_rows;
-	xm_pattern_slot_t* slots = ctx->pattern_slots
+	xm_pattern_slot_t* slot = ctx->pattern_slots
 		+ pat->rows_index * NUM_CHANNELS(&ctx->module);
+	xm_pattern_slot_t* max = slot
+		+ pat->num_rows * NUM_CHANNELS(&ctx->module);
 
 	uint8_t packing_type = READ_U8(offset + 4);
 	if(packing_type != 0) {
@@ -1275,11 +1277,10 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 	   pattern is truncated mid-slot. */
 	moddata_length = offset + packed_patterndata_size;
 
-	/* j counts bytes in the file, k counts pattern slots */
-	uint16_t j, k;
-	for(j = 0, k = 0; j < packed_patterndata_size; ++k) {
+	/* j counts bytes in the file */
+	uint16_t j;
+	for(j = 0; j < packed_patterndata_size && slot < max; ++slot) {
 		uint8_t note = READ_U8(offset + j);
-		xm_pattern_slot_t* slot = slots + k;
 
 		if(note & (1 << 7)) {
 			/* MSB is set, this is a compressed packet */
@@ -1400,12 +1401,13 @@ static uint32_t xm_load_xm0104_pattern(xm_context_t* ctx,
 		}
 	}
 
-	if(k != pat->num_rows * NUM_CHANNELS(&ctx->module)) {
-		NOTICE("incomplete packed pattern data for pattern %ld, "
-		       "expected %u slots, got %u",
-		       pat - ctx->patterns,
-		       pat->num_rows * NUM_CHANNELS(&ctx->module),
-		       k);
+	if(slot < max) {
+		NOTICE("too little packed pattern data for pattern %ld",
+		       pat - ctx->patterns);
+	}
+	if(j < packed_patterndata_size) {
+		NOTICE("too much packed pattern data for pattern %ld",
+		       pat - ctx->patterns);
 	}
 	return offset + packed_patterndata_size;
 }
