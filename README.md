@@ -26,6 +26,8 @@ features:
 
 Written in C23 and released under the WTFPL license, version 2.
 
+For compiling libxm on older compilers (C89) and/or platforms (MSVC), checkout [MikeEviscerate's fork](https://github.com/MikeEviscerate/libxm-windows).
+
 Disclaimer
 ==========
 
